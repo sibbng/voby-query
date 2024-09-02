@@ -42,7 +42,7 @@ export type MutationObject<
 	TContext = unknown,
 > = {
 	state: MutationState<TData, TError, TVariables, TContext>;
-	options: MutationOptions<TData, TError, TVariables, TContext>;
+	resolvedOptions: MutationOptions<TData, TError, TVariables, TContext>;
 	mutate: (
 		variables: TVariables,
 		options?: MutateOptions<TData, TError, TVariables, TContext>,
@@ -149,7 +149,6 @@ function createMutation<
 		? hashFn(options.mutationKey)
 		: undefined;
 
-	// Early return if mutation is in cache
 	if (mutationKey && queryClient.mutationCache.has(mutationKey)) {
 		return queryClient.mutationCache.get(mutationKey) as MutationObject<
 			TData,
@@ -249,7 +248,6 @@ function createMutation<
 			);
 
 			if (shouldRetry(state.failureCount(), error as TError)) {
-				// Implement retry logic
 				const retryDelay = resolvedOptions.retryDelay ?? 1000;
 				const maxRetries =
 					typeof resolvedOptions.retry === "number" ? resolvedOptions.retry : 3;
@@ -296,7 +294,7 @@ function createMutation<
 	const mutationObject: MutationObject<TData, TError, TVariables, TContext> = {
 		instances: 0,
 		state,
-		options: resolvedOptions,
+		resolvedOptions,
 		mutate,
 		mutateAsync: mutate,
 		reset,

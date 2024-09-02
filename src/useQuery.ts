@@ -27,6 +27,9 @@ import { QueryClientContext } from './context';
 export type QueryClient = {
   cache: Map<string, Query<any, any, any, any>>;
   mutationCache: Map<string, MutationObject<any, any, any, any>>;
+  jobQueue: Map<string, number[]>;
+  startQueueJob: (queueKey: string) => void;
+  finishQueueJob: (queueKey: string) => void;
   getQueryData: <T>(queryKey: QueryKey) => T;
   setQueryData: <T>(queryKey: QueryKey, data: (previous: T) => T) => void;
   invalidateQueries: (
@@ -212,20 +215,6 @@ const createMutationCache = (
   cache?: Map<string, MutationObject<any, any, any, any>>,
 ) => {
   return cache ?? new Map<string, MutationObject<any, any, any, any>>();
-};
-const createGCHandler = (gcTime: number) => {
-  let timeoutId: number | undefined;
-
-  const scheduleGC = (callback: () => void) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(callback, gcTime) as unknown as number;
-  };
-
-  const cancelGC = () => {
-    clearTimeout(timeoutId);
-  };
-
-  return { scheduleGC, cancelGC };
 };
 
 // #region createQuery
@@ -564,6 +553,7 @@ type FetchQueryOptions<
 export const createQueryClient = (options?: {
   queryCache?: Map<string, Query>;
   mutationCache?: Map<string, MutationObject>;
+  jobQueue?: Map<string, number[]>;
   defaultOptions?: {
     queries?: Omit<QueryOptions, 'queryKey'>;
     mutations?: MutationOptions;
@@ -651,6 +641,39 @@ export const createQueryClient = (options?: {
   const queryKeyHashFn = queryDefaults.queryKeyHashFn ?? hashFn;
   const cache = createQueryCache(options?.queryCache);
   const mutationCache = createMutationCache(options?.mutationCache);
+  const jobQueue = options?.jobQueue ?? new Map();
+  const queueBus = new EventTarget();
+
+  const startQueueJob = async (queueKey: string) => {
+    const queue = jobQueue.get(queueKey) ?? [];
+    const queueId = Date.now();
+    queue.push(queueId);
+    jobQueue.set(queueKey, queue);
+
+    if (queue[0] === queueId) return;
+
+    await new Promise((resolve) => {
+      const event = () => {
+        if (queue[0] === queueId) {
+          resolve(undefined);
+          queueBus.removeEventListener('queue:updated', event);
+        }
+      };
+      queueBus.addEventListener('queue:updated', event);
+    });
+  };
+
+  const finishQueueJob = (queueKey: string) => {
+    const queue = jobQueue.get(queueKey);
+    if (!queue) return;
+
+    queue.shift();
+    if (queue.length === 0) {
+      jobQueue.delete(queueKey);
+    } else {
+      queueBus.dispatchEvent(new CustomEvent('queue:updated'));
+    }
+  };
   const getQueryData = (queryKey: QueryKey) => {
     const queryHash = queryKeyHashFn(queryKey);
     return cache.get(queryHash)?.state.data();
@@ -983,6 +1006,9 @@ export const createQueryClient = (options?: {
     getMutationCache,
     clear,
     resetQueries,
+    jobQueue,
+    startQueueJob,
+    finishQueueJob,
   };
   return queryClient;
 };
