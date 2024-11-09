@@ -1,6 +1,6 @@
 import { $$, useResolved } from 'voby';
-import type { QueryKey, QueryOptions } from './useQuery';
 import type { MutationKey } from './useMutation';
+import type { QueryKey, QueryOptions } from './useQuery';
 
 export function queryOptions<Q extends QueryOptions>(options: Q): Q {
   return options;

@@ -1,6 +1,6 @@
 {
   "name": "voby-query",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type:": "module",
   "main": "dist/index.mjs",
   "types": "dist/index.d.mts",
@@ -14,7 +14,8 @@
     "build": "rslib build",
     "check": "biome check --write",
     "dev": "rslib build --watch",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "prepublish": "biome check && rslib build"
   },
   "files": ["dist"],
   "devDependencies": {

@@ -1,15 +1,15 @@
 import {
   $,
-  type Observable,
-  useMemo,
-  type ObservableReadonly,
-  useTimeout,
-  useRoot,
-  type ObservableMaybe,
   type FunctionMaybe,
+  type Observable,
+  type ObservableMaybe,
+  type ObservableReadonly,
   useEffect,
+  useMemo,
+  useRoot,
+  useTimeout,
 } from 'voby';
-import { useQueryClient, type QueryClient, type QueryKey } from './useQuery';
+import { type QueryClient, type QueryKey, useQueryClient } from './useQuery';
 import { hashFn } from './utils';
 
 type MutationStatus = 'idle' | 'pending' | 'success' | 'error';
