@@ -361,7 +361,6 @@ export function useMutation<
 
   useEffect(() => mutation().addInstance());
 
-  // @ts-expect-error I don't know what is going on here
   return useMemo(() => ({
     data: useMemo(() => mutation().state.data()),
     error: useMemo(() => mutation().state.error()),
@@ -375,7 +374,7 @@ export function useMutation<
     mutate: mutation().mutate,
     mutateAsync: mutation().mutateAsync,
     reset: mutation().reset,
-    status: useMemo(() => mutation().state.status),
+    status: useMemo(() => mutation().state.status()),
     submittedAt: useMemo(() => mutation().state.submittedAt()),
     variables: useMemo(() => mutation().state.variables()),
     meta: mutation().state.meta,

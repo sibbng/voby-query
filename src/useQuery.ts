@@ -299,21 +299,21 @@ const createQuery = <
     isInvalidated: $(false),
     status: $<QueryStatus>('pending'),
     fetchStatus: $<FetchStatus>('idle'),
-    isFetching: useMemo(() => state.fetchStatus() === 'fetching'),
+    isFetching: useMemo((): boolean => state.fetchStatus() === 'fetching'),
     isRefetching: useMemo(
-      () => state.fetchStatus() === 'fetching' && state.status() !== 'pending',
+      (): boolean => state.fetchStatus() === 'fetching' && state.status() !== 'pending',
     ),
-    isFetched: useMemo(() => state.fetchStatus() === 'idle'),
-    isFetchedAfterMount: useMemo(() => state.status() !== 'pending'),
-    isPaused: useMemo(() => state.fetchStatus() === 'paused'),
-    isPending: useMemo(() => state.status() === 'pending'),
-    isSuccess: useMemo(() => state.status() === 'success'),
-    isError: useMemo(() => state.status() === 'error'),
+    isFetched: useMemo((): boolean => state.fetchStatus() === 'idle'),
+    isFetchedAfterMount: useMemo((): boolean => state.status() !== 'pending'),
+    isPaused: useMemo((): boolean => state.fetchStatus() === 'paused'),
+    isPending: useMemo((): boolean => state.status() === 'pending'),
+    isSuccess: useMemo((): boolean => state.status() === 'success'),
+    isError: useMemo((): boolean => state.status() === 'error'),
     isLoadingError: useMemo(
-      () => state.status() === 'error' && state.status() === 'pending',
+      (): boolean => state.status() === 'error' && state.status() === 'pending',
     ),
     isRefetchError: useMemo(
-      () => state.status() === 'error' && state.status() !== 'pending',
+      (): boolean => state.status() === 'error' && state.status() !== 'pending',
     ),
     isStale: $(false),
   } satisfies QueryState<TData>;
@@ -452,7 +452,7 @@ const createQuery = <
           if (query.isCancelled || signal.aborted) {
             return;
           }
-          state.data(result);
+          state.data(result as TData);
           state.dataUpdatedAt(Date.now());
           state.dataUpdateCount(state.dataUpdateCount() + 1);
           state.status('success');
@@ -1030,7 +1030,7 @@ export function useQuery<
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = TQueryFnData,
+  TInitialData extends TQueryFnData | undefined = undefined,
   R = void,
   D = R extends void
     ? TInitialData extends TQueryFnData
@@ -1067,7 +1067,6 @@ export function useQuery<
     { sync: true },
   );
 
-  // @ts-expect-error I don't know what is going on here
   return useMemo(() => {
     const state = Object.fromEntries(
       Object.entries(query().state).map(([key, value]) => [
@@ -1079,9 +1078,10 @@ export function useQuery<
       ...state,
       data: useMemo(() =>
         state.isPending() && typeof options.initialData === 'undefined'
-          ? options.placeholderData
-          : ((query().state.data() && options.select?.(state.data() as any)) ??
-            query().state.data()),
+          ? (options.placeholderData as Awaited<TInitialData extends undefined ? D | undefined : D>)
+          : ((options.select
+              ? options.select(state.data() as any)
+              : query().state.data()) as Awaited<TInitialData extends undefined ? D | undefined : D>),
       ),
       refetch: query().refetch,
       cancel: query().cancel,
