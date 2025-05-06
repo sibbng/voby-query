@@ -352,8 +352,9 @@ const createQuery = <
               query.fetch();
             }
           }
-
-          state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
+          if(state.fetchStatus() !== "fetching") {
+            state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
+          }
           if (resolvedOptions.refetchInterval) {
             useInterval(() => {
               query.fetch();
