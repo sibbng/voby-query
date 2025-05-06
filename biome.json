@@ -3,6 +3,10 @@
   "organizeImports": {
     "enabled": true
   },
+  "files": {
+    "include": ["src/**/*.ts"],
+    "ignore": ["node_modules", "dist", ".rslib"]
+  },
   "vcs": {
     "enabled": true,
     "clientKind": "git",

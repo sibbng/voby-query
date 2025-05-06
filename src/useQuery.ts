@@ -352,7 +352,7 @@ const createQuery = <
               query.fetch();
             }
           }
-          if(state.fetchStatus() !== "fetching") {
+          if (state.fetchStatus() !== 'fetching') {
             state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
           }
           if (resolvedOptions.refetchInterval) {
@@ -1080,8 +1080,8 @@ export function useQuery<
       data: useMemo(() =>
         state.isPending() && typeof options.initialData === 'undefined'
           ? options.placeholderData
-          : (query().state.data() && options.select?.(state.data() as any)) ??
-            query().state.data(),
+          : ((query().state.data() && options.select?.(state.data() as any)) ??
+            query().state.data()),
       ),
       refetch: query().refetch,
       cancel: query().cancel,
