@@ -1030,7 +1030,7 @@ export function useQuery<
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
+  TInitialData extends TQueryFnData | undefined = TQueryFnData,
   R = void,
   D = R extends void
     ? TInitialData extends TQueryFnData
