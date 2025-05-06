@@ -301,7 +301,8 @@ const createQuery = <
     fetchStatus: $<FetchStatus>('idle'),
     isFetching: useMemo((): boolean => state.fetchStatus() === 'fetching'),
     isRefetching: useMemo(
-      (): boolean => state.fetchStatus() === 'fetching' && state.status() !== 'pending',
+      (): boolean =>
+        state.fetchStatus() === 'fetching' && state.status() !== 'pending',
     ),
     isFetched: useMemo((): boolean => state.fetchStatus() === 'idle'),
     isFetchedAfterMount: useMemo((): boolean => state.status() !== 'pending'),
@@ -1078,10 +1079,14 @@ export function useQuery<
       ...state,
       data: useMemo(() =>
         state.isPending() && typeof options.initialData === 'undefined'
-          ? (options.placeholderData as Awaited<TInitialData extends undefined ? D | undefined : D>)
+          ? (options.placeholderData as Awaited<
+              TInitialData extends undefined ? D | undefined : D
+            >)
           : ((options.select
               ? options.select(state.data() as any)
-              : query().state.data()) as Awaited<TInitialData extends undefined ? D | undefined : D>),
+              : query().state.data()) as Awaited<
+              TInitialData extends undefined ? D | undefined : D
+            >),
       ),
       refetch: query().refetch,
       cancel: query().cancel,
