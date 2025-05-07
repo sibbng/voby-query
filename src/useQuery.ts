@@ -1,5 +1,6 @@
 import {
   $,
+  $$,
   type FunctionMaybe,
   type Observable,
   type ObservableMaybe,
@@ -118,7 +119,7 @@ export type QueryOptions<
   initialData?: TInitialData;
   initialDataUpdatedAt?: number;
   placeholderData?: TData;
-  enabled?: boolean;
+  enabled?: FunctionMaybe<boolean>;
   staleTime?: number;
   refetchInterval?: number;
   gcTime?: number;
@@ -266,6 +267,7 @@ const createQuery = <
 
   const cache = queryClient.cache;
   const queryHash = resolvedOptions.queryKeyHashFn!(options.queryKey);
+  $$(options.enabled);
 
   if (cache.has(queryHash)) {
     const query = cache.get(queryHash) as Query<
