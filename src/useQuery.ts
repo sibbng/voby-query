@@ -1077,17 +1077,16 @@ export function useQuery<
     ) as QueryStateReadonly<D>;
     return {
       ...state,
-      data: useMemo(() =>
-        state.isPending() && typeof options.initialData === 'undefined'
-          ? (options.placeholderData as Awaited<
-              TInitialData extends undefined ? D | undefined : D
-            >)
-          : ((options.select
-              ? options.select(state.data() as any)
-              : query().state.data()) as Awaited<
-              TInitialData extends undefined ? D | undefined : D
-            >),
-      ),
+      data: useMemo(() => {
+        query().state.data();
+        if (state.isPending() && typeof options.initialData !== 'undefined') {
+          return options.placeholderData as Awaited<D>;
+        }
+        if (options.select) {
+          return options.select(state.data() as any) as any;
+        }
+        return query().state.data() as Awaited<D>;
+      }),
       refetch: query().refetch,
       cancel: query().cancel,
     };
