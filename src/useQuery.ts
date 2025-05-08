@@ -268,7 +268,7 @@ const createQuery = <
   const cache = queryClient.cache;
   const queryHash = resolvedOptions.queryKeyHashFn!(options.queryKey);
   $$(options.enabled);
-  
+
   if (cache.has(queryHash)) {
     const query = cache.get(queryHash) as Query<
       TQueryFnData,
@@ -487,7 +487,7 @@ const createQuery = <
           state.isStale(false);
           query.staleDisposer = useTimeout(() => {
             state.isStale(true);
-            query.refetch()
+            query.refetch();
           }, resolvedOptions.staleTime);
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
@@ -1060,10 +1060,14 @@ export function useQuery<
 > {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
-    const query = createQuery<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>(
-      queryClient,
-      options,
-    );
+    const query = createQuery<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey,
+      TInitialData,
+      R
+    >(queryClient, options);
     useCleanup(query.addInstance());
     return query;
   });
