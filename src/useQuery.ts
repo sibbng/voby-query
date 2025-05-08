@@ -564,7 +564,7 @@ export const createQueryClient = (options?: {
     mutations?: MutationOptions;
   };
 }): QueryClient => {
-  const queryDefaults = options?.defaultOptions?.queries ?? {
+  const queryDefaults = {
     queryKeyHashFn: hashFn,
     enabled: true,
     throwOnError: false,
@@ -581,13 +581,15 @@ export const createQueryClient = (options?: {
       ? options?.defaultOptions?.queries?.networkMode === 'online'
       : true,
     refetchOnMount: true,
+    ...options?.defaultOptions?.queries,
   };
-  const mutationDefaults = options?.defaultOptions?.mutations ?? {
+  const mutationDefaults = {
     retry: 0,
     retryDelay: 0,
     gcTime: 5 * 60 * 1000,
     networkMode: 'online' as const,
     throwOnError: false,
+    ...options?.defaultOptions?.mutations,
   };
   const getDefaultOptions = () => ({
     queries: queryDefaults,
