@@ -127,7 +127,7 @@ export type QueryOptions<
   throwOnError?: boolean;
   structuralSharing?:
     | boolean
-    | ((oldData: unknown | undefined, newData: unknown) => unknown);
+    | ((oldData: TData | undefined, newData: Awaited<TQueryFnData>) => TData);
   select?: (
     data: TInitialData extends TQueryFnData ? TInitialData : TQueryFnData,
   ) => R;
@@ -273,7 +273,7 @@ const createQuery = <
 
   const cache = queryClient.cache;
   const queryHash = resolvedOptions.queryKeyHashFn!(options.queryKey);
-  resolvedOptions.enabled = $$(options.enabled);
+  resolvedOptions.enabled = $$(resolvedOptions.enabled);
 
   if (cache.has(queryHash)) {
     const query = cache.get(queryHash) as Query<
