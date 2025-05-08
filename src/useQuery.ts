@@ -6,8 +6,8 @@ import {
   type ObservableMaybe,
   type ObservableReadonly,
   untrack,
+  useCleanup,
   useContext,
-  useEffect,
   useEventListener,
   useInterval,
   useMemo,
@@ -202,7 +202,7 @@ type Query<
   staleDisposer: () => void;
   addInstance: () => () => void;
   removeInstance: () => void;
-  scheduleDestory: () => void;
+  scheduleDestroy: () => void;
   reset: () => void;
   scheduleRetry: (retryAttempt: number) => void;
   isCancelled: boolean;
@@ -268,7 +268,7 @@ const createQuery = <
   const cache = queryClient.cache;
   const queryHash = resolvedOptions.queryKeyHashFn!(options.queryKey);
   $$(options.enabled);
-
+  
   if (cache.has(queryHash)) {
     const query = cache.get(queryHash) as Query<
       TQueryFnData,
@@ -349,7 +349,8 @@ const createQuery = <
               }
               if (refetchOnMount === 'always') return true;
               if (refetchOnMount === false) return false;
-              return query.state.isStale() || query.resolvedOptions.enabled;
+              if (query.state.isStale() || query.state.isPending()) return true;
+              return false;
             })();
             if (shouldRefetch) {
               query.fetch();
@@ -387,10 +388,9 @@ const createQuery = <
       },
       removeInstance: () => {
         query.instances--;
-
         if (query.instances === 0) {
           query.isActive = false;
-          query.scheduleDestory();
+          query.scheduleDestroy();
         }
       },
       // #region cancel
@@ -412,7 +412,7 @@ const createQuery = <
         query.state.fetchStatus('idle');
         query.state.isStale(false);
       },
-      scheduleDestory: () => {
+      scheduleDestroy: () => {
         useRoot(() => {
           query.destroyDisposer = useTimeout(() => {
             query.destroy();
@@ -487,6 +487,7 @@ const createQuery = <
           state.isStale(false);
           query.staleDisposer = useTimeout(() => {
             state.isStale(true);
+            query.refetch()
           }, resolvedOptions.staleTime);
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
@@ -1057,18 +1058,13 @@ export function useQuery<
 > {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
-    return createQuery<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>(
+    const query = createQuery<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>(
       queryClient,
       options,
     );
+    useCleanup(query.addInstance());
+    return query;
   });
-
-  useEffect(
-    () => {
-      query().addInstance();
-    },
-    { sync: true },
-  );
 
   return useMemo(() => {
     const state = Object.fromEntries(
