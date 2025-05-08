@@ -22,7 +22,8 @@ import type {
   MutationObject,
   MutationOptions,
 } from './useMutation';
-import { hashFn } from './utils';
+import { hashFn, replaceEqualDeep } from './utils';
+import { isDevelopment } from 'std-env';
 
 // #region Types
 export type QueryClient = {
@@ -124,6 +125,9 @@ export type QueryOptions<
   refetchInterval?: number;
   gcTime?: number;
   throwOnError?: boolean;
+  structuralSharing?:
+    | boolean
+    | ((oldData: unknown | undefined, newData: unknown) => unknown);
   select?: (
     data: TInitialData extends TQueryFnData ? TInitialData : TQueryFnData,
   ) => R;
@@ -155,14 +159,16 @@ type QueryState<D = undefined> = {
   fetchStatus: Observable<FetchStatus>;
   isFetching: ObservableReadonly<boolean>;
   isRefetching: ObservableReadonly<boolean>;
+  isRefetchError: ObservableReadonly<boolean>;
   isFetched: ObservableReadonly<boolean>;
   isFetchedAfterMount: ObservableReadonly<boolean>;
   isPaused: ObservableReadonly<boolean>;
   isPending: ObservableReadonly<boolean>;
   isSuccess: ObservableReadonly<boolean>;
   isError: ObservableReadonly<boolean>;
+  isLoading: ObservableReadonly<boolean>;
   isLoadingError: ObservableReadonly<boolean>;
-  isRefetchError: ObservableReadonly<boolean>;
+  isPlaceholderData: ObservableReadonly<boolean>;
   isStale: Observable<boolean>;
 };
 type QueryStateReadonly<D> = {
@@ -267,7 +273,7 @@ const createQuery = <
 
   const cache = queryClient.cache;
   const queryHash = resolvedOptions.queryKeyHashFn!(options.queryKey);
-  $$(options.enabled);
+  resolvedOptions.enabled = $$(options.enabled);
 
   if (cache.has(queryHash)) {
     const query = cache.get(queryHash) as Query<
@@ -292,11 +298,11 @@ const createQuery = <
   // #region state
   const state = {
     data: $(options.initialData as TData, { equals: false }),
-    dataUpdateCount: $(options.initialDataUpdatedAt ?? 0),
-    dataUpdatedAt: $(Date.now()),
+    dataUpdateCount: $(0),
+    dataUpdatedAt: $(options.initialDataUpdatedAt ?? 0),
     error: $<Error | null>(null, { equals: false }),
     errorUpdateCount: $(0),
-    errorUpdatedAt: $(Date.now()),
+    errorUpdatedAt: $(0),
     meta: $(null),
     isInvalidated: $(false),
     status: $<QueryStatus>('pending'),
@@ -312,11 +318,19 @@ const createQuery = <
     isPending: useMemo((): boolean => state.status() === 'pending'),
     isSuccess: useMemo((): boolean => state.status() === 'success'),
     isError: useMemo((): boolean => state.status() === 'error'),
+    isLoading: useMemo(
+      (): boolean =>
+        state.status() === 'pending' && state.fetchStatus() === 'fetching',
+    ),
     isLoadingError: useMemo(
-      (): boolean => state.status() === 'error' && state.status() === 'pending',
+      (): boolean => state.status() === 'error' && state.data() !== undefined,
     ),
     isRefetchError: useMemo(
       (): boolean => state.status() === 'error' && state.status() !== 'pending',
+    ),
+    isPlaceholderData: useMemo(
+      (): boolean =>
+        options.placeholderData !== undefined && state.data() === undefined,
     ),
     isStale: $(false),
   } satisfies QueryState<TData>;
@@ -341,7 +355,7 @@ const createQuery = <
         query.isActive = true;
         query.instances++;
         untrack(() => {
-          if (query.resolvedOptions.enabled) {
+          if (resolvedOptions.enabled) {
             const shouldRefetch = (() => {
               const refetchOnMount = resolvedOptions.refetchOnMount;
               if (typeof refetchOnMount === 'function') {
@@ -378,8 +392,12 @@ const createQuery = <
           }
           if (resolvedOptions.refetchOnWindowFocus) {
             useEventListener(document, 'visibilitychange', () => {
-              if (document.visibilityState === 'visible' && state.isStale()) {
-                query.fetch();
+              if (
+                document.visibilityState === 'visible' &&
+                (resolvedOptions.refetchOnWindowFocus === 'always' ||
+                  state.isStale())
+              ) {
+                query.refetch();
               }
             });
           }
@@ -455,16 +473,39 @@ const createQuery = <
           if (query.isCancelled || signal.aborted) {
             return;
           }
-          state.data(result as TData);
+
+          let newData: TData;
+          if (typeof resolvedOptions.structuralSharing === 'function') {
+            newData = resolvedOptions.structuralSharing(
+              state.data(),
+              result,
+            ) as TData;
+          } else if (resolvedOptions.structuralSharing === false) {
+            newData = result as TData;
+          } else if (isDevelopment) {
+            try {
+              newData = replaceEqualDeep(state.data(), result) as TData;
+            } catch (error) {
+              console.error(
+                `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
+              );
+
+              throw error;
+            }
+          } else {
+            newData = replaceEqualDeep(state.data(), result) as TData;
+          }
+
+          state.data(newData);
           state.dataUpdatedAt(Date.now());
-          state.dataUpdateCount(state.dataUpdateCount() + 1);
+          state.dataUpdateCount((prev) => prev + 1);
           state.status('success');
         } catch (error) {
           if (error instanceof Error && !signal.aborted) {
             state.error(error);
             state.status('error');
             state.errorUpdatedAt(Date.now());
-            state.errorUpdateCount(state.errorUpdateCount() + 1);
+            state.errorUpdateCount((prev) => prev + 1);
             if (throwOnError) {
               throw error;
             }
@@ -487,7 +528,6 @@ const createQuery = <
           state.isStale(false);
           query.staleDisposer = useTimeout(() => {
             state.isStale(true);
-            query.refetch();
           }, resolvedOptions.staleTime);
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
@@ -577,6 +617,7 @@ export const createQueryClient = (options?: {
     retryDelay: 1000,
     cancelRefetch: true,
     refetchOnWindowFocus: true,
+    structuralSharing: true,
     refetchOnReconnect: options?.defaultOptions?.queries?.networkMode
       ? options?.defaultOptions?.queries?.networkMode === 'online'
       : true,
@@ -1082,14 +1123,14 @@ export function useQuery<
     return {
       ...state,
       data: useMemo(() => {
-        query().state.data();
-        if (state.isPending() && typeof options.initialData !== 'undefined') {
+        state.data();
+        if (state.isPending() && options.placeholderData) {
           return options.placeholderData as Awaited<D>;
         }
         if (options.select) {
           return options.select(state.data() as any) as any;
         }
-        return query().state.data() as Awaited<D>;
+        return state.data() as Awaited<D>;
       }),
       refetch: query().refetch,
       cancel: query().cancel,
