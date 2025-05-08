@@ -1,3 +1,4 @@
+import { isDevelopment } from 'std-env';
 import {
   $,
   $$,
@@ -23,7 +24,6 @@ import type {
   MutationOptions,
 } from './useMutation';
 import { hashFn, replaceEqualDeep } from './utils';
-import { isDevelopment } from 'std-env';
 
 // #region Types
 export type QueryClient = {
