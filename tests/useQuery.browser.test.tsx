@@ -1,9 +1,9 @@
 import { expect, test, vi } from 'vitest'
-import { flush } from './utils';
+import { flush, render } from './utils';
 import { waitFor } from '@testing-library/dom';
 import { createQueryClient, useQuery } from '../src/useQuery'
 import { QueryClientProvider } from '../src/context'
-import { render, If, $, useEffect } from 'voby'
+import { If, $ } from 'voby'
 
 test('useQuery with provider', async () => {
   const queryClient = createQueryClient()

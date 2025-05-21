@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest'
-import { flush } from './utils';
+import { flush, render } from './utils';
 import { waitFor } from '@testing-library/dom';
 import { useMutation } from '../src/useMutation'
 import { createQueryClient } from '../src/useQuery'
 import { QueryClientProvider } from '../src/context'
-import { render, If } from 'voby'
+import { If } from 'voby'
 
 test('useMutation basic functionality', async () => {
   const queryClient = createQueryClient()
