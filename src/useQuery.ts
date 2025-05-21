@@ -9,6 +9,7 @@ import {
   untrack,
   useCleanup,
   useContext,
+  useEffect,
   useEventListener,
   useInterval,
   useMemo,
@@ -169,6 +170,7 @@ type QueryState<D = undefined> = {
   isLoadingError: ObservableReadonly<boolean>;
   isPlaceholderData: ObservableReadonly<boolean>;
   isStale: Observable<boolean>;
+  isIdle: ObservableReadonly<boolean>;
 };
 type QueryStateReadonly<D> = {
   [K in keyof Omit<QueryState<D>, 'meta'>]: ObservableReadonly<
@@ -204,6 +206,7 @@ type Query<
   controller: AbortController;
   isFetching: boolean;
   destroyDisposer: () => void;
+  stateDisposer: () => void;
   staleDisposer: () => void;
   addInstance: () => () => void;
   removeInstance: () => void;
@@ -294,46 +297,6 @@ const createQuery = <
     >;
   }
 
-  // #region state
-  const state = {
-    data: $(options.initialData as TData, { equals: false }),
-    dataUpdateCount: $(0),
-    dataUpdatedAt: $(options.initialDataUpdatedAt ?? 0),
-    error: $<Error | null>(null, { equals: false }),
-    errorUpdateCount: $(0),
-    errorUpdatedAt: $(0),
-    meta: $(null),
-    isInvalidated: $(false),
-    status: $<QueryStatus>('pending'),
-    fetchStatus: $<FetchStatus>('idle'),
-    isFetching: useMemo((): boolean => state.fetchStatus() === 'fetching'),
-    isRefetching: useMemo(
-      (): boolean =>
-        state.fetchStatus() === 'fetching' && state.status() !== 'pending',
-    ),
-    isFetched: useMemo((): boolean => state.fetchStatus() === 'idle'),
-    isFetchedAfterMount: useMemo((): boolean => state.status() !== 'pending'),
-    isPaused: useMemo((): boolean => state.fetchStatus() === 'paused'),
-    isPending: useMemo((): boolean => state.status() === 'pending'),
-    isSuccess: useMemo((): boolean => state.status() === 'success'),
-    isError: useMemo((): boolean => state.status() === 'error'),
-    isLoading: useMemo(
-      (): boolean =>
-        state.status() === 'pending' && state.fetchStatus() === 'fetching',
-    ),
-    isLoadingError: useMemo(
-      (): boolean => state.status() === 'error' && state.data() !== undefined,
-    ),
-    isRefetchError: useMemo(
-      (): boolean => state.status() === 'error' && state.status() !== 'pending',
-    ),
-    isPlaceholderData: useMemo(
-      (): boolean =>
-        options.placeholderData !== undefined && state.data() === undefined,
-    ),
-    isStale: $(false),
-  } satisfies QueryState<TData>;
-
   // create custom event
   const events = new EventTarget();
 
@@ -344,19 +307,20 @@ const createQuery = <
       events,
       resolvedOptions,
       instances: 0,
-      state,
+      state: undefined as any, // will be set below
       controller: new AbortController(),
       isCancelled: false,
-      destroyDisposer: () => {},
+      destroyDisposer: () => {}, // for GC timer only
+      stateDisposer: () => {},   // for state lifetime
       // #region addInstance
       addInstance: () => {
         query.destroyDisposer();
         query.isActive = true;
         query.instances++;
         untrack(() => {
-          if (resolvedOptions.enabled) {
+          if (query.resolvedOptions.enabled) {
             const shouldRefetch = (() => {
-              const refetchOnMount = resolvedOptions.refetchOnMount;
+              const refetchOnMount = query.resolvedOptions.refetchOnMount;
               if (typeof refetchOnMount === 'function') {
                 return refetchOnMount(query);
               }
@@ -369,32 +333,35 @@ const createQuery = <
               query.fetch();
             }
           }
-          if (state.fetchStatus() !== 'fetching') {
-            state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
+          if (query.state.fetchStatus() !== 'fetching') {
+            query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
           }
-          if (resolvedOptions.refetchInterval) {
-            useInterval(() => {
-              query.fetch();
-            }, resolvedOptions.refetchInterval);
+          if (query.resolvedOptions.refetchInterval) {
+            // Delay the first interval call so the initial fetch is not doubled
+            useTimeout(() => {
+              useInterval(() => {
+                query.fetch();
+              }, query.resolvedOptions.refetchInterval);
+            }, query.resolvedOptions.refetchInterval);
           }
-          if (resolvedOptions.networkMode === 'online') {
+          if (query.resolvedOptions.networkMode === 'online') {
             useEventListener(window, 'online', async () => {
-              if (resolvedOptions.refetchOnReconnect) {
-                state.fetchStatus('fetching');
+              if (query.resolvedOptions.refetchOnReconnect) {
+                query.state.fetchStatus('fetching');
                 query.refetch();
               }
             });
             useEventListener(window, 'offline', async () => {
               query.cancel();
-              state.fetchStatus('paused');
+              query.state.fetchStatus('paused');
             });
           }
-          if (resolvedOptions.refetchOnWindowFocus) {
+          if (query.resolvedOptions.refetchOnWindowFocus) {
             useEventListener(document, 'visibilitychange', () => {
               if (
                 document.visibilityState === 'visible' &&
-                (resolvedOptions.refetchOnWindowFocus === 'always' ||
-                  state.isStale())
+                (query.resolvedOptions.refetchOnWindowFocus === 'always' ||
+                  query.state.isStale())
               ) {
                 query.refetch();
               }
@@ -438,6 +405,7 @@ const createQuery = <
       },
       destroy: () => {
         query.cancel();
+        query.stateDisposer(); // Dispose the state
         cache.delete(queryHash);
       },
       isFetching: false,
@@ -445,6 +413,7 @@ const createQuery = <
         throwOnError = resolvedOptions.throwOnError,
         cancelRefetch = resolvedOptions.cancelRefetch,
       } = {}) => {
+        if (!query.resolvedOptions.enabled) return;
         if (cancelRefetch) {
           await query.cancel();
         }
@@ -455,16 +424,17 @@ const createQuery = <
         retryAttempt = 0,
         throwOnError = resolvedOptions.throwOnError,
       ) => {
+        if (!query.resolvedOptions.enabled) return;
         if (!query.isActive) return;
         if (query.isFetching && !query.isCancelled) return;
-        if (state.fetchStatus() === 'paused') return;
+        if (query.state.fetchStatus() === 'paused') return;
 
         query.isFetching = true;
         query.isCancelled = false;
         query.controller = new AbortController();
         const signal = query.controller.signal;
         try {
-          state.fetchStatus('fetching');
+          query.state.fetchStatus('fetching');
           const result = await untrack(() =>
             query.resolvedOptions.queryFn!({ signal }),
           );
@@ -476,14 +446,14 @@ const createQuery = <
           let newData: TData;
           if (typeof resolvedOptions.structuralSharing === 'function') {
             newData = resolvedOptions.structuralSharing(
-              state.data(),
+              query.state.data(),
               result,
             ) as TData;
           } else if (resolvedOptions.structuralSharing === false) {
             newData = result as TData;
           } else if (isDevelopment) {
             try {
-              newData = replaceEqualDeep(state.data(), result) as TData;
+              newData = replaceEqualDeep(query.state.data(), result) as TData;
             } catch (error) {
               console.error(
                 `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
@@ -492,19 +462,19 @@ const createQuery = <
               throw error;
             }
           } else {
-            newData = replaceEqualDeep(state.data(), result) as TData;
+            newData = replaceEqualDeep(query.state.data(), result) as TData;
           }
 
-          state.data(newData);
-          state.dataUpdatedAt(Date.now());
-          state.dataUpdateCount((prev) => prev + 1);
-          state.status('success');
+          query.state.data(newData);
+          query.state.dataUpdatedAt(Date.now());
+          query.state.dataUpdateCount((prev) => prev + 1);
+          query.state.status('success');
         } catch (error) {
           if (error instanceof Error && !signal.aborted) {
-            state.error(error);
-            state.status('error');
-            state.errorUpdatedAt(Date.now());
-            state.errorUpdateCount((prev) => prev + 1);
+            query.state.error(error);
+            query.state.status('error');
+            query.state.errorUpdatedAt(Date.now());
+            query.state.errorUpdateCount((prev) => prev + 1);
             if (throwOnError) {
               throw error;
             }
@@ -514,31 +484,35 @@ const createQuery = <
           if (
             !query.isCancelled &&
             signal.aborted &&
-            state.fetchStatus() === 'fetching'
+            query.state.fetchStatus() === 'fetching'
           ) {
             // biome-ignore lint/correctness/noUnsafeFinally: <explanation>
             return;
           }
           query.isFetching = false;
-          if (state.fetchStatus() !== 'paused') {
-            state.fetchStatus('idle');
+          if (query.state.fetchStatus() !== 'paused') {
+            query.state.fetchStatus('idle');
           }
           query.staleDisposer();
-          state.isStale(false);
-          query.staleDisposer = useTimeout(() => {
-            state.isStale(true);
-          }, resolvedOptions.staleTime);
+          query.state.isStale(false);
+          if (query.resolvedOptions.staleTime === 0) {
+            query.state.isStale(true);
+          } else {
+            query.staleDisposer = useTimeout(() => {
+              query.state.isStale(true);
+            }, query.resolvedOptions.staleTime);
+          }
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
       },
       staleDisposer: () => {},
       // #region retry
       scheduleRetry: (attempt: number) => {
-        const { retry, retryDelay, retryOnMount } = resolvedOptions;
+        const { retry, retryDelay, retryOnMount } = query.resolvedOptions;
         if (retry === false) return;
         if (
           query.resolvedOptions.networkMode === 'online' &&
-          state.fetchStatus() === 'paused'
+          query.state.fetchStatus() === 'paused'
         ) {
           useEventListener(
             window,
@@ -561,6 +535,53 @@ const createQuery = <
         }
       },
     };
+
+  // Use useRoot to create the query state in a detached reactive scope
+  query.stateDisposer = useRoot(() => {
+    query.state = {
+      data: $(options.initialData as TData, { equals: false }),
+      dataUpdateCount: $(0),
+      dataUpdatedAt: $(options.initialDataUpdatedAt ?? 0),
+      error: $<Error | null>(null, { equals: false }),
+      errorUpdateCount: $(0),
+      errorUpdatedAt: $(0),
+      meta: $(null),
+      isInvalidated: $(false),
+      status: $<QueryStatus>(options.initialData !== undefined ? 'success' : 'pending'),
+      fetchStatus: $<FetchStatus>('idle'),
+      isFetching: useMemo((): boolean => query.state.fetchStatus() === 'fetching'),
+      isRefetching: useMemo(
+        (): boolean =>
+          query.state.fetchStatus() === 'fetching' && query.state.status() !== 'pending',
+      ),
+      isFetched: useMemo((): boolean => query.state.fetchStatus() === 'idle'),
+      isFetchedAfterMount: useMemo((): boolean => query.state.status() !== 'pending'),
+      isPaused: useMemo((): boolean => query.state.fetchStatus() === 'paused'),
+      isPending: useMemo((): boolean => query.state.status() === 'pending'),
+      isSuccess: useMemo((): boolean => query.state.status() === 'success'),
+      isError: useMemo((): boolean => query.state.status() === 'error'),
+      isLoading: useMemo(
+        (): boolean =>
+          query.state.status() === 'pending' && query.state.fetchStatus() === 'fetching',
+      ),
+      isLoadingError: useMemo(
+        (): boolean => query.state.status() === 'error' && query.state.data() !== undefined,
+      ),
+      isRefetchError: useMemo(
+        (): boolean => query.state.status() === 'error' && query.state.status() !== 'pending',
+      ),
+      isPlaceholderData: useMemo(
+        (): boolean =>
+          options.placeholderData !== undefined && query.state.data() === undefined,
+      ),
+      isStale: $(false),
+      isIdle: useMemo((): boolean => query.state.fetchStatus() === 'idle' && query.state.status() === 'pending'),
+    } as QueryState<TData>;
+    // Return disposer for cleanup
+    return () => {
+      // No-op for now, but could add cleanup logic if needed
+    };
+  });
 
   cache.set(queryHash, query as Query);
 
@@ -756,6 +777,7 @@ export const createQueryClient = (options?: {
     if (refetchType === 'none') return;
 
     const queriesToRefetch = queriesToInvalidate.filter((query) => {
+      if (!query.resolvedOptions.enabled) return false;
       if (refetchType === 'active' && !query.isActive) return false;
       if (refetchType === 'inactive' && query.isActive) return false;
       return true;
@@ -805,6 +827,7 @@ export const createQueryClient = (options?: {
         if (!keyMatch) return false;
       }
 
+      if (!query.resolvedOptions.enabled) return false;
       if (type === 'active' && !query.isActive) return false;
       if (type === 'inactive' && query.isActive) return false;
       if (stale === true && !query.state.isStale()) return false;
@@ -960,13 +983,16 @@ export const createQueryClient = (options?: {
   >(
     options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
   ): Promise<TData> => {
-    const { queryKey, queryFn, staleTime = 0, ...restOptions } = options;
+    const { queryKey, queryFn, ...restOptions } = options;
     const queryHash = queryKeyHashFn(queryKey);
     const existingQuery = cache.get(queryHash);
 
     if (existingQuery) {
+      if (existingQuery.state.isStale()) {
+        await existingQuery.fetch();
+      }
       const currentData = existingQuery.state.data();
-      if (currentData !== undefined && !existingQuery.state.isStale()) {
+      if (currentData !== undefined) {
         return currentData as TData;
       }
     }
@@ -1112,19 +1138,20 @@ export function useQuery<
     return query;
   });
 
+  // Return a read-only observable function, not a plain object
   return useMemo(() => {
     const state = query().state;
     return {
       ...state,
       data: useMemo(() => {
-        state.data();
+        const data = state.data();
         if (state.isPending() && options.placeholderData) {
           return options.placeholderData as Awaited<D>;
         }
-        if (options.select) {
-          return options.select(state.data() as any) as any;
+        if (options.select && data !== undefined) {
+          return options.select(data as any) as any;
         }
-        return state.data() as Awaited<D>;
+        return data as Awaited<D>;
       }),
       refetch: query().refetch,
       cancel: query().cancel,

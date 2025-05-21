@@ -1,0 +1,37 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - '**' # Runs on pushes to all branches
+  pull_request:
+    branches:
+      - main # Runs on PRs targeting main, can be adjusted to all branches if needed
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18 # Using Node.js 18 LTS
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4 # Uses the official pnpm action
+        with:
+          version: 8 # Specify pnpm version, adjust if needed based on project's pnpm version
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium # Install only chromium for speed, or remove browser name for all
+
+      - name: Run tests
+        run: pnpm test
