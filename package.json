@@ -1,7 +1,7 @@
 {
   "name": "voby-query",
   "version": "0.5.1",
-  "type:": "module",
+  "type": "module",
   "main": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "exports": {
@@ -15,7 +15,8 @@
     "check": "biome check --write",
     "dev": "rslib build --watch",
     "format": "biome format --write",
-    "prepublish": "biome check && rslib build"
+    "prepublish": "biome check && rslib build",
+    "test": "vitest"
   },
   "files": [
     "dist"
@@ -24,11 +25,20 @@
     "@biomejs/biome": "^1.9.4",
     "@microsoft/api-extractor": "^7.52.7",
     "@rslib/core": "^0.6.8",
-    "typescript": "^5.8.3"
+    "@vitest/browser": "^3.1.4",
+    "playwright": "^1.52.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
   },
-  "packageManager": "pnpm@9.7.0+sha512.dc09430156b427f5ecfc79888899e1c39d2d690f004be70e05230b72cb173d96839587545d09429b55ac3c429c801b4dc3c0e002f653830a420fa2dd4e3cf9cf",
   "dependencies": {
     "std-env": "^3.9.0",
     "voby": "^0.58.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "core-js",
+      "esbuild"
+    ]
   }
 }

@@ -976,7 +976,7 @@ export const createQueryClient = (options?: {
       queryFn,
       ...restOptions,
     });
-
+    query.isActive = true;
     await query.fetch();
     return query.state.data() as unknown as TData;
   };
