@@ -24,7 +24,6 @@ export default defineConfig({
           browser: { // Keep existing browser settings
             provider: 'playwright',
             enabled: true,
-            headless: false, // Assuming we want to keep this, adjust if not.
             instances: [
               { browser: 'chromium' },
             ],
