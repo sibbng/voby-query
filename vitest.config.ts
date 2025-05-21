@@ -22,6 +22,7 @@ export default defineConfig({
             'tests/**/*.browser.{test,spec}.{ts,tsx}',
           ],
           name: 'browser',
+          maxConcurrency: 1,
           browser: { // Keep existing browser settings
             provider: 'playwright',
             enabled: true,
