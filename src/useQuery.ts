@@ -12,7 +12,6 @@ import {
   useEventListener,
   useInterval,
   useMemo,
-  useReadonly,
   useRoot,
   useTimeout,
 } from 'voby';
@@ -1114,12 +1113,7 @@ export function useQuery<
   });
 
   return useMemo(() => {
-    const state = Object.fromEntries(
-      Object.entries(query().state).map(([key, value]) => [
-        key,
-        key === 'meta' ? value : useReadonly(value as Observable<any>),
-      ]),
-    ) as QueryStateReadonly<D>;
+    const state = query().state;
     return {
       ...state,
       data: useMemo(() => {

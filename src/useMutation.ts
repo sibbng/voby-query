@@ -4,10 +4,10 @@ import {
   type Observable,
   type ObservableMaybe,
   type ObservableReadonly,
-  useEffect,
   useMemo,
   useRoot,
   useTimeout,
+  useCleanup,
 } from 'voby';
 import { type QueryClient, type QueryKey, useQueryClient } from './useQuery';
 import { hashFn } from './utils';
@@ -357,9 +357,11 @@ export function useMutation<
 > {
   const queryClient = useQueryClient(options.queryClient);
 
-  const mutation = useMemo(() => createMutation(queryClient, options));
-
-  useEffect(() => mutation().addInstance());
+  const mutation = useMemo(() => {
+    const mutation = createMutation(queryClient, options);
+    useCleanup(mutation.addInstance());
+    return mutation;
+  });
 
   return useMemo(() => ({
     data: useMemo(() => mutation().state.data()),
