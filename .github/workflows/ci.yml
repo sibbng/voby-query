@@ -20,12 +20,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18 # Using Node.js 18 LTS
+          node-version: 22
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4 # Uses the official pnpm action
         with:
-          version: 8 # Specify pnpm version, adjust if needed based on project's pnpm version
+          version: 10 # Specify pnpm version, adjust if needed based on project's pnpm version
 
       - name: Install dependencies
         run: pnpm install
