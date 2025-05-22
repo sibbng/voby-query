@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest'
-import { flush, render } from './utils';
+import { flush, render, sleep } from './utils';
 import { waitFor } from '@testing-library/dom';
 import { createQueryClient, useQuery } from '../src/useQuery'
 import { QueryClientProvider } from '../src/context'
@@ -558,4 +558,141 @@ test('useQuery refetchInterval: stops if component unmounts', async () => {
   await new Promise(resolve => setTimeout(resolve, intervalMs * 3))
 
   expect(queryFnMock).not.toHaveBeenCalled() // Should not be called again after unmount
+})
+
+test('gcTime cache: remount within and after gcTime', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  const queryKey = ['gc-test'];
+  const gcTime = 1000;
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey,
+      queryFn: async () => {
+        fetchCount++;
+        await sleep(100)
+        return 'cached data';
+      },
+      gcTime,
+    });
+    return (
+      <>
+        <If when={() => query().isLoading()}>
+          Loading...
+        </If>
+        <If when={() => query().isSuccess()}>
+          {() => query().data()}
+        </If>
+      </>
+    );
+  }
+
+  const show = $(true);
+  function App() {
+    return (
+      <QueryClientProvider value={queryClient}>
+        <If when={show}>
+          <TestComponent />
+        </If>
+      </QueryClientProvider>
+    );
+  }
+
+  render(<App />, document.body);
+
+  // Step 1: Wait for data to load
+  expect(document.body.textContent).toContain('Loading...');
+  await waitFor(() => expect(document.body.textContent).toBe('cached data'));
+  expect(fetchCount).toBe(1);
+
+  // Step 2: Unmount, wait 100ms, remount
+  show(false);
+  await flush();
+  await new Promise(res => setTimeout(res, 100));
+  show(true);
+  await flush();
+  // Should load instantly from cache
+  expect(document.body.textContent).toBe('cached data');
+  expect(fetchCount).toBe(1);
+
+  // Step 3: Unmount, wait 1200ms
+  show(false);
+  await flush();
+  await new Promise(res => setTimeout(res, 1200));
+  const cacheData = queryClient.getQueryData(queryKey);
+  expect(cacheData).toBe(undefined);
+
+  // Remount
+  show(true);
+  await flush();
+  // Should be loading because cache was GC'd
+  expect(document.body.textContent).toBe('Loading...');
+  await waitFor(() => expect(document.body.textContent).toBe('cached data'));
+  expect(fetchCount).toBe(2);
+});
+
+test('multiple useQuery instances - unmounting one should not affect the other', async () => {
+  const queryClient = createQueryClient()
+  let fetchCount = 0
+  
+  const sharedQueryKey = 'shared-query-key'
+  const expectedData = 'Shared query data'
+  
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: [sharedQueryKey],
+      queryFn: async () => {
+          fetchCount++
+        await new Promise(resolve => setTimeout(resolve, 10)) // Small delay to simulate async
+        return expectedData
+      },
+      staleTime: 0
+    })
+
+    return (
+      <div>
+        <If when={() => query().isLoading()}>
+          Loading...
+        </If>
+        <If when={() => query().isSuccess()}>
+          {() => query().data()}
+        </If>
+      </div>
+    )
+  }
+  
+  const showFirst = $(true)
+  
+  function App() {
+    return (
+      <QueryClientProvider value={queryClient}>
+        <If when={showFirst}>
+          <TestComponent />
+        </If>
+        <TestComponent />
+      </QueryClientProvider>
+    )
+  }
+
+  render(<App />, document.body)
+
+  expect(document.body.textContent).toContain('Loading...')
+  
+  await waitFor(() => {
+    expect(document.body.textContent).toContain(expectedData)
+  })
+
+  expect(fetchCount).toBe(1)
+  
+  showFirst(false)
+  await flush()
+
+  expect(document.body.textContent).toContain(expectedData)
+  
+  await queryClient.refetchQueries({ queryKey: [sharedQueryKey] })
+  await flush()
+  
+  expect(document.body.textContent).toBe(expectedData)
+  expect(fetchCount).toBe(2)
 })
