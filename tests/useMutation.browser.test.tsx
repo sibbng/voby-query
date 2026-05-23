@@ -514,3 +514,132 @@ test('useMutationState filters by partial observable mutation keys', async () =>
   expect(queryClient.isMutating({ mutationKey: ['todos'], status: 'success' })).toBe(1);
   expect(queryClient.isMutating({ mutationKey: ['todos'], exact: true })).toBe(0);
 });
+
+test('useMutationState reactively shows pending count during in-flight mutation', async () => {
+  const queryClient = createQueryClient();
+  let mutationResult: any;
+
+  function Mutator() {
+    const mutation = useMutation<string, Error, string>({
+      mutationKey: ['reactive', 'pending'],
+      mutationFn: async (v: string) => {
+        await new Promise((res) => setTimeout(res, 100));
+        return v;
+      },
+    });
+    mutationResult = mutation;
+    return null;
+  }
+
+  function PendingCounter() {
+    const pending = useMutationState({ filters: { status: 'pending' } });
+    return <div data-testid="count">{() => pending().length}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Mutator />
+      <PendingCounter />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Initially no mutations pending
+  expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
+
+  // Start a slow mutation — pending count should jump to 1
+  const promise = mutationResult().mutate('hello');
+  await waitFor(() =>
+    expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1'),
+  );
+
+  // After mutation settles, pending count drops back to 0
+  await promise;
+  await flush();
+  expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
+});
+
+test('useMutation stays functional after queryClient.clear()', async () => {
+  const queryClient = createQueryClient();
+
+  function TestComponent() {
+    const mutation = useMutation<string, Error, string>({
+      mutationKey: ['after', 'clear'],
+      mutationFn: async (v: string) => {
+        await new Promise((res) => setTimeout(res, 30));
+        return `ok: ${v}`;
+      },
+    });
+    return (
+      <>
+        <button data-testid="btn" onClick={() => mutation().mutate('after-clear')}>
+          Mutate
+        </button>
+        <If when={() => mutation().isSuccess()}>{() => mutation().data()}</If>
+        <If when={() => mutation().isIdle()}>idle</If>
+      </>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  expect(document.body.textContent).toContain('idle');
+
+  // Clear all caches — mutation should re-register automatically
+  queryClient.clear();
+  await flush();
+
+  // Trigger mutation from inside the reactive context via a button click
+  document.querySelector<HTMLButtonElement>('[data-testid="btn"]')!.click();
+  await waitFor(() => expect(document.body.textContent).toContain('ok: after-clear'));
+});
+
+test('useMutationState shows pending count for mutation started after queryClient.clear()', async () => {
+  const queryClient = createQueryClient();
+  let mutationResult: any;
+
+  function Mutator() {
+    const mutation = useMutation<string, Error, string>({
+      mutationKey: ['post', 'clear'],
+      mutationFn: async (v: string) => {
+        await new Promise((res) => setTimeout(res, 100));
+        return v;
+      },
+    });
+    mutationResult = mutation;
+    return null;
+  }
+
+  function PendingCounter() {
+    const pending = useMutationState({ filters: { status: 'pending' } });
+    return <div data-testid="count">{() => pending().length}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Mutator />
+      <PendingCounter />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Clear cache — mutation is removed from cache
+  queryClient.clear();
+  await flush();
+  expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
+
+  // Start a new mutation after clear — useMutation re-registers, useMutationState reacts
+  const promise = mutationResult().mutate('post-clear');
+  await waitFor(() =>
+    expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1'),
+  );
+
+  await promise;
+  await flush();
+  expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
+});

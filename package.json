@@ -17,9 +17,12 @@
     "build": "vp pack",
     "check": "vp check",
     "dev": "vp pack --watch",
+    "playground:build": "pnpm --filter voby-query-playground build",
+    "playground:dev": "pnpm --filter voby-query-playground dev",
     "format": "vp fmt . --write",
     "prepublish": "vp check && vp pack",
-    "test": "vp test"
+    "test": "vp test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "std-env": "^3.9.0",

@@ -18,9 +18,24 @@ import type { MutationFilters, MutationKey, MutationObject, MutationOptions } fr
 import { hashFn, partialMatchKey, replaceEqualDeep } from './utils';
 
 // #region Types
+export type MutationCache = {
+  size: number;
+  has: (key: string) => boolean;
+  get: (key: string) => MutationObject<any, any, any, any> | undefined;
+  set: (
+    key: string,
+    value: MutationObject<any, any, any, any>,
+  ) => Map<string, MutationObject<any, any, any, any>>;
+  delete: (key: string) => boolean;
+  clear: () => void;
+  values: () => IterableIterator<MutationObject<any, any, any, any>>;
+  entries: () => IterableIterator<[string, MutationObject<any, any, any, any>]>;
+  keys: () => IterableIterator<string>;
+  version: Observable<number>;
+};
 export type QueryClient = {
   cache: Map<string, Query<any, any, any, any>>;
-  mutationCache: Map<string, MutationObject<any, any, any, any>>;
+  mutationCache: MutationCache;
   jobQueue: Map<string, number[]>;
   startQueueJob: (queueKey: string) => void;
   finishQueueJob: (queueKey: string) => void;
@@ -67,7 +82,7 @@ export type QueryClient = {
   isFetching: (filters?: QueryFilters) => number;
   isMutating: (filters?: MutationFilters) => number;
   getQueryCache: () => Map<string, Query>;
-  getMutationCache: () => Map<string, MutationObject>;
+  getMutationCache: () => MutationCache;
   clear: () => void;
   getDefaultOptions: () => {
     queries: Omit<QueryOptions, 'queryKey'>;
@@ -191,7 +206,36 @@ const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>) => {
   return cache ?? new Map<string, Query<any, any, any, any>>();
 };
 const createMutationCache = (cache?: Map<string, MutationObject<any, any, any, any>>) => {
-  return cache ?? new Map<string, MutationObject<any, any, any, any>>();
+  const map = cache ?? new Map<string, MutationObject<any, any, any, any>>();
+  // Reactive version signal — bumps on structural changes so useMutationState re-evaluates
+  const version = $(0);
+  const bump = () => version((v) => v + 1);
+  return {
+    get size() {
+      return map.size;
+    },
+    has: (key: string) => map.has(key),
+    get: (key: string) => map.get(key),
+    set: (key: string, value: MutationObject<any, any, any, any>) => {
+      map.set(key, value);
+      bump();
+      return map;
+    },
+    delete: (key: string) => {
+      const r = map.delete(key);
+      if (r) bump();
+      return r;
+    },
+    clear: () => {
+      map.clear();
+      bump();
+    },
+    values: () => map.values(),
+    entries: () => map.entries(),
+    keys: () => map.keys(),
+    [Symbol.iterator]: () => map[Symbol.iterator](),
+    version,
+  };
 };
 
 // #region createQuery
@@ -442,7 +486,8 @@ const createQuery = <
           query.staleDisposer();
           query.state.isStale(false);
           const rawStaleTime = query.resolvedOptions.staleTime;
-          const staleTime = typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
+          const staleTime =
+            typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
           if (staleTime === 'static' || staleTime === Infinity) {
             // data never goes stale
           } else if (staleTime === 0) {
@@ -462,7 +507,8 @@ const createQuery = <
       const { retry, retryDelay } = query.resolvedOptions;
       if (retry === false) return;
       if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
-      const delay = typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
+      const delay =
+        typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
       if (
         query.resolvedOptions.networkMode === 'online' &&
         query.state.fetchStatus() === 'paused'
@@ -973,7 +1019,7 @@ export const createQueryClient = (options?: {
     return cache;
   };
 
-  const getMutationCache = (): Map<string, MutationObject> => {
+  const getMutationCache = (): MutationCache => {
     return mutationCache;
   };
 

@@ -6,6 +6,7 @@ import {
   type ObservableReadonly,
   useMemo,
   useCleanup,
+  useRoot,
 } from 'voby';
 import { type QueryClient, useQueryClient } from './useQuery';
 import { hashFn, partialMatchKey } from './utils';
@@ -49,6 +50,7 @@ export type MutationObject<
   reset: () => void;
   destroy: () => void;
   destroyDisposer: () => void;
+  stateDisposer: () => void;
   addInstance: () => () => void;
   removeInstance: () => void;
   scheduleDestroy: () => void;
@@ -167,21 +169,29 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
       : resolvedOptions.retry > failureCount;
   };
 
-  const state: MutationState<TData, TError, TVariables, TContext> = {
-    data: $(undefined),
-    error: $<TError | null>(null),
-    status: $<MutationStatus>('idle'),
-    failureCount: $(0),
-    failureReason: $<TError | null>(null),
-    isPaused: $(false),
-    submittedAt: $(undefined),
-    variables: $(undefined),
-    isError: useMemo(() => state.status() === 'error'),
-    isIdle: useMemo(() => state.status() === 'idle'),
-    isPending: useMemo(() => state.status() === 'pending'),
-    isSuccess: useMemo(() => state.status() === 'success'),
-    meta: $({}),
-  };
+  // Create state memos in a detached root so they survive parent memo re-runs.
+  // Same pattern as createQuery — prevents disposal when the containing useMemo
+  // re-evaluates due to mutationCache.version() bumping during cache.set().
+  let state!: MutationState<TData, TError, TVariables, TContext>;
+  let stateDisposer: () => void = () => {};
+  useRoot(dispose => {
+    stateDisposer = dispose;
+    state = {
+      data: $(undefined),
+      error: $<TError | null>(null),
+      status: $<MutationStatus>('idle'),
+      failureCount: $(0),
+      failureReason: $<TError | null>(null),
+      isPaused: $(false),
+      submittedAt: $(undefined),
+      variables: $(undefined),
+      isError: useMemo(() => state.status() === 'error'),
+      isIdle: useMemo(() => state.status() === 'idle'),
+      isPending: useMemo(() => state.status() === 'pending'),
+      isSuccess: useMemo(() => state.status() === 'success'),
+      meta: $({}),
+    };
+  });
 
   const mutate = async (
     variables: TVariables,
@@ -263,10 +273,12 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
     mutate,
     mutateAsync: mutate,
     reset,
+    stateDisposer,
     destroy: () => {
       if (mutationKey) {
         queryClient.mutationCache.delete(mutationKey);
       }
+      mutationObject.stateDisposer();
     },
     addInstance: () => {
       mutationObject.destroyDisposer();
@@ -282,9 +294,12 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
     scheduleDestroy: () => {
       if ((resolvedOptions.gcTime ?? 5 * 60 * 1000) === Infinity) return;
       mutationObject.destroyDisposer();
-      const id = setTimeout(() => {
-        mutationObject.destroy();
-      }, resolvedOptions.gcTime ?? 5 * 60 * 1000);
+      const id = setTimeout(
+        () => {
+          mutationObject.destroy();
+        },
+        resolvedOptions.gcTime ?? 5 * 60 * 1000,
+      );
       mutationObject.destroyDisposer = () => clearTimeout(id);
     },
     destroyDisposer: () => {},
@@ -311,6 +326,9 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
   const queryClient = useQueryClient(options.queryClient);
 
   const mutation = useMemo(() => {
+    // Subscribe to structural cache changes so this memo re-runs after clear(),
+    // causing createMutation to re-register the mutation in the cache.
+    queryClient.mutationCache.version();
     const mutation = createMutation(queryClient, options);
     useCleanup(mutation.addInstance());
     return mutation;
@@ -352,6 +370,8 @@ export function useMutationState<TResult = MutationState>({
   const queryClient = useQueryClient();
   const cache = queryClient.mutationCache;
   return useMemo(() => {
+    // Subscribe to structural changes (add/remove/clear)
+    cache.version();
     return Array.from(cache.values())
       .filter(
         (mutation): mutation is MutationObject<any, any, any, any> =>

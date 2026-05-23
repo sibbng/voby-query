@@ -1,0 +1,21 @@
+{
+  "name": "voby-query-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp build",
+    "check": "vp check",
+    "dev": "vp dev"
+  },
+  "dependencies": {
+    "voby": "^0.58.1",
+    "voby-query": "workspace:*"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@^0.1.22",
+    "vite-plus": "^0.1.22"
+  }
+}
