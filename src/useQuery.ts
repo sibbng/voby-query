@@ -424,6 +424,9 @@ const createQuery = <
       throwOnError = resolvedOptions.throwOnError,
       force = false,
     } = {}) => {
+      if (queryHash && !cache.has(queryHash)) {
+        cache.set(queryHash, query as Query);
+      }
       if (!query.resolvedOptions.enabled) return;
       if (!force && !query.isActive) return;
       if (query.isFetching && !query.isCancelled) return;
@@ -535,44 +538,56 @@ const createQuery = <
 
   // Use useRoot to create the query state in a detached reactive scope
   query.stateDisposer = useRoot(() => {
+    const data = $(options.initialData as TData, { equals: false });
+    const dataUpdateCount = $(0);
+    const dataUpdatedAt = $(options.initialDataUpdatedAt ?? 0);
+    const error = $<Error | null>(null, { equals: false });
+    const errorUpdateCount = $(0);
+    const errorUpdatedAt = $(0);
+    const meta = $(null);
+    const isInvalidated = $(false);
+    const status = $<QueryStatus>(options.initialData !== undefined ? 'success' : 'pending');
+    const fetchStatus = $<FetchStatus>('idle');
+    const isStale = $(false);
+
     query.state = {
-      data: $(options.initialData as TData, { equals: false }),
-      dataUpdateCount: $(0),
-      dataUpdatedAt: $(options.initialDataUpdatedAt ?? 0),
-      error: $<Error | null>(null, { equals: false }),
-      errorUpdateCount: $(0),
-      errorUpdatedAt: $(0),
-      meta: $(null),
-      isInvalidated: $(false),
-      status: $<QueryStatus>(options.initialData !== undefined ? 'success' : 'pending'),
-      fetchStatus: $<FetchStatus>('idle'),
-      isFetching: useMemo((): boolean => query.state.fetchStatus() === 'fetching'),
+      data,
+      dataUpdateCount,
+      dataUpdatedAt,
+      error,
+      errorUpdateCount,
+      errorUpdatedAt,
+      meta,
+      isInvalidated,
+      status,
+      fetchStatus,
+      isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
       isRefetching: useMemo(
         (): boolean =>
-          query.state.fetchStatus() === 'fetching' && query.state.status() !== 'pending',
+          fetchStatus() === 'fetching' && status() !== 'pending',
       ),
-      isFetched: useMemo((): boolean => query.state.fetchStatus() === 'idle'),
-      isFetchedAfterMount: useMemo((): boolean => query.state.status() !== 'pending'),
-      isPaused: useMemo((): boolean => query.state.fetchStatus() === 'paused'),
-      isPending: useMemo((): boolean => query.state.status() === 'pending'),
-      isSuccess: useMemo((): boolean => query.state.status() === 'success'),
-      isError: useMemo((): boolean => query.state.status() === 'error'),
+      isFetched: useMemo((): boolean => fetchStatus() === 'idle'),
+      isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
+      isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
+      isPending: useMemo((): boolean => status() === 'pending'),
+      isSuccess: useMemo((): boolean => status() === 'success'),
+      isError: useMemo((): boolean => status() === 'error'),
       isLoading: useMemo(
         (): boolean =>
-          query.state.status() === 'pending' && query.state.fetchStatus() === 'fetching',
+          status() === 'pending' && fetchStatus() === 'fetching',
       ),
       isLoadingError: useMemo(
-        (): boolean => query.state.status() === 'error' && query.state.data() !== undefined,
+        (): boolean => status() === 'error' && data() !== undefined,
       ),
       isRefetchError: useMemo(
-        (): boolean => query.state.status() === 'error' && query.state.status() !== 'pending',
+        (): boolean => status() === 'error' && status() !== 'pending',
       ),
       isPlaceholderData: useMemo(
-        (): boolean => options.placeholderData !== undefined && query.state.data() === undefined,
+        (): boolean => options.placeholderData !== undefined && data() === undefined,
       ),
-      isStale: $(false),
+      isStale,
       isIdle: useMemo(
-        (): boolean => query.state.fetchStatus() === 'idle' && query.state.status() === 'pending',
+        (): boolean => fetchStatus() === 'idle' && status() === 'pending',
       ),
     } as QueryState<TData>;
     // Return disposer for cleanup

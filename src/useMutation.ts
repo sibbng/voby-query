@@ -176,20 +176,31 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
   let stateDisposer: () => void = () => {};
   useRoot(dispose => {
     stateDisposer = dispose;
+
+    const data = $<TData | undefined>(undefined);
+    const error = $<TError | null>(null);
+    const status = $<MutationStatus>('idle');
+    const failureCount = $(0);
+    const failureReason = $<TError | null>(null);
+    const isPaused = $(false);
+    const submittedAt = $<number | undefined>(undefined);
+    const variables = $<TVariables | undefined>(undefined);
+    const meta = $({});
+
     state = {
-      data: $(undefined),
-      error: $<TError | null>(null),
-      status: $<MutationStatus>('idle'),
-      failureCount: $(0),
-      failureReason: $<TError | null>(null),
-      isPaused: $(false),
-      submittedAt: $(undefined),
-      variables: $(undefined),
-      isError: useMemo(() => state.status() === 'error'),
-      isIdle: useMemo(() => state.status() === 'idle'),
-      isPending: useMemo(() => state.status() === 'pending'),
-      isSuccess: useMemo(() => state.status() === 'success'),
-      meta: $({}),
+      data,
+      error,
+      status,
+      failureCount,
+      failureReason,
+      isPaused,
+      submittedAt,
+      variables,
+      isError: useMemo(() => status() === 'error'),
+      isIdle: useMemo(() => status() === 'idle'),
+      isPending: useMemo(() => status() === 'pending'),
+      isSuccess: useMemo(() => status() === 'success'),
+      meta,
     };
   });
 
@@ -197,6 +208,9 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
     variables: TVariables,
     mutateOptions?: MutateOptions<TData, TError, TVariables, TContext>,
   ) => {
+    if (mutationKey && !queryClient.mutationCache.has(mutationKey)) {
+      queryClient.mutationCache.set(mutationKey, mutationObject);
+    }
     let context: TContext | undefined;
     state.status('pending');
     state.variables(variables);
@@ -326,9 +340,6 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
   const queryClient = useQueryClient(options.queryClient);
 
   const mutation = useMemo(() => {
-    // Subscribe to structural cache changes so this memo re-runs after clear(),
-    // causing createMutation to re-register the mutation in the cache.
-    queryClient.mutationCache.version();
     const mutation = createMutation(queryClient, options);
     useCleanup(mutation.addInstance());
     return mutation;
