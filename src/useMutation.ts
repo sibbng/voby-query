@@ -5,8 +5,6 @@ import {
   type ObservableMaybe,
   type ObservableReadonly,
   useMemo,
-  useRoot,
-  useTimeout,
   useCleanup,
 } from 'voby';
 import { type QueryClient, useQueryClient } from './useQuery';
@@ -228,7 +226,7 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
           typeof retryDelay === 'function'
             ? retryDelay(state.failureCount(), error as TError)
             : retryDelay * 2 ** (state.failureCount() - 1);
-        useTimeout(() => {
+        setTimeout(() => {
           mutate(variables, mutateOptions);
         }, resolvedRetryDelay);
       } else {
@@ -283,14 +281,11 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
     },
     scheduleDestroy: () => {
       if ((resolvedOptions.gcTime ?? 5 * 60 * 1000) === Infinity) return;
-      useRoot(() => {
-        mutationObject.destroyDisposer = useTimeout(
-          () => {
-            mutationObject.destroy();
-          },
-          resolvedOptions.gcTime ?? 5 * 60 * 1000,
-        );
-      });
+      mutationObject.destroyDisposer();
+      const id = setTimeout(() => {
+        mutationObject.destroy();
+      }, resolvedOptions.gcTime ?? 5 * 60 * 1000);
+      mutationObject.destroyDisposer = () => clearTimeout(id);
     },
     destroyDisposer: () => {},
   };

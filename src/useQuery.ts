@@ -10,10 +10,8 @@ import {
   useCleanup,
   useContext,
   useEventListener,
-  useInterval,
   useMemo,
   useRoot,
-  useTimeout,
 } from 'voby';
 import { QueryClientContext } from './context';
 import type { MutationFilters, MutationKey, MutationObject, MutationOptions } from './useMutation';
@@ -179,6 +177,7 @@ type Query<
   destroyDisposer: () => void;
   stateDisposer: () => void;
   staleDisposer: () => void;
+  retryDisposer: () => void;
   addInstance: () => () => void;
   removeInstance: () => void;
   scheduleDestroy: () => void;
@@ -259,6 +258,8 @@ const createQuery = <
     isCancelled: false,
     destroyDisposer: () => {}, // for GC timer only
     stateDisposer: () => {}, // for state lifetime
+    staleDisposer: () => {}, // for stale timer
+    retryDisposer: () => {}, // for retry timer
     // #region addInstance
     addInstance: () => {
       query.destroyDisposer();
@@ -284,12 +285,17 @@ const createQuery = <
           query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
         }
         if (query.resolvedOptions.refetchInterval) {
-          // Delay the first interval call so the initial fetch is not doubled
-          useTimeout(() => {
-            useInterval(() => {
+          const intervalDelay = query.resolvedOptions.refetchInterval;
+          let intervalId: ReturnType<typeof setInterval>;
+          const timeoutId = setTimeout(() => {
+            intervalId = setInterval(() => {
               query.fetch();
-            }, query.resolvedOptions.refetchInterval);
-          }, query.resolvedOptions.refetchInterval);
+            }, intervalDelay);
+          }, intervalDelay);
+          useCleanup(() => {
+            clearTimeout(timeoutId);
+            clearInterval(intervalId);
+          });
         }
         if (query.resolvedOptions.networkMode === 'online') {
           useEventListener(window, 'online', async () => {
@@ -344,15 +350,17 @@ const createQuery = <
     },
     scheduleDestroy: () => {
       if (resolvedOptions.gcTime === Infinity) return;
-      useRoot(() => {
-        query.destroyDisposer = useTimeout(() => {
-          query.destroy();
-        }, resolvedOptions.gcTime);
-      });
+      query.destroyDisposer();
+      const id = setTimeout(() => {
+        query.destroy();
+      }, resolvedOptions.gcTime);
+      query.destroyDisposer = () => clearTimeout(id);
     },
     destroy: () => {
       query.cancel();
-      query.stateDisposer(); // Dispose the state
+      query.staleDisposer();
+      query.retryDisposer();
+      query.stateDisposer();
       cache.delete(queryHash);
     },
     isFetching: false,
@@ -440,15 +448,15 @@ const createQuery = <
           } else if (staleTime === 0) {
             query.state.isStale(true);
           } else {
-            query.staleDisposer = useTimeout(() => {
+            const id = setTimeout(() => {
               query.state.isStale(true);
             }, staleTime);
+            query.staleDisposer = () => clearTimeout(id);
           }
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
       }
     },
-    staleDisposer: () => {},
     // #region retry
     scheduleRetry: (attempt: number, error: Error) => {
       const { retry, retryDelay } = query.resolvedOptions;
@@ -470,9 +478,11 @@ const createQuery = <
         return;
       }
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
-        useTimeout(() => {
+        const id = setTimeout(() => {
+          query.retryDisposer = () => {};
           query.fetch({ retryAttempt: attempt });
-        }, delay);
+        }, delay ?? 0);
+        query.retryDisposer = () => clearTimeout(id);
       }
     },
   };
