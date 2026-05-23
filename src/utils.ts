@@ -9,20 +9,59 @@ export function queryOptions<Q extends QueryOptions>(options: Q): Q {
 // #region Utils
 
 export const hashFn = (queryKey: QueryKey | MutationKey): string => {
-  return JSON.stringify(useResolved($$(queryKey)), (_, val) => {
+  return JSON.stringify(resolveKey(queryKey), (_, val) => {
     return isPlainObject(val)
       ? Object.keys(val)
           .sort()
-          .reduce((result, key) => {
-            result[key] = val[key];
-            return result;
-          }, {} as any)
+          .reduce(
+            (result, key) => {
+              result[key] = (val as Record<string, unknown>)[key];
+              return result;
+            },
+            {} as Record<string, unknown>,
+          )
       : val;
   });
 };
 
+export const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
+  return useResolved($$(queryKey)) as unknown[];
+};
+
+export const partialMatchKey = (
+  filterKey: QueryKey | MutationKey,
+  queryKey: QueryKey | MutationKey,
+): boolean => {
+  const resolvedFilterKey = resolveKey(filterKey);
+  const resolvedQueryKey = resolveKey(queryKey);
+
+  if (resolvedFilterKey.length > resolvedQueryKey.length) return false;
+
+  return resolvedFilterKey.every((value, index) => deepEqual(value, resolvedQueryKey[index]));
+};
+
+const deepEqual = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true;
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => deepEqual(value, b[index]));
+  }
+
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every((key) =>
+      deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    );
+  }
+
+  return false;
+};
+
 // Copied from: https://github.com/jonschlinkert/is-plain-object
-export function isPlainObject(o: any): o is Object {
+export function isPlainObject(o: any): o is object {
   if (!hasObjectPrototype(o)) {
     return false;
   }

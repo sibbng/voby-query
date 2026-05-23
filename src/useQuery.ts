@@ -9,7 +9,6 @@ import {
   untrack,
   useCleanup,
   useContext,
-  useEffect,
   useEventListener,
   useInterval,
   useMemo,
@@ -17,13 +16,8 @@ import {
   useTimeout,
 } from 'voby';
 import { QueryClientContext } from './context';
-import type {
-  MutationFilters,
-  MutationKey,
-  MutationObject,
-  MutationOptions,
-} from './useMutation';
-import { hashFn, replaceEqualDeep } from './utils';
+import type { MutationFilters, MutationKey, MutationObject, MutationOptions } from './useMutation';
+import { hashFn, partialMatchKey, replaceEqualDeep } from './utils';
 
 // #region Types
 export type QueryClient = {
@@ -32,8 +26,8 @@ export type QueryClient = {
   jobQueue: Map<string, number[]>;
   startQueueJob: (queueKey: string) => void;
   finishQueueJob: (queueKey: string) => void;
-  getQueryData: <T>(queryKey: QueryKey) => T;
-  setQueryData: <T>(queryKey: QueryKey, data: (previous: T) => T) => void;
+  getQueryData: <T>(queryKey: QueryKey) => T | undefined;
+  setQueryData: <T>(queryKey: QueryKey, data: T | ((previous: T | undefined) => T)) => void;
   invalidateQueries: (
     filters: {
       queryKey: QueryKey;
@@ -60,14 +54,8 @@ export type QueryClient = {
       cancelRefetch?: boolean;
     },
   ) => Promise<void>;
-  cancelQueries: (filters?: {
-    queryKey?: QueryKey;
-    exact?: boolean;
-  }) => Promise<void>;
-  removeQueries: (filters?: {
-    queryKey?: QueryKey;
-    exact?: boolean;
-  }) => void;
+  cancelQueries: (filters?: { queryKey?: QueryKey; exact?: boolean }) => Promise<void>;
+  removeQueries: (filters?: { queryKey?: QueryKey; exact?: boolean }) => void;
   resetQueries: (
     filters?: {
       queryKey?: QueryKey;
@@ -77,11 +65,8 @@ export type QueryClient = {
       throwOnError?: boolean;
       cancelRefetch?: boolean;
     },
-  ) => void;
-  isFetching: (filters?: {
-    queryKey?: QueryKey;
-    exact?: boolean;
-  }) => number;
+  ) => Promise<void>;
+  isFetching: (filters?: QueryFilters) => number;
   isMutating: (filters?: MutationFilters) => number;
   getQueryCache: () => Map<string, Query>;
   getMutationCache: () => Map<string, MutationObject>;
@@ -95,15 +80,9 @@ export type QueryClient = {
     mutations?: Partial<MutationOptions>;
   }) => void;
   getQueryDefaults: (queryKey: QueryKey) => Partial<QueryOptions>;
-  setQueryDefaults: (
-    queryKey: QueryKey,
-    defaults: Partial<QueryOptions>,
-  ) => void;
+  setQueryDefaults: (queryKey: QueryKey, defaults: Partial<QueryOptions>) => void;
   getMutationDefaults: (mutationKey?: MutationKey) => Partial<MutationOptions>;
-  setMutationDefaults: (
-    mutationKey: MutationKey,
-    defaults: Partial<MutationOptions>,
-  ) => void;
+  setMutationDefaults: (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => void;
 };
 export type QueryKey = FunctionMaybe<ObservableMaybe<string | number>[]>;
 export type QueryOptions<
@@ -121,21 +100,19 @@ export type QueryOptions<
   initialDataUpdatedAt?: number;
   placeholderData?: TData;
   enabled?: FunctionMaybe<boolean>;
-  staleTime?: number;
+  staleTime?: number | 'static' | ((query: Query) => number | 'static');
   refetchInterval?: number;
-  gcTime?: number;
+  gcTime?: number | typeof Infinity;
   throwOnError?: boolean;
   structuralSharing?:
     | boolean
     | ((oldData: TData | undefined, newData: Awaited<TQueryFnData>) => TData);
-  select?: (
-    data: TInitialData extends TQueryFnData ? TInitialData : TQueryFnData,
-  ) => R;
+  select?: (data: TInitialData extends TQueryFnData ? TInitialData : TQueryFnData) => R;
   networkMode?: 'online' | 'always' | 'offlineFirst';
   refetchOnReconnect?: boolean;
-  retry?: boolean | number;
+  retry?: boolean | number | ((failureCount: number, error: TError) => boolean);
   retryOnMount?: boolean;
-  retryDelay?: number;
+  retryDelay?: number | ((retryAttempt: number, error: TError) => number);
   cancelRefetch?: boolean;
   refetchOnWindowFocus?: boolean | 'always';
   refetchOnMount?:
@@ -189,19 +166,13 @@ type Query<
   state: QueryState<TData>;
   cancel: () => Promise<void>;
   destroy: () => void;
-  fetch: (retryAttempt?: number, throwOnError?: boolean) => Promise<void>;
-  refetch: (options?: {
+  fetch: (options?: {
+    retryAttempt?: number;
     throwOnError?: boolean;
-    cancelRefetch?: boolean;
+    force?: boolean;
   }) => Promise<void>;
-  resolvedOptions: QueryOptions<
-    TQueryFnData,
-    TError,
-    TData,
-    TQueryKey,
-    TInitialData,
-    R
-  >;
+  refetch: (options?: { throwOnError?: boolean; cancelRefetch?: boolean }) => Promise<void>;
+  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
   instances: number;
   controller: AbortController;
   isFetching: boolean;
@@ -212,7 +183,7 @@ type Query<
   removeInstance: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
-  scheduleRetry: (retryAttempt: number) => void;
+  scheduleRetry: (retryAttempt: number, error: Error) => void;
   isCancelled: boolean;
   events: EventTarget;
 };
@@ -220,9 +191,7 @@ type Query<
 const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>) => {
   return cache ?? new Map<string, Query<any, any, any, any>>();
 };
-const createMutationCache = (
-  cache?: Map<string, MutationObject<any, any, any, any>>,
-) => {
+const createMutationCache = (cache?: Map<string, MutationObject<any, any, any, any>>) => {
   return cache ?? new Map<string, MutationObject<any, any, any, any>>();
 };
 
@@ -236,23 +205,9 @@ const createQuery = <
   R = void,
 >(
   queryClient: QueryClient,
-  options: QueryOptions<
-    TQueryFnData,
-    TError,
-    TData,
-    TQueryKey,
-    TInitialData,
-    R
-  >,
+  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
 ): Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
-  const resolvedOptions: QueryOptions<
-    TQueryFnData,
-    TError,
-    TData,
-    TQueryKey,
-    TInitialData,
-    R
-  > = {
+  const resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
     queryClient,
     ...(queryClient.getDefaultOptions().queries as QueryOptions<
       TQueryFnData,
@@ -287,254 +242,240 @@ const createQuery = <
       R
     >;
     query.resolvedOptions = resolvedOptions;
-    return query as Query<
-      TQueryFnData,
-      TError,
-      TData,
-      TQueryKey,
-      TInitialData,
-      R
-    >;
+    return query as Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
   }
 
   // create custom event
   const events = new EventTarget();
 
   // #region query
-  const query: Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> =
-    {
-      isActive: false,
-      events,
-      resolvedOptions,
-      instances: 0,
-      state: undefined as any, // will be set below
-      controller: new AbortController(),
-      isCancelled: false,
-      destroyDisposer: () => {}, // for GC timer only
-      stateDisposer: () => {},   // for state lifetime
-      // #region addInstance
-      addInstance: () => {
-        query.destroyDisposer();
-        query.isActive = true;
-        query.instances++;
-        untrack(() => {
-          if (query.resolvedOptions.enabled) {
-            const shouldRefetch = (() => {
-              const refetchOnMount = query.resolvedOptions.refetchOnMount;
-              if (typeof refetchOnMount === 'function') {
-                return refetchOnMount(query);
-              }
-              if (refetchOnMount === 'always') return true;
-              if (refetchOnMount === false) return false;
-              if (query.state.isStale() || query.state.isPending()) return true;
-              return false;
-            })();
-            if (shouldRefetch) {
+  const query: Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
+    isActive: false,
+    events,
+    resolvedOptions,
+    instances: 0,
+    state: undefined as any, // will be set below
+    controller: new AbortController(),
+    isCancelled: false,
+    destroyDisposer: () => {}, // for GC timer only
+    stateDisposer: () => {}, // for state lifetime
+    // #region addInstance
+    addInstance: () => {
+      query.destroyDisposer();
+      query.isActive = true;
+      query.instances++;
+      untrack(() => {
+        if (query.resolvedOptions.enabled) {
+          const shouldRefetch = (() => {
+            const refetchOnMount = query.resolvedOptions.refetchOnMount;
+            if (typeof refetchOnMount === 'function') {
+              return refetchOnMount(query);
+            }
+            if (refetchOnMount === 'always') return true;
+            if (refetchOnMount === false) return false;
+            if (query.state.isStale() || query.state.isPending()) return true;
+            return false;
+          })();
+          if (shouldRefetch) {
+            query.fetch();
+          }
+        }
+        if (query.state.fetchStatus() !== 'fetching') {
+          query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
+        }
+        if (query.resolvedOptions.refetchInterval) {
+          // Delay the first interval call so the initial fetch is not doubled
+          useTimeout(() => {
+            useInterval(() => {
               query.fetch();
-            }
-          }
-          if (query.state.fetchStatus() !== 'fetching') {
-            query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
-          }
-          if (query.resolvedOptions.refetchInterval) {
-            // Delay the first interval call so the initial fetch is not doubled
-            useTimeout(() => {
-              useInterval(() => {
-                query.fetch();
-              }, query.resolvedOptions.refetchInterval);
             }, query.resolvedOptions.refetchInterval);
-          }
-          if (query.resolvedOptions.networkMode === 'online') {
-            useEventListener(window, 'online', async () => {
-              if (query.resolvedOptions.refetchOnReconnect) {
-                query.state.fetchStatus('fetching');
-                query.refetch();
-              }
-            });
-            useEventListener(window, 'offline', async () => {
-              query.cancel();
-              query.state.fetchStatus('paused');
-            });
-          }
-          if (query.resolvedOptions.refetchOnWindowFocus) {
-            useEventListener(document, 'visibilitychange', () => {
-              if (
-                document.visibilityState === 'visible' &&
-                (query.resolvedOptions.refetchOnWindowFocus === 'always' ||
-                  query.state.isStale())
-              ) {
-                query.refetch();
-              }
-            });
-          }
-        });
-        return query.removeInstance;
-      },
-      removeInstance: () => {
-        query.instances--;
-        if (query.instances === 0) {
-          query.isActive = false;
-          query.scheduleDestroy();
+          }, query.resolvedOptions.refetchInterval);
         }
-      },
-      // #region cancel
-      cancel: async () => {
-        return new Promise((resolve) => {
-          query.controller.abort();
-          query.isCancelled = true;
-          requestAnimationFrame(() => {
-            resolve();
+        if (query.resolvedOptions.networkMode === 'online') {
+          useEventListener(window, 'online', async () => {
+            if (query.resolvedOptions.refetchOnReconnect) {
+              query.state.fetchStatus('fetching');
+              query.refetch();
+            }
           });
-        });
-      },
-      reset: () => {
-        query.state.data(options.initialData as TData);
-        query.state.dataUpdatedAt(options.initialDataUpdatedAt ?? 0);
-        query.state.error(null);
-        query.state.errorUpdatedAt(0);
-        query.state.status('pending');
-        query.state.fetchStatus('idle');
-        query.state.isStale(false);
-      },
-      scheduleDestroy: () => {
-        useRoot(() => {
-          query.destroyDisposer = useTimeout(() => {
-            query.destroy();
-          }, resolvedOptions.gcTime);
-        });
-      },
-      destroy: () => {
-        query.cancel();
-        query.stateDisposer(); // Dispose the state
-        cache.delete(queryHash);
-      },
-      isFetching: false,
-      refetch: async ({
-        throwOnError = resolvedOptions.throwOnError,
-        cancelRefetch = resolvedOptions.cancelRefetch,
-      } = {}) => {
-        if (!query.resolvedOptions.enabled) return;
-        if (cancelRefetch) {
-          await query.cancel();
+          useEventListener(window, 'offline', async () => {
+            query.cancel();
+            query.state.fetchStatus('paused');
+          });
         }
-        return query.fetch(0, throwOnError);
-      },
-      // #region fetch
-      fetch: async (
-        retryAttempt = 0,
-        throwOnError = resolvedOptions.throwOnError,
-      ) => {
-        if (!query.resolvedOptions.enabled) return;
-        if (!query.isActive) return;
-        if (query.isFetching && !query.isCancelled) return;
-        if (query.state.fetchStatus() === 'paused') return;
-
-        query.isFetching = true;
-        query.isCancelled = false;
-        query.controller = new AbortController();
-        const signal = query.controller.signal;
-        try {
-          query.state.fetchStatus('fetching');
-          const result = await untrack(() =>
-            query.resolvedOptions.queryFn!({ signal }),
-          );
-          // If query is cancelled before promise resolves, don't update state
-          if (query.isCancelled || signal.aborted) {
-            return;
-          }
-
-          let newData: TData;
-          if (typeof resolvedOptions.structuralSharing === 'function') {
-            newData = resolvedOptions.structuralSharing(
-              query.state.data(),
-              result,
-            ) as TData;
-          } else if (resolvedOptions.structuralSharing === false) {
-            newData = result as TData;
-          } else if (isDevelopment) {
-            try {
-              newData = replaceEqualDeep(query.state.data(), result) as TData;
-            } catch (error) {
-              console.error(
-                `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
-              );
-
-              throw error;
+        if (query.resolvedOptions.refetchOnWindowFocus) {
+          useEventListener(document, 'visibilitychange', () => {
+            if (
+              document.visibilityState === 'visible' &&
+              (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
+            ) {
+              query.refetch();
             }
-          } else {
+          });
+        }
+      });
+      return query.removeInstance;
+    },
+    removeInstance: () => {
+      query.instances--;
+      if (query.instances === 0) {
+        query.isActive = false;
+        query.scheduleDestroy();
+      }
+    },
+    // #region cancel
+    cancel: async () => {
+      return new Promise((resolve) => {
+        query.controller.abort();
+        query.isCancelled = true;
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    },
+    reset: () => {
+      query.state.data(options.initialData as TData);
+      query.state.dataUpdatedAt(options.initialDataUpdatedAt ?? 0);
+      query.state.error(null);
+      query.state.errorUpdatedAt(0);
+      query.state.status('pending');
+      query.state.fetchStatus('idle');
+      query.state.isStale(false);
+    },
+    scheduleDestroy: () => {
+      if (resolvedOptions.gcTime === Infinity) return;
+      useRoot(() => {
+        query.destroyDisposer = useTimeout(() => {
+          query.destroy();
+        }, resolvedOptions.gcTime);
+      });
+    },
+    destroy: () => {
+      query.cancel();
+      query.stateDisposer(); // Dispose the state
+      cache.delete(queryHash);
+    },
+    isFetching: false,
+    refetch: async ({
+      throwOnError = resolvedOptions.throwOnError,
+      cancelRefetch = resolvedOptions.cancelRefetch,
+    } = {}) => {
+      if (!query.resolvedOptions.enabled) return;
+      if (cancelRefetch) {
+        await query.cancel();
+      }
+      return query.fetch({ retryAttempt: 0, throwOnError });
+    },
+    // #region fetch
+    fetch: async ({
+      retryAttempt = 0,
+      throwOnError = resolvedOptions.throwOnError,
+      force = false,
+    } = {}) => {
+      if (!query.resolvedOptions.enabled) return;
+      if (!force && !query.isActive) return;
+      if (query.isFetching && !query.isCancelled) return;
+      if (query.state.fetchStatus() === 'paused') return;
+
+      query.isFetching = true;
+      query.isCancelled = false;
+      query.controller = new AbortController();
+      const signal = query.controller.signal;
+      try {
+        query.state.fetchStatus('fetching');
+        const result = await untrack(() => query.resolvedOptions.queryFn!({ signal }));
+        // If query is cancelled before promise resolves, don't update state
+        if (query.isCancelled || signal.aborted) {
+          return;
+        }
+
+        let newData: TData;
+        if (typeof resolvedOptions.structuralSharing === 'function') {
+          newData = resolvedOptions.structuralSharing(query.state.data(), result) as TData;
+        } else if (resolvedOptions.structuralSharing === false) {
+          newData = result as TData;
+        } else if (isDevelopment) {
+          try {
             newData = replaceEqualDeep(query.state.data(), result) as TData;
-          }
+          } catch (error) {
+            console.error(
+              `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
+            );
 
-          query.state.data(newData);
-          query.state.dataUpdatedAt(Date.now());
-          query.state.dataUpdateCount((prev) => prev + 1);
-          query.state.status('success');
-        } catch (error) {
-          if (error instanceof Error && !signal.aborted) {
-            query.state.error(error);
-            query.state.status('error');
-            query.state.errorUpdatedAt(Date.now());
-            query.state.errorUpdateCount((prev) => prev + 1);
-            if (throwOnError) {
-              throw error;
-            }
-            query.scheduleRetry(retryAttempt + 1);
+            throw error;
           }
-        } finally {
-          if (
-            !query.isCancelled &&
-            signal.aborted &&
-            query.state.fetchStatus() === 'fetching'
-          ) {
-            // biome-ignore lint/correctness/noUnsafeFinally: <explanation>
-            return;
+        } else {
+          newData = replaceEqualDeep(query.state.data(), result) as TData;
+        }
+
+        query.state.data(newData);
+        query.state.dataUpdatedAt(Date.now());
+        query.state.dataUpdateCount((prev) => prev + 1);
+        query.state.status('success');
+      } catch (error) {
+        if (error instanceof Error && !signal.aborted) {
+          query.state.error(error);
+          query.state.status('error');
+          query.state.errorUpdatedAt(Date.now());
+          query.state.errorUpdateCount((prev) => prev + 1);
+          if (throwOnError) {
+            throw error;
           }
+          query.scheduleRetry(retryAttempt + 1, error);
+        }
+      } finally {
+        const shouldSkipFinalize =
+          !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
+        if (!shouldSkipFinalize) {
           query.isFetching = false;
           if (query.state.fetchStatus() !== 'paused') {
             query.state.fetchStatus('idle');
           }
           query.staleDisposer();
           query.state.isStale(false);
-          if (query.resolvedOptions.staleTime === 0) {
+          const rawStaleTime = query.resolvedOptions.staleTime;
+          const staleTime = typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
+          if (staleTime === 'static' || staleTime === Infinity) {
+            // data never goes stale
+          } else if (staleTime === 0) {
             query.state.isStale(true);
           } else {
             query.staleDisposer = useTimeout(() => {
               query.state.isStale(true);
-            }, query.resolvedOptions.staleTime);
+            }, staleTime);
           }
           events.dispatchEvent(new CustomEvent('fetch:done'));
         }
-      },
-      staleDisposer: () => {},
-      // #region retry
-      scheduleRetry: (attempt: number) => {
-        const { retry, retryDelay, retryOnMount } = query.resolvedOptions;
-        if (retry === false) return;
-        if (
-          query.resolvedOptions.networkMode === 'online' &&
-          query.state.fetchStatus() === 'paused'
-        ) {
-          useEventListener(
-            window,
-            'online',
-            () => {
-              query.fetch(attempt);
-            },
-            { once: true },
-          );
-          return;
-        }
-        if (retry === true) {
-          useTimeout(() => {
-            query.fetch();
-          }, retryDelay);
-        } else if (retry && attempt < retry) {
-          useTimeout(() => {
-            query.fetch(attempt);
-          }, retryDelay);
-        }
-      },
-    };
+      }
+    },
+    staleDisposer: () => {},
+    // #region retry
+    scheduleRetry: (attempt: number, error: Error) => {
+      const { retry, retryDelay } = query.resolvedOptions;
+      if (retry === false) return;
+      if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
+      const delay = typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
+      if (
+        query.resolvedOptions.networkMode === 'online' &&
+        query.state.fetchStatus() === 'paused'
+      ) {
+        useEventListener(
+          window,
+          'online',
+          () => {
+            query.fetch({ retryAttempt: attempt });
+          },
+          { once: true },
+        );
+        return;
+      }
+      if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
+        useTimeout(() => {
+          query.fetch({ retryAttempt: attempt });
+        }, delay);
+      }
+    },
+  };
 
   // Use useRoot to create the query state in a detached reactive scope
   query.stateDisposer = useRoot(() => {
@@ -571,11 +512,12 @@ const createQuery = <
         (): boolean => query.state.status() === 'error' && query.state.status() !== 'pending',
       ),
       isPlaceholderData: useMemo(
-        (): boolean =>
-          options.placeholderData !== undefined && query.state.data() === undefined,
+        (): boolean => options.placeholderData !== undefined && query.state.data() === undefined,
       ),
       isStale: $(false),
-      isIdle: useMemo((): boolean => query.state.fetchStatus() === 'idle' && query.state.status() === 'pending'),
+      isIdle: useMemo(
+        (): boolean => query.state.fetchStatus() === 'idle' && query.state.status() === 'pending',
+      ),
     } as QueryState<TData>;
     // Return disposer for cleanup
     return () => {
@@ -629,12 +571,12 @@ export const createQueryClient = (options?: {
     enabled: true,
     throwOnError: false,
     gcTime: 1000 * 60 * 5,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
     refetchInterval: 1000 * 60 * 5,
     networkMode: 'online' as const,
     retry: 3,
     retryOnMount: true,
-    retryDelay: 1000,
+    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
     cancelRefetch: true,
     refetchOnWindowFocus: true,
     structuralSharing: true,
@@ -665,33 +607,39 @@ export const createQueryClient = (options?: {
     Object.assign(mutationDefaults, newOptions.mutations);
   };
 
-  const queryDefaultsMap = new Map<string, Partial<QueryOptions>>();
+  const queryDefaultsMap = new Map<
+    string,
+    { queryKey: QueryKey; defaults: Partial<QueryOptions> }
+  >();
 
   const getQueryDefaults = (queryKey: QueryKey) => {
     const queryHash = queryKeyHashFn(queryKey);
-    for (const [key, defaults] of queryDefaultsMap.entries()) {
-      if (queryHash.startsWith(key)) {
+    for (const [key, { queryKey: defaultQueryKey, defaults }] of queryDefaultsMap.entries()) {
+      if (queryHash === key || partialMatchKey(defaultQueryKey, queryKey)) {
         return defaults;
       }
     }
     return {};
   };
 
-  const setQueryDefaults = (
-    queryKey: QueryKey,
-    defaults: Partial<QueryOptions>,
-  ) => {
+  const setQueryDefaults = (queryKey: QueryKey, defaults: Partial<QueryOptions>) => {
     const queryHash = queryKeyHashFn(queryKey);
-    queryDefaultsMap.set(queryHash, defaults);
+    queryDefaultsMap.set(queryHash, { queryKey, defaults });
   };
 
-  const mutationDefaultsMap = new Map<string, Partial<MutationOptions>>();
+  const mutationDefaultsMap = new Map<
+    string,
+    { mutationKey: MutationKey; defaults: Partial<MutationOptions> }
+  >();
 
   const getMutationDefaults = (mutationKey?: MutationKey) => {
     if (mutationKey) {
       const mutationHash = queryKeyHashFn(mutationKey);
-      for (const [key, defaults] of mutationDefaultsMap.entries()) {
-        if (mutationHash.startsWith(key)) {
+      for (const [
+        key,
+        { mutationKey: defaultMutationKey, defaults },
+      ] of mutationDefaultsMap.entries()) {
+        if (mutationHash === key || partialMatchKey(defaultMutationKey, mutationKey)) {
           return defaults;
         }
       }
@@ -699,18 +647,52 @@ export const createQueryClient = (options?: {
     return {};
   };
 
-  const setMutationDefaults = (
-    mutationKey: MutationKey,
-    defaults: Partial<MutationOptions>,
-  ) => {
+  const setMutationDefaults = (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => {
     const mutationHash = queryKeyHashFn(mutationKey);
-    mutationDefaultsMap.set(mutationHash, defaults);
+    mutationDefaultsMap.set(mutationHash, { mutationKey, defaults });
   };
   const queryKeyHashFn = queryDefaults.queryKeyHashFn ?? hashFn;
   const cache = createQueryCache(options?.queryCache);
   const mutationCache = createMutationCache(options?.mutationCache);
   const jobQueue = options?.jobQueue ?? new Map();
   const queueBus = new EventTarget();
+
+  const matchesQueryKey = (query: Query, queryKey: QueryKey, exact: boolean) => {
+    return exact
+      ? queryKeyHashFn(query.resolvedOptions.queryKey) === queryKeyHashFn(queryKey)
+      : partialMatchKey(queryKey, query.resolvedOptions.queryKey);
+  };
+
+  const matchesQueryFilters = (query: Query, filters?: QueryFilters) => {
+    if (!filters) return true;
+    const { queryKey, exact = false, type = 'all', stale, fetchStatus } = filters;
+
+    if (queryKey && !matchesQueryKey(query, queryKey, exact)) return false;
+    if (type === 'active' && !query.isActive) return false;
+    if (type === 'inactive' && query.isActive) return false;
+    if (stale === true && !query.state.isStale()) return false;
+    if (stale === false && query.state.isStale()) return false;
+    if (fetchStatus && query.state.fetchStatus() !== fetchStatus) return false;
+
+    return true;
+  };
+
+  const matchesMutationFilters = (mutation: MutationObject, filters?: MutationFilters) => {
+    if (!filters) return mutation.state.status() === 'pending';
+
+    const { mutationKey, exact = false, status } = filters;
+    if (mutationKey) {
+      const currentMutationKey = mutation.resolvedOptions.mutationKey;
+      if (!currentMutationKey) return false;
+      const keyMatch = exact
+        ? hashFn(currentMutationKey) === hashFn(mutationKey)
+        : partialMatchKey(mutationKey, currentMutationKey);
+      if (!keyMatch) return false;
+    }
+    if (status && mutation.state.status() !== status) return false;
+
+    return true;
+  };
 
   const startQueueJob = async (queueKey: string) => {
     const queue = jobQueue.get(queueKey) ?? [];
@@ -747,28 +729,25 @@ export const createQueryClient = (options?: {
     return cache.get(queryHash)?.state.data();
   };
   // #region setQueryData
-  const setQueryData = (queryKey: QueryKey, data: any) => {
+  const setQueryData: QueryClient['setQueryData'] = (queryKey, data) => {
     const queryHash = queryKeyHashFn(queryKey);
     const query = cache.get(queryHash);
     if (!query) return;
-    query.state.data((old) => (typeof data === 'function' ? data(old) : data));
+    if (typeof data === 'function') {
+      const updater = data as (previous: unknown) => unknown;
+      query.state.data((old) => updater(old));
+    } else {
+      query.state.data(data);
+    }
   };
   // #region invalidateQueries
   const invalidateQueries: QueryClient['invalidateQueries'] = async (
     { queryKey, exact = false, refetchType = 'active' },
     { throwOnError = false, cancelRefetch = true } = {},
   ) => {
-    const queriesToInvalidate = Array.from(cache.values()).filter((query) => {
-      if (queryKey) {
-        const currentQueryHash = queryKeyHashFn(query.resolvedOptions.queryKey);
-        const filterQueryHash = queryKeyHashFn(queryKey);
-        const keyMatch = exact
-          ? currentQueryHash === filterQueryHash
-          : currentQueryHash.startsWith(filterQueryHash);
-        if (!keyMatch) return false;
-      }
-      return true;
-    });
+    const queriesToInvalidate = Array.from(cache.values()).filter((query) =>
+      matchesQueryKey(query, queryKey, exact),
+    );
 
     for (const query of queriesToInvalidate) {
       query.state.isStale(true);
@@ -784,13 +763,11 @@ export const createQueryClient = (options?: {
     });
 
     if (cancelRefetch) {
-      for (const query of queriesToRefetch) {
-        query.cancel();
-      }
+      await Promise.all(queriesToRefetch.map((query) => query.cancel()));
     }
 
     const refetchPromises = queriesToRefetch.map((query) =>
-      query.fetch(undefined, throwOnError),
+      query.fetch({ throwOnError, force: true }),
     );
 
     try {
@@ -818,33 +795,17 @@ export const createQueryClient = (options?: {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
     const queriesToRefetch = Array.from(cache.values()).filter((query) => {
-      if (queryKey) {
-        const currentQueryHash = queryKeyHashFn(query.resolvedOptions.queryKey);
-        const filterQueryHash = queryKeyHashFn(queryKey);
-        const keyMatch = exact
-          ? currentQueryHash === filterQueryHash
-          : currentQueryHash.startsWith(filterQueryHash);
-        if (!keyMatch) return false;
-      }
-
       if (!query.resolvedOptions.enabled) return false;
-      if (type === 'active' && !query.isActive) return false;
-      if (type === 'inactive' && query.isActive) return false;
-      if (stale === true && !query.state.isStale()) return false;
-      if (stale === false && query.state.isStale()) return false;
-
-      return true;
+      return matchesQueryFilters(query, { queryKey, type, exact, stale });
     });
 
-    const refetchPromises = queriesToRefetch.map((query) =>
-      query.fetch(undefined, throwOnError),
-    );
-
     if (cancelRefetch) {
-      for (const query of queriesToRefetch) {
-        query.cancel();
-      }
+      await Promise.all(queriesToRefetch.map((query) => query.cancel()));
     }
+
+    const refetchPromises = queriesToRefetch.map((query) =>
+      query.fetch({ throwOnError, force: true }),
+    );
 
     await Promise.all(refetchPromises);
   };
@@ -855,43 +816,20 @@ export const createQueryClient = (options?: {
   }): Promise<void> => {
     const { queryKey, exact = false } = filters || {};
 
-    const queriesToCancel = Array.from(cache.values()).filter((query) => {
-      if (queryKey) {
-        const currentQueryHash = queryKeyHashFn(query.resolvedOptions.queryKey);
-        const filterQueryHash = queryKeyHashFn(queryKey);
-        const keyMatch = exact
-          ? currentQueryHash === filterQueryHash
-          : currentQueryHash.startsWith(filterQueryHash);
-        if (!keyMatch) return false;
-      }
-      return true;
-    });
+    const queriesToCancel = Array.from(cache.values()).filter(
+      (query) => !queryKey || matchesQueryKey(query, queryKey, exact),
+    );
 
     for (const query of queriesToCancel) {
       await query.cancel();
     }
   };
   // #region removeQueries
-  const removeQueries = (filters?: {
-    queryKey?: QueryKey;
-    exact?: boolean;
-  }): void => {
+  const removeQueries = (filters?: { queryKey?: QueryKey; exact?: boolean }): void => {
     const { queryKey, exact = false } = filters || {};
 
     const queriesToRemove = Array.from(cache.entries()).filter(
-      ([hash, query]) => {
-        if (queryKey) {
-          const currentQueryHash = queryKeyHashFn(
-            query.resolvedOptions.queryKey,
-          );
-          const filterQueryHash = queryKeyHashFn(queryKey);
-          const keyMatch = exact
-            ? currentQueryHash === filterQueryHash
-            : currentQueryHash.startsWith(filterQueryHash);
-          if (!keyMatch) return false;
-        }
-        return true;
-      },
+      ([, query]) => !queryKey || matchesQueryKey(query, queryKey, exact),
     );
 
     for (const [hash, query] of queriesToRemove) {
@@ -912,17 +850,9 @@ export const createQueryClient = (options?: {
     const { queryKey, exact = false } = filters || {};
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
-    const queriesToReset = Array.from(cache.values()).filter((query) => {
-      if (queryKey) {
-        const currentQueryHash = queryKeyHashFn(query.resolvedOptions.queryKey);
-        const filterQueryHash = queryKeyHashFn(queryKey);
-        const keyMatch = exact
-          ? currentQueryHash === filterQueryHash
-          : currentQueryHash.startsWith(filterQueryHash);
-        if (!keyMatch) return false;
-      }
-      return true;
-    });
+    const queriesToReset = Array.from(cache.values()).filter(
+      (query) => !queryKey || matchesQueryKey(query, queryKey, exact),
+    );
 
     const resetPromises = queriesToReset.map(async (query) => {
       query.reset();
@@ -960,7 +890,7 @@ export const createQueryClient = (options?: {
       const currentData = existingQuery.state.data();
       if (currentData !== undefined) {
         if (revalidateIfStale && existingQuery.state.isStale()) {
-          existingQuery.fetch().catch(() => {}); // Refetch in background
+          existingQuery.fetch({ force: true }).catch(() => {}); // Refetch in background
         }
         return currentData as TData;
       }
@@ -971,7 +901,7 @@ export const createQueryClient = (options?: {
       queryKey,
       ...restOptions,
     });
-    await query.fetch();
+    await query.fetch({ force: true });
     return query.state.data() as TData;
   };
   // #region fetchQuery
@@ -989,7 +919,7 @@ export const createQueryClient = (options?: {
 
     if (existingQuery) {
       if (existingQuery.state.isStale()) {
-        await existingQuery.fetch();
+        await existingQuery.fetch({ force: true });
       }
       const currentData = existingQuery.state.data();
       if (currentData !== undefined) {
@@ -1002,8 +932,7 @@ export const createQueryClient = (options?: {
       queryFn,
       ...restOptions,
     });
-    query.isActive = true;
-    await query.fetch();
+    await query.fetch({ force: true });
     return query.state.data() as unknown as TData;
   };
   // #region prefetchQuery
@@ -1017,31 +946,18 @@ export const createQueryClient = (options?: {
   ): Promise<void> => {
     try {
       await fetchQuery(options);
-    } catch (error) {
+    } catch {
       // Silently catch any errors
     }
   };
   const isFetching = (filters?: QueryFilters): number => {
     const queries = Array.from(cache.values());
-    const filteredQueries = filters
-      ? queries.filter((query) =>
-          Object.entries(filters).every(
-            ([key, value]) => query[key as keyof typeof query] === value,
-          ),
-        )
-      : queries;
+    const filteredQueries = queries.filter((query) => matchesQueryFilters(query, filters));
     return filteredQueries.filter((query) => query.state.isFetching()).length;
   };
   const isMutating = (filters?: MutationFilters): number => {
     const mutations = Array.from(mutationCache.values());
-    return mutations.filter((mutation) => {
-      if (filters) {
-        return Object.entries(filters).every(
-          ([key, value]) => mutation[key as keyof typeof mutation] === value,
-        );
-      }
-      return mutation.state.status() === 'pending';
-    }).length;
+    return mutations.filter((mutation) => matchesMutationFilters(mutation, filters)).length;
   };
   const getQueryCache = (): Map<string, Query> => {
     return cache;
@@ -1104,20 +1020,9 @@ export function useQuery<
   TQueryKey extends QueryKey = QueryKey,
   TInitialData extends TQueryFnData | undefined = undefined,
   R = void,
-  D = R extends void
-    ? TInitialData extends TQueryFnData
-      ? TInitialData
-      : TQueryFnData
-    : R,
+  D = R extends void ? (TInitialData extends TQueryFnData ? TInitialData : TQueryFnData) : R,
 >(
-  options: QueryOptions<
-    TQueryFnData,
-    TError,
-    TData,
-    TQueryKey,
-    TInitialData,
-    R
-  >,
+  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
 ): ObservableReadonly<
   QueryStateReadonly<TInitialData extends undefined ? D | undefined : D> & {
     refetch: () => Promise<void>;
@@ -1126,14 +1031,10 @@ export function useQuery<
 > {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
-    const query = createQuery<
-      TQueryFnData,
-      TError,
-      TData,
-      TQueryKey,
-      TInitialData,
-      R
-    >(queryClient, options);
+    const query = createQuery<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>(
+      queryClient,
+      options,
+    );
     useCleanup(query.addInstance());
     return query;
   });

@@ -9,8 +9,8 @@ import {
   useTimeout,
   useCleanup,
 } from 'voby';
-import { type QueryClient, type QueryKey, useQueryClient } from './useQuery';
-import { hashFn } from './utils';
+import { type QueryClient, useQueryClient } from './useQuery';
+import { hashFn, partialMatchKey } from './utils';
 
 type MutationStatus = 'idle' | 'pending' | 'success' | 'error';
 
@@ -18,7 +18,7 @@ export type MutationState<
   TData = unknown,
   TError = unknown,
   TVariables = unknown,
-  TContext = unknown,
+  _TContext = unknown,
 > = {
   data: Observable<TData | undefined>;
   error: Observable<TError | null>;
@@ -66,11 +66,7 @@ export type MutationOptions<
   mutationFn?: (variables: TVariables) => Promise<TData>;
   mutationKey?: MutationKey;
   onMutate?: (variables: TVariables) => Promise<TContext> | TContext;
-  onSuccess?: (
-    data: TData,
-    variables: TVariables,
-    context: TContext,
-  ) => Promise<unknown> | unknown;
+  onSuccess?: (data: TData, variables: TVariables, context: TContext) => Promise<unknown> | unknown;
   onError?: (
     error: TError,
     variables: TVariables,
@@ -93,11 +89,7 @@ export type MutationOptions<
 
 type MutateOptions<TData, TError, TVariables, TContext> = {
   onSuccess?: (data: TData, variables: TVariables, context: TContext) => void;
-  onError?: (
-    error: TError,
-    variables: TVariables,
-    context: TContext | undefined,
-  ) => void;
+  onError?: (error: TError, variables: TVariables, context: TContext | undefined) => void;
   onSettled?: (
     data: TData | undefined,
     error: TError | null,
@@ -136,18 +128,11 @@ export type Mutation<
   reset: () => void;
 };
 
-function createMutation<
-  TData,
-  TError = Error,
-  TVariables = void,
-  TContext = unknown,
->(
+function createMutation<TData, TError = Error, TVariables = void, TContext = unknown>(
   queryClient: QueryClient,
   options: MutationOptions<TData, TError, TVariables, TContext>,
 ): MutationObject<TData, TError, TVariables, TContext> {
-  const mutationKey = options.mutationKey
-    ? hashFn(options.mutationKey)
-    : undefined;
+  const mutationKey = options.mutationKey ? hashFn(options.mutationKey) : undefined;
 
   if (mutationKey && queryClient.mutationCache.has(mutationKey)) {
     return queryClient.mutationCache.get(mutationKey) as MutationObject<
@@ -234,42 +219,24 @@ function createMutation<
       await resolvedOptions.onError?.(error as TError, variables, context);
       mutateOptions?.onError?.(error as TError, variables, context);
 
-      await resolvedOptions.onSettled?.(
-        undefined,
-        error as TError,
-        variables,
-        context,
-      );
-      mutateOptions?.onSettled?.(
-        undefined,
-        error as TError,
-        variables,
-        context,
-      );
+      await resolvedOptions.onSettled?.(undefined, error as TError, variables, context);
+      mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
 
       if (shouldRetry(state.failureCount(), error as TError)) {
         const retryDelay = resolvedOptions.retryDelay ?? 1000;
-        const maxRetries =
-          typeof resolvedOptions.retry === 'number' ? resolvedOptions.retry : 3;
-
-        if (state.failureCount() <= maxRetries) {
-          const resolvedRetryDelay =
-            typeof retryDelay === 'function'
-              ? retryDelay(state.failureCount(), error as TError)
-              : retryDelay;
-          useTimeout(
-            () => {
-              mutate(variables, mutateOptions);
-            },
-            resolvedRetryDelay * 2 ** (state.failureCount() - 1),
-          );
-        } else {
-          if (resolvedOptions.throwOnError) {
-            throw error;
-          }
-        }
+        const resolvedRetryDelay =
+          typeof retryDelay === 'function'
+            ? retryDelay(state.failureCount(), error as TError)
+            : retryDelay * 2 ** (state.failureCount() - 1);
+        useTimeout(() => {
+          mutate(variables, mutateOptions);
+        }, resolvedRetryDelay);
       } else {
-        if (resolvedOptions.throwOnError) {
+        const shouldThrow =
+          typeof resolvedOptions.throwOnError === 'function'
+            ? resolvedOptions.throwOnError(error as TError)
+            : resolvedOptions.throwOnError;
+        if (shouldThrow) {
           throw error;
         }
       }
@@ -315,13 +282,14 @@ function createMutation<
       }
     },
     scheduleDestroy: () => {
+      if ((resolvedOptions.gcTime ?? 5 * 60 * 1000) === Infinity) return;
       useRoot(() => {
         mutationObject.destroyDisposer = useTimeout(
           () => {
             mutationObject.destroy();
           },
           resolvedOptions.gcTime ?? 5 * 60 * 1000,
-        ); // Default to 5 minutes if gcTime is not provided
+        );
       });
     },
     destroyDisposer: () => {},
@@ -333,27 +301,17 @@ function createMutation<
 
   return mutationObject;
 }
-export function useMutation<
-  TData,
-  TError = Error,
-  TVariables = void,
-  TContext = unknown,
->(
+export function useMutation<TData, TError = Error, TVariables = void, TContext = unknown>(
   options: MutationOptions<TData, TError, TVariables, TContext>,
 ): ObservableReadonly<
   {
     [K in keyof Omit<
       MutationState<TData, TError, TVariables, TContext>,
       'meta'
-    >]: ObservableReadonly<
-      ReturnType<MutationState<TData, TError, TVariables, TContext>[K]>
-    >;
+    >]: ObservableReadonly<ReturnType<MutationState<TData, TError, TVariables, TContext>[K]>>;
   } & {
     meta: MutationState<TData, TError, TVariables, TContext>['meta'];
-  } & Pick<
-      Mutation<TData, TError, TVariables, TContext>,
-      'mutate' | 'mutateAsync' | 'reset'
-    >
+  } & Pick<Mutation<TData, TError, TVariables, TContext>, 'mutate' | 'mutateAsync' | 'reset'>
 > {
   const queryClient = useQueryClient(options.queryClient);
 
@@ -384,7 +342,7 @@ export function useMutation<
 }
 
 export type MutationFilters = {
-  mutationKey?: QueryKey;
+  mutationKey?: MutationKey;
   exact?: boolean;
   status?: MutationStatus;
 };
@@ -397,18 +355,20 @@ export function useMutationState<TResult = MutationState>({
   select,
 }: MutationStateOptions<TResult>): ObservableReadonly<TResult[]> {
   const queryClient = useQueryClient();
-  const mutationHash =
-    filters?.mutationKey && JSON.stringify(filters?.mutationKey);
   const cache = queryClient.mutationCache;
   return useMemo(() => {
-    return Array.from(mutationHash ? [cache.get(mutationHash)] : cache.values())
+    return Array.from(cache.values())
       .filter(
         (mutation): mutation is MutationObject<any, any, any, any> =>
           mutation !== undefined &&
+          (filters?.mutationKey
+            ? mutation.resolvedOptions.mutationKey !== undefined &&
+              (filters.exact
+                ? hashFn(mutation.resolvedOptions.mutationKey) === hashFn(filters.mutationKey)
+                : partialMatchKey(filters.mutationKey, mutation.resolvedOptions.mutationKey))
+            : true) &&
           (filters?.status ? mutation.state.status() === filters.status : true),
       )
-      .map((mutation) =>
-        select ? select(mutation) : (mutation as unknown as TResult),
-      );
+      .map((mutation) => (select ? select(mutation) : (mutation as unknown as TResult)));
   }) as ObservableReadonly<TResult[]>;
 }

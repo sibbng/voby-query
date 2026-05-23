@@ -30,16 +30,16 @@ npm i voby-query
 ## Usage
 
 ```ts
-import { useQuery } from "voby-query"
+import { useQuery } from 'voby-query';
 
-const id = $(1)
+const id = $(1);
 const query = useQuery({
-  queryKey: ["todos", id],
+  queryKey: ['todos', id],
   queryFn: async () => {
-    const response = await fetch(`https://jsonplaceholder.typicode.com/todos/${id()}`)
-    return response.json()
+    const response = await fetch(`https://jsonplaceholder.typicode.com/todos/${id()}`);
+    return response.json();
   },
-})
+});
 ```
 
 To learn more about usage visit [React Query's documentation](https://tanstack.com/query/latest).

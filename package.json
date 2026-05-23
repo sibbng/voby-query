@@ -1,45 +1,42 @@
 {
   "name": "voby-query",
   "version": "0.5.1",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "types": "dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
     }
   },
   "scripts": {
-    "build": "rslib build",
-    "check": "biome check --write",
-    "dev": "rslib build --watch",
-    "format": "biome format --write",
-    "prepublish": "biome check && rslib build",
-    "test": "vitest"
-  },
-  "files": [
-    "dist"
-  ],
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@microsoft/api-extractor": "^7.52.7",
-    "@rslib/core": "^0.6.8",
-    "@testing-library/dom": "^10.4.0",
-    "@vitest/browser": "3.2.0-beta.2",
-    "happy-dom": "^17.4.7",
-    "playwright": "^1.52.0",
-    "typescript": "^5.8.3",
-    "vitest": "3.2.0-beta.2"
+    "build": "vp pack",
+    "check": "vp check",
+    "dev": "vp pack --watch",
+    "format": "vp fmt . --write",
+    "prepublish": "vp check && vp pack",
+    "test": "vp test"
   },
   "dependencies": {
     "std-env": "^3.9.0",
     "voby": "^0.58.1"
   },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "happy-dom": "^17.4.7",
+    "playwright": "^1.52.0",
+    "typescript": "^5.8.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@^0.1.22",
+    "vite-plus": "^0.1.22",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@0.1.22"
+  },
+  "packageManager": "pnpm@10.6.3",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@biomejs/biome",
-      "core-js",
       "esbuild"
     ]
   }
