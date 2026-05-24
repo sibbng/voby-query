@@ -1,4 +1,4 @@
-import { $$, useResolved } from 'voby';
+import { $$ } from 'voby';
 import type { MutationKey } from './useMutation';
 import type { QueryKey, QueryOptions } from './useQuery';
 
@@ -25,7 +25,7 @@ export const hashFn = (queryKey: QueryKey | MutationKey): string => {
 };
 
 export const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
-  const resolved = useResolved($$(queryKey));
+  const resolved = $$(queryKey);
   return Array.isArray(resolved) ? resolved.map((item) => $$(item)) : [];
 };
 
