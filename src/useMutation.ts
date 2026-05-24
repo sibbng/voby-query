@@ -369,6 +369,7 @@ export type MutationFilters = {
   mutationKey?: MutationKey;
   exact?: boolean;
   status?: MutationStatus;
+  predicate?: (mutation: MutationObject<any, any, any, any>) => boolean;
 };
 type MutationStateOptions<TResult = MutationState> = {
   filters?: MutationFilters;
@@ -393,7 +394,8 @@ export function useMutationState<TResult = MutationState>({
                 ? hashFn(mutation.resolvedOptions.mutationKey) === hashFn(filters.mutationKey)
                 : partialMatchKey(filters.mutationKey, mutation.resolvedOptions.mutationKey))
             : true) &&
-          (filters?.status ? mutation.state.status() === filters.status : true),
+          (filters?.status ? mutation.state.status() === filters.status : true) &&
+          (filters?.predicate ? filters.predicate(mutation) : true),
       )
       .map((mutation) => (select ? select(mutation) : (mutation as unknown as TResult)));
   }) as ObservableReadonly<TResult[]>;

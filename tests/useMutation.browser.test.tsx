@@ -515,6 +515,61 @@ test('useMutationState filters by partial observable mutation keys', async () =>
   expect(queryClient.isMutating({ mutationKey: ['todos'], exact: true })).toBe(0);
 });
 
+test('useMutationState and isMutating support predicate filters', async () => {
+  const queryClient = createQueryClient();
+  let createTodoMutation: any;
+  let updateTodoMutation: any;
+
+  function CreateTodoMutator() {
+    const mutation = useMutation<string, Error, { id: number }>({
+      mutationKey: ['todos', 'create'],
+      mutationFn: async ({ id }) => `created ${id}`,
+    });
+    createTodoMutation = mutation;
+    return null;
+  }
+
+  function UpdateTodoMutator() {
+    const mutation = useMutation<string, Error, { id: number }>({
+      mutationKey: ['todos', 'update'],
+      mutationFn: async ({ id }) => `updated ${id}`,
+    });
+    updateTodoMutation = mutation;
+    return null;
+  }
+
+  function PredicateList() {
+    const matches = useMutationState({
+      filters: {
+        predicate: (mutation) => mutation.state.variables()?.id === 2,
+      },
+      select: (mutation) => mutation.state.variables()?.id,
+    });
+
+    return <div data-testid="predicate-match">{() => matches().join(',')}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <CreateTodoMutator />
+      <UpdateTodoMutator />
+      <PredicateList />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await createTodoMutation().mutate({ id: 1 });
+  await updateTodoMutation().mutate({ id: 2 });
+  await flush();
+
+  expect(document.querySelector('[data-testid="predicate-match"]')?.textContent).toBe('2');
+  expect(
+    queryClient.isMutating({
+      predicate: (mutation) => mutation.state.variables()?.id === 2,
+    }),
+  ).toBe(1);
+});
+
 test('useMutationState reactively shows pending count during in-flight mutation', async () => {
   const queryClient = createQueryClient();
   let mutationResult: any;

@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src/useQuery';
+import { CancelledError, createQueryClient } from '../src/useQuery';
 import { sleep } from './utils';
 
 const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>
@@ -182,6 +182,68 @@ test('queryClient.ensureQueryData fetches uncached queries', async () => {
   expect(queryClient.getQueryData(['ensure-query-data'])).toBe('ensured data');
 });
 
+test('queryClient.fetchQuery deduplicates concurrent requests for the same key', async () => {
+  const queryClient = createQueryClient();
+  let resolveFetch: (value: string) => void = () => {};
+  const queryFnMock = vi.fn(
+    async () =>
+      new Promise<string>((resolve) => {
+        resolveFetch = resolve;
+      }),
+  );
+
+  const firstFetch = queryClient.fetchQuery({
+    queryKey: ['dedupe-fetch-query'],
+    queryFn: queryFnMock,
+  });
+
+  await Promise.resolve();
+
+  const secondFetch = queryClient.fetchQuery({
+    queryKey: ['dedupe-fetch-query'],
+    queryFn: queryFnMock,
+  });
+
+  resolveFetch('deduped data');
+
+  await expect(Promise.all([firstFetch, secondFetch])).resolves.toEqual([
+    'deduped data',
+    'deduped data',
+  ]);
+  expect(queryFnMock).toHaveBeenCalledTimes(1);
+});
+
+test('queryClient.ensureQueryData deduplicates concurrent requests for the same key', async () => {
+  const queryClient = createQueryClient();
+  let resolveFetch: (value: string) => void = () => {};
+  const queryFnMock = vi.fn(
+    async () =>
+      new Promise<string>((resolve) => {
+        resolveFetch = resolve;
+      }),
+  );
+
+  const firstFetch = queryClient.ensureQueryData({
+    queryKey: ['dedupe-ensure-query-data'],
+    queryFn: queryFnMock,
+  });
+
+  await Promise.resolve();
+
+  const secondFetch = queryClient.ensureQueryData({
+    queryKey: ['dedupe-ensure-query-data'],
+    queryFn: queryFnMock,
+  });
+
+  resolveFetch('deduped ensure data');
+
+  await expect(Promise.all([firstFetch, secondFetch])).resolves.toEqual([
+    'deduped ensure data',
+    'deduped ensure data',
+  ]);
+  expect(queryFnMock).toHaveBeenCalledTimes(1);
+});
+
 test('queryClient matches partial query keys for invalidate and refetch', async () => {
   const queryClient = createQueryClient();
   let callCount = 0;
@@ -222,6 +284,50 @@ test('queryClient matches partial query keys for removeQueries', async () => {
   expect(queryClient.getQueryData(['todos', 1])).toBeUndefined();
   expect(queryClient.getQueryData(['todos', 2])).toBeUndefined();
   expect(queryClient.getQueryData(['users', 1])).toBe('user 1');
+});
+
+test('queryClient.removeQueries supports type and predicate filters', async () => {
+  const queryClient = createQueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['posts', 'active'],
+    queryFn: async () => 'active post',
+    staleTime: 1000,
+  });
+  await queryClient.fetchQuery({
+    queryKey: ['posts', 'inactive'],
+    queryFn: async () => 'inactive post',
+    staleTime: 1000,
+  });
+  await queryClient.fetchQuery({
+    queryKey: ['users', 'inactive'],
+    queryFn: async () => 'inactive user',
+    staleTime: 1000,
+  });
+
+  const activePostsQuery = [...queryClient.getQueryCache().values()].find(
+    (query) =>
+      Array.isArray(query.resolvedOptions.queryKey) &&
+      query.resolvedOptions.queryKey[0] === 'posts' &&
+      query.resolvedOptions.queryKey[1] === 'active',
+  );
+
+  if (!activePostsQuery) {
+    throw new Error('Expected active posts query to exist in cache');
+  }
+
+  activePostsQuery.isActive = true;
+
+  queryClient.removeQueries({
+    queryKey: ['posts'],
+    type: 'inactive',
+    predicate: (query) =>
+      Array.isArray(query.resolvedOptions.queryKey) && query.resolvedOptions.queryKey[1] === 'inactive',
+  });
+
+  expect(queryClient.getQueryData(['posts', 'active'])).toBe('active post');
+  expect(queryClient.getQueryData(['posts', 'inactive'])).toBeUndefined();
+  expect(queryClient.getQueryData(['users', 'inactive'])).toBe('inactive user');
 });
 
 test('queryClient applies partial query defaults', async () => {
@@ -275,6 +381,128 @@ test('queryClient refetchQueries cancels an in-flight request before fetching ag
   expect(abortCount).toBe(1);
   expect(callCount).toBe(2);
   expect(queryClient.getQueryData(['cancel-before-refetch'])).toBe('data 2');
+});
+
+test('queryClient.cancelQueries reverts an in-flight refetch to the previous state', async () => {
+  const queryClient = createQueryClient();
+  let callCount = 0;
+  let abortCount = 0;
+  let resolveRefetch: (value: string) => void = () => {};
+
+  await queryClient.fetchQuery({
+    queryKey: ['cancel-revert'],
+    queryFn: async () => {
+      callCount++;
+      return `data ${callCount}`;
+    },
+    staleTime: 1000,
+  });
+
+  const query = findQuery(queryClient, 'cancel-revert');
+  expect(query?.state.status()).toBe('success');
+  expect(query?.state.fetchStatus()).toBe('idle');
+  expect(query?.state.data()).toBe('data 1');
+
+  if (!query) {
+    throw new Error('Expected query to exist in cache');
+  }
+
+  query.resolvedOptions.queryFn = async ({ signal }) => {
+    callCount++;
+    signal.addEventListener(
+      'abort',
+      () => {
+        abortCount++;
+      },
+      { once: true },
+    );
+
+    return new Promise<string>((resolve) => {
+      resolveRefetch = resolve;
+    });
+  };
+
+  const refetchPromise = queryClient.refetchQueries({ queryKey: ['cancel-revert'] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(query.state.fetchStatus()).toBe('fetching');
+  expect(query.state.status()).toBe('success');
+  expect(query.state.data()).toBe('data 1');
+
+  await queryClient.cancelQueries({
+    queryKey: ['cancel-revert'],
+    fetchStatus: 'fetching',
+    predicate: (candidate) => candidate === query,
+  });
+
+  expect(abortCount).toBe(1);
+  expect(query.state.fetchStatus()).toBe('idle');
+  expect(query.state.status()).toBe('success');
+  expect(query.state.data()).toBe('data 1');
+  expect(queryClient.getQueryData(['cancel-revert'])).toBe('data 1');
+
+  resolveRefetch('data 2');
+  await refetchPromise;
+
+  expect(query.state.fetchStatus()).toBe('idle');
+  expect(query.state.status()).toBe('success');
+  expect(query.state.data()).toBe('data 1');
+  expect(queryClient.getQueryData(['cancel-revert'])).toBe('data 1');
+});
+
+test('queryClient.cancelQueries throws CancelledError for initial fetches unless silent', async () => {
+  const queryClient = createQueryClient();
+
+  const firstFetch = queryClient.fetchQuery({
+    queryKey: ['cancel-initial'],
+    queryFn: async ({ signal }) =>
+      new Promise<string>((_resolve, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            reject(new Error('aborted'));
+          },
+          { once: true },
+        );
+      }),
+  });
+
+  await Promise.resolve();
+
+  await expect(
+    queryClient.cancelQueries({ queryKey: ['cancel-initial'], fetchStatus: 'fetching' }),
+  ).rejects.toBeInstanceOf(CancelledError);
+  await firstFetch;
+
+  const cancelledInitialQuery = findQuery(queryClient, 'cancel-initial');
+  expect(cancelledInitialQuery?.state.status()).toBe('pending');
+  expect(cancelledInitialQuery?.state.fetchStatus()).toBe('idle');
+  expect(cancelledInitialQuery?.state.data()).toBeUndefined();
+
+  const silentFetch = queryClient.fetchQuery({
+    queryKey: ['cancel-initial-silent'],
+    queryFn: async ({ signal }) =>
+      new Promise<string>((_resolve, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            reject(new Error('aborted'));
+          },
+          { once: true },
+        );
+      }),
+  });
+
+  await Promise.resolve();
+
+  await expect(
+    queryClient.cancelQueries(
+      { queryKey: ['cancel-initial-silent'], fetchStatus: 'fetching' },
+      { silent: true },
+    ),
+  ).resolves.toBeUndefined();
+  await silentFetch;
 });
 
 test('queryClient isFetching uses partial and exact query-key filters', async () => {

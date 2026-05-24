@@ -35,6 +35,21 @@ export type MutationCache = {
   keys: () => IterableIterator<string>;
   version: Observable<number>;
 };
+export type CancelOptions = {
+  silent?: boolean;
+  revert?: boolean;
+};
+export class CancelledError extends Error {
+  revert: boolean;
+  silent: boolean;
+
+  constructor({ revert = true, silent = false }: CancelOptions = {}) {
+    super('Query was cancelled');
+    this.name = 'CancelledError';
+    this.revert = revert;
+    this.silent = silent;
+  }
+}
 export type QueryClient = {
   cache: Map<string, Query<any, any, any, any>>;
   mutationCache: MutationCache;
@@ -44,9 +59,7 @@ export type QueryClient = {
   getQueryData: <T>(queryKey: QueryKey) => T | undefined;
   setQueryData: <T>(queryKey: QueryKey, data: T | ((previous: T | undefined) => T)) => void;
   invalidateQueries: (
-    filters: {
-      queryKey: QueryKey;
-      exact?: boolean;
+    filters?: QueryFilters & {
       refetchType?: 'active' | 'inactive' | 'all' | 'none';
     },
     options?: {
@@ -58,24 +71,19 @@ export type QueryClient = {
   fetchQuery: <T>(options: QueryOptions<T>) => Promise<T>;
   prefetchQuery: <T>(options: QueryOptions<T>) => Promise<void>;
   refetchQueries: (
-    filters?: {
-      queryKey?: QueryKey;
-      type?: 'all' | 'active' | 'inactive';
-      exact?: boolean;
-      stale?: boolean;
-    },
+    filters?: QueryFilters,
     options?: {
       throwOnError?: boolean;
       cancelRefetch?: boolean;
     },
   ) => Promise<void>;
-  cancelQueries: (filters?: { queryKey?: QueryKey; exact?: boolean }) => Promise<void>;
-  removeQueries: (filters?: { queryKey?: QueryKey; exact?: boolean }) => void;
+  cancelQueries: (
+    filters?: QueryFilters,
+    options?: CancelOptions,
+  ) => Promise<void>;
+  removeQueries: (filters?: QueryFilters) => void;
   resetQueries: (
-    filters?: {
-      queryKey?: QueryKey;
-      exact?: boolean;
-    },
+    filters?: QueryFilters,
     options?: {
       throwOnError?: boolean;
       cancelRefetch?: boolean;
@@ -169,6 +177,18 @@ type QueryStateReadonly<D> = {
     Awaited<ReturnType<QueryState<D>[K]>>
   >;
 } & { meta: QueryState<D>['meta'] };
+type QueryStateSnapshot<D = undefined> = {
+  data: D;
+  dataUpdateCount: number;
+  dataUpdatedAt: number;
+  error: Error | null;
+  errorUpdateCount: number;
+  errorUpdatedAt: number;
+  isInvalidated: boolean;
+  status: QueryStatus;
+  fetchStatus: FetchStatus;
+  isStale: boolean;
+};
 type Query<
   TQueryFnData = unknown,
   TError = unknown,
@@ -179,7 +199,7 @@ type Query<
 > = {
   isActive: boolean;
   state: QueryState<TData>;
-  cancel: () => Promise<void>;
+  cancel: (options?: CancelOptions) => Promise<void>;
   destroy: () => void;
   fetch: (options?: {
     retryAttempt?: number;
@@ -191,6 +211,8 @@ type Query<
   instances: number;
   controller: AbortController;
   isFetching: boolean;
+  fetchPromise?: Promise<void>;
+  revertState?: QueryStateSnapshot<TData>;
   destroyDisposer: () => void;
   stateDisposer: () => void;
   staleDisposer: () => void;
@@ -239,6 +261,32 @@ const createMutationCache = (cache?: Map<string, MutationObject<any, any, any, a
     [Symbol.iterator]: () => map[Symbol.iterator](),
     version,
   };
+};
+
+const createQueryStateSnapshot = <D>(state: QueryState<D>): QueryStateSnapshot<D> => ({
+  data: state.data(),
+  dataUpdateCount: state.dataUpdateCount(),
+  dataUpdatedAt: state.dataUpdatedAt(),
+  error: state.error(),
+  errorUpdateCount: state.errorUpdateCount(),
+  errorUpdatedAt: state.errorUpdatedAt(),
+  isInvalidated: state.isInvalidated(),
+  status: state.status(),
+  fetchStatus: state.fetchStatus(),
+  isStale: state.isStale(),
+});
+
+const restoreQueryStateSnapshot = <D>(state: QueryState<D>, snapshot: QueryStateSnapshot<D>) => {
+  state.data(snapshot.data);
+  state.dataUpdateCount(snapshot.dataUpdateCount);
+  state.dataUpdatedAt(snapshot.dataUpdatedAt);
+  state.error(snapshot.error);
+  state.errorUpdateCount(snapshot.errorUpdateCount);
+  state.errorUpdatedAt(snapshot.errorUpdatedAt);
+  state.isInvalidated(snapshot.isInvalidated);
+  state.status(snapshot.status);
+  state.fetchStatus(snapshot.fetchStatus);
+  state.isStale(snapshot.isStale);
 };
 
 // #region createQuery
@@ -307,6 +355,8 @@ const createQuery = <
     stateDisposer: () => {}, // for state lifetime
     staleDisposer: () => {}, // for stale timer
     retryDisposer: () => {}, // for retry timer
+    fetchPromise: undefined,
+    revertState: undefined,
     // #region addInstance
     addInstance: () => {
       query.destroyDisposer();
@@ -355,7 +405,7 @@ const createQuery = <
               }
             };
             const offlineHandler = async () => {
-              query.cancel();
+              await query.cancel({ revert: false, silent: true });
               query.state.fetchStatus('paused');
             };
             window.addEventListener('online', onlineHandler);
@@ -397,9 +447,30 @@ const createQuery = <
       }
     },
     // #region cancel
-    cancel: async () => {
+    cancel: async ({ revert = true, silent = false } = {}) => {
+      const wasFetching = query.isFetching || query.fetchPromise !== undefined;
+      const hadPreviousData = query.revertState?.data !== undefined;
+
       query.controller.abort();
       query.isCancelled = true;
+      query.retryDisposer();
+      query.retryDisposer = () => {};
+      query.isFetching = false;
+      query.fetchPromise = undefined;
+
+      if (revert && query.revertState) {
+        restoreQueryStateSnapshot(query.state, query.revertState);
+      }
+
+      if (query.state.fetchStatus() !== 'paused') {
+        query.state.fetchStatus('idle');
+      }
+
+      query.revertState = undefined;
+
+      if (wasFetching && revert && !silent && !hadPreviousData) {
+        throw new CancelledError({ revert, silent });
+      }
     },
     reset: () => {
       query.state.data(options.initialData as TData);
@@ -419,7 +490,7 @@ const createQuery = <
       query.destroyDisposer = () => clearTimeout(id);
     },
     destroy: () => {
-      query.cancel();
+      query.cancel({ revert: false, silent: true });
       query.inactiveCleanup?.();
       query.staleDisposer();
       query.retryDisposer();
@@ -433,7 +504,7 @@ const createQuery = <
     } = {}) => {
       if (!query.resolvedOptions.enabled) return;
       if (cancelRefetch) {
-        await query.cancel();
+        await query.cancel({ revert: false, silent: true });
       }
       return query.fetch({ retryAttempt: 0, throwOnError });
     },
@@ -448,82 +519,99 @@ const createQuery = <
       }
       if (!query.resolvedOptions.enabled) return;
       if (!force && !query.isActive) return;
-      if (query.isFetching && !query.isCancelled) return;
+      if (query.isFetching && !query.isCancelled) {
+        return query.fetchPromise!;
+      }
       if (query.state.fetchStatus() === 'paused') return;
 
       query.isFetching = true;
       query.isCancelled = false;
       query.controller = new AbortController();
       const signal = query.controller.signal;
-      try {
-        query.state.fetchStatus('fetching');
-        const result = await untrack(() => query.resolvedOptions.queryFn!({ signal }));
-        // If query is cancelled before promise resolves, don't update state
-        if (query.isCancelled || signal.aborted) {
-          return;
-        }
-
-        let newData: TData;
-        if (typeof resolvedOptions.structuralSharing === 'function') {
-          newData = resolvedOptions.structuralSharing(query.state.data(), result) as TData;
-        } else if (resolvedOptions.structuralSharing === false) {
-          newData = result as TData;
-        } else if (isDevelopment) {
-          try {
-            newData = replaceEqualDeep(query.state.data(), result) as TData;
-          } catch (error) {
-            console.error(
-              `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
-            );
-
-            throw error;
+      query.revertState = createQueryStateSnapshot(query.state);
+      let fetchPromise!: Promise<void>;
+      fetchPromise = (async () => {
+        try {
+          query.state.fetchStatus('fetching');
+          const result = await untrack(() => query.resolvedOptions.queryFn!({ signal }));
+          // If query is cancelled before promise resolves, don't update state
+          if (query.isCancelled || signal.aborted) {
+            return;
           }
-        } else {
-          newData = replaceEqualDeep(query.state.data(), result) as TData;
-        }
 
-        query.state.data(newData);
-        query.state.dataUpdatedAt(Date.now());
-        query.state.dataUpdateCount((prev) => prev + 1);
-        query.state.status('success');
-      } catch (err) {
-        if (!signal.aborted) {
-          const error = err instanceof Error ? err : new Error(String(err));
-          query.state.error(error);
-          query.state.status('error');
-          query.state.errorUpdatedAt(Date.now());
-          query.state.errorUpdateCount((prev) => prev + 1);
-          if (throwOnError) {
-            throw error;
-          }
-          query.scheduleRetry(retryAttempt + 1, error);
-        }
-      } finally {
-        const shouldSkipFinalize =
-          !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
-        if (!shouldSkipFinalize) {
-          query.isFetching = false;
-          if (query.state.fetchStatus() !== 'paused') {
-            query.state.fetchStatus('idle');
-          }
-          query.staleDisposer();
-          query.state.isStale(false);
-          const rawStaleTime = query.resolvedOptions.staleTime;
-          const staleTime =
-            typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
-          if (staleTime === 'static' || staleTime === Infinity) {
-            // data never goes stale
-          } else if (staleTime === 0) {
-            query.state.isStale(true);
+          let newData: TData;
+          if (typeof resolvedOptions.structuralSharing === 'function') {
+            newData = resolvedOptions.structuralSharing(query.state.data(), result) as TData;
+          } else if (resolvedOptions.structuralSharing === false) {
+            newData = result as TData;
+          } else if (isDevelopment) {
+            try {
+              newData = replaceEqualDeep(query.state.data(), result) as TData;
+            } catch (error) {
+              console.error(
+                `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${error}`,
+              );
+
+              throw error;
+            }
           } else {
-            const id = setTimeout(() => {
-              query.state.isStale(true);
-            }, staleTime);
-            query.staleDisposer = () => clearTimeout(id);
+            newData = replaceEqualDeep(query.state.data(), result) as TData;
           }
-          events.dispatchEvent(new CustomEvent('fetch:done'));
+
+          query.state.data(newData);
+          query.state.dataUpdatedAt(Date.now());
+          query.state.dataUpdateCount((prev) => prev + 1);
+          query.state.status('success');
+        } catch (err) {
+          if (!signal.aborted) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            query.state.error(error);
+            query.state.status('error');
+            query.state.errorUpdatedAt(Date.now());
+            query.state.errorUpdateCount((prev) => prev + 1);
+            if (throwOnError) {
+              throw error;
+            }
+            query.scheduleRetry(retryAttempt + 1, error);
+          }
+        } finally {
+          if (query.fetchPromise !== fetchPromise) {
+            return;
+          }
+
+          query.fetchPromise = undefined;
+          query.revertState = undefined;
+
+          const shouldSkipFinalize =
+            !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
+          if (!shouldSkipFinalize) {
+            query.isFetching = false;
+            if (query.state.fetchStatus() !== 'paused') {
+              query.state.fetchStatus('idle');
+            }
+            query.staleDisposer();
+            query.state.isStale(false);
+            const rawStaleTime = query.resolvedOptions.staleTime;
+            const staleTime =
+              typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
+            if (staleTime === 'static' || staleTime === Infinity) {
+              // data never goes stale
+            } else if (staleTime === 0) {
+              query.state.isStale(true);
+            } else {
+              const id = setTimeout(() => {
+                query.state.isStale(true);
+              }, staleTime);
+              query.staleDisposer = () => clearTimeout(id);
+            }
+            events.dispatchEvent(new CustomEvent('fetch:done'));
+          }
         }
-      }
+      })();
+
+      query.fetchPromise = fetchPromise;
+
+      return fetchPromise;
     },
     // #region retry
     scheduleRetry: (attempt: number, error: Error) => {
@@ -616,6 +704,7 @@ export type QueryFilters = {
   type?: 'all' | 'active' | 'inactive';
   stale?: boolean;
   fetchStatus?: FetchStatus;
+  predicate?: (query: Query) => boolean;
 };
 
 type FetchQueryOptions<
@@ -745,7 +834,7 @@ export const createQueryClient = (options?: {
 
   const matchesQueryFilters = (query: Query, filters?: QueryFilters) => {
     if (!filters) return true;
-    const { queryKey, exact = false, type = 'all', stale, fetchStatus } = filters;
+    const { queryKey, exact = false, type = 'all', stale, fetchStatus, predicate } = filters;
 
     if (queryKey && !matchesQueryKey(query, queryKey, exact)) return false;
     if (type === 'active' && !query.isActive) return false;
@@ -753,6 +842,7 @@ export const createQueryClient = (options?: {
     if (stale === true && !query.state.isStale()) return false;
     if (stale === false && query.state.isStale()) return false;
     if (fetchStatus && query.state.fetchStatus() !== fetchStatus) return false;
+    if (predicate && !predicate(query)) return false;
 
     return true;
   };
@@ -760,7 +850,7 @@ export const createQueryClient = (options?: {
   const matchesMutationFilters = (mutation: MutationObject, filters?: MutationFilters) => {
     if (!filters) return mutation.state.status() === 'pending';
 
-    const { mutationKey, exact = false, status } = filters;
+    const { mutationKey, exact = false, status, predicate } = filters;
     if (mutationKey) {
       const currentMutationKey = mutation.resolvedOptions.mutationKey;
       if (!currentMutationKey) return false;
@@ -770,6 +860,7 @@ export const createQueryClient = (options?: {
       if (!keyMatch) return false;
     }
     if (status && mutation.state.status() !== status) return false;
+    if (predicate && !predicate(mutation)) return false;
 
     return true;
   };
@@ -832,11 +923,12 @@ export const createQueryClient = (options?: {
   };
   // #region invalidateQueries
   const invalidateQueries: QueryClient['invalidateQueries'] = async (
-    { queryKey, exact = false, refetchType = 'active' },
+    filters,
     { throwOnError = false, cancelRefetch = true } = {},
   ) => {
+    const { refetchType = 'active', ...queryFilters } = filters || {};
     const queriesToInvalidate = Array.from(cache.values()).filter((query) =>
-      matchesQueryKey(query, queryKey, exact),
+      matchesQueryFilters(query, queryFilters),
     );
 
     for (const query of queriesToInvalidate) {
@@ -853,7 +945,9 @@ export const createQueryClient = (options?: {
     });
 
     if (cancelRefetch) {
-      await Promise.all(queriesToRefetch.map((query) => query.cancel()));
+      await Promise.all(
+        queriesToRefetch.map((query) => query.cancel({ revert: false, silent: true })),
+      );
     }
 
     const refetchPromises = queriesToRefetch.map((query) =>
@@ -870,27 +964,23 @@ export const createQueryClient = (options?: {
   };
   // #region refetchQueries
   const refetchQueries = async (
-    filters?: {
-      queryKey?: QueryKey;
-      type?: 'all' | 'active' | 'inactive';
-      exact?: boolean;
-      stale?: boolean;
-    },
+    filters?: QueryFilters,
     options?: {
       throwOnError?: boolean;
       cancelRefetch?: boolean;
     },
   ): Promise<void> => {
-    const { queryKey, type = 'all', exact = false, stale } = filters || {};
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
     const queriesToRefetch = Array.from(cache.values()).filter((query) => {
       if (!query.resolvedOptions.enabled) return false;
-      return matchesQueryFilters(query, { queryKey, type, exact, stale });
+      return matchesQueryFilters(query, filters);
     });
 
     if (cancelRefetch) {
-      await Promise.all(queriesToRefetch.map((query) => query.cancel()));
+      await Promise.all(
+        queriesToRefetch.map((query) => query.cancel({ revert: false, silent: true })),
+      );
     }
 
     const refetchPromises = queriesToRefetch.map((query) =>
@@ -900,47 +990,39 @@ export const createQueryClient = (options?: {
     await Promise.all(refetchPromises);
   };
   // #region cancelQueries
-  const cancelQueries = async (filters?: {
-    queryKey?: QueryKey;
-    exact?: boolean;
-  }): Promise<void> => {
-    const { queryKey, exact = false } = filters || {};
-
-    const queriesToCancel = Array.from(cache.values()).filter(
-      (query) => !queryKey || matchesQueryKey(query, queryKey, exact),
+  const cancelQueries: QueryClient['cancelQueries'] = async (
+    filters,
+    { silent = false, revert = true } = {},
+  ): Promise<void> => {
+    const queriesToCancel = Array.from(cache.values()).filter((query) =>
+      matchesQueryFilters(query, filters),
     );
 
     for (const query of queriesToCancel) {
-      await query.cancel();
+      await query.cancel({ silent, revert });
     }
   };
   // #region removeQueries
-  const removeQueries = (filters?: { queryKey?: QueryKey; exact?: boolean }): void => {
-    const { queryKey, exact = false } = filters || {};
-
+  const removeQueries: QueryClient['removeQueries'] = (filters) => {
     const queriesToRemove = Array.from(cache.entries()).filter(
-      ([, query]) => !queryKey || matchesQueryKey(query, queryKey, exact),
+      ([, query]) => matchesQueryFilters(query, filters),
     );
 
     for (const [, query] of queriesToRemove) {
       query.destroy();
     }
   };
-  const resetQueries = async (
-    filters?: {
-      queryKey?: QueryKey;
-      exact?: boolean;
-    },
+  const resetQueries: QueryClient['resetQueries'] = async (
+    filters,
     options?: {
       throwOnError?: boolean;
       cancelRefetch?: boolean;
     },
   ): Promise<void> => {
-    const { queryKey, exact = false } = filters || {};
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
     const queriesToReset = Array.from(cache.values()).filter(
-      (query) => !queryKey || matchesQueryKey(query, queryKey, exact),
+      (query) => matchesQueryFilters(query, filters),
     );
 
     const resetPromises = queriesToReset.map(async (query) => {
