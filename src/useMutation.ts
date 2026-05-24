@@ -174,7 +174,7 @@ function createMutation<TData, TError = Error, TVariables = void, TContext = unk
   // re-evaluates due to mutationCache.version() bumping during cache.set().
   let state!: MutationState<TData, TError, TVariables, TContext>;
   let stateDisposer: () => void = () => {};
-  useRoot(dispose => {
+  useRoot((dispose) => {
     stateDisposer = dispose;
 
     const data = $<TData | undefined>(undefined);

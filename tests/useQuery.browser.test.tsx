@@ -3,7 +3,7 @@ import { flush, render, sleep } from './utils';
 import { waitFor } from '@testing-library/dom';
 import { createQueryClient, useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
-import { If, $ } from 'voby';
+import { If, $, useMemo } from 'voby';
 
 test('useQuery with provider', async () => {
   const queryClient = createQueryClient();
@@ -680,4 +680,189 @@ test('multiple useQuery instances - unmounting one should not affect the other',
 
   expect(document.body.textContent).toBe(expectedData);
   expect(fetchCount).toBe(2);
+});
+
+test('useQuery dynamic queryKey with observable elements', async () => {
+  const queryClient = createQueryClient();
+  const id = $(1);
+  const fetchHistory: number[] = [];
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['dynamic-profile', id],
+      queryFn: async () => {
+        const currentId = id();
+        fetchHistory.push(currentId);
+        return `Profile ${currentId}`;
+      },
+    });
+
+    return <div>{() => query().data() ?? 'Loading...'}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await waitFor(() => expect(document.body.textContent).toBe('Profile 1'));
+  expect(fetchHistory).toEqual([1]);
+
+  // Now change the active ID
+  id(2);
+  await flush();
+
+  await waitFor(() => expect(document.body.textContent).toBe('Profile 2'));
+  expect(fetchHistory).toEqual([1, 2]);
+
+  // Verify we have separate cache entries!
+  const data1 = queryClient.getQueryData(['dynamic-profile', 1]);
+  const data2 = queryClient.getQueryData(['dynamic-profile', 2]);
+  expect(data1).toBe('Profile 1');
+  expect(data2).toBe('Profile 2');
+});
+
+test('Dependent Queries (enabled changes dynamically)', async () => {
+  const queryClient = createQueryClient();
+  const userId = $(undefined as number | undefined);
+
+  let userFetchCount = 0;
+  let todoFetchCount = 0;
+
+  function App() {
+    // Query 1: Get User (always enabled)
+    const userQuery = useQuery({
+      queryKey: ['user'],
+      queryFn: async () => {
+        userFetchCount++;
+        return { id: 42, name: 'John Doe' };
+      },
+    });
+
+    // Query 2: Get Todos (enabled ONLY when userId is defined)
+    const isTodoEnabled = useMemo(() => userId() !== undefined);
+    const todoQuery = useQuery({
+      queryKey: ['todos', userId],
+      enabled: isTodoEnabled,
+      queryFn: async () => {
+        todoFetchCount++;
+        return ['Todo 1', 'Todo 2'];
+      },
+    });
+
+    return (
+      <div>
+        <p>UserId: {() => userId() ?? 'none'}</p>
+        <p>UserQueryStatus: {() => userQuery().status()}</p>
+        <p>TodoQueryStatus: {() => todoQuery().status()}</p>
+        <p>TodoQueryFetchStatus: {() => todoQuery().fetchStatus()}</p>
+        <p>TodoQueryData: {() => todoQuery().data()?.join(', ') ?? 'no data'}</p>
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <App />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Initially: User fetch starts. Todo query is disabled, so status should be 'pending' and fetchStatus 'idle'
+  await flush();
+  expect(userFetchCount).toBe(1);
+  expect(todoFetchCount).toBe(0);
+  expect(document.body.textContent).toContain('UserQueryStatus: success');
+  expect(document.body.textContent).toContain('TodoQueryStatus: pending');
+  expect(document.body.textContent).toContain('TodoQueryFetchStatus: idle');
+  expect(document.body.textContent).toContain('TodoQueryData: no data');
+
+  // Now, dynamically set the user ID from the user query (simulating dependent queries resolving)
+  const userData = queryClient.getQueryData<{ id: number; name: string }>(['user']);
+  expect(userData).toEqual({ id: 42, name: 'John Doe' });
+
+  userId(userData?.id);
+  await flush();
+
+  // Todo query is now enabled, should fetch!
+  await waitFor(() => expect(document.body.textContent).toContain('TodoQueryStatus: success'));
+  expect(todoFetchCount).toBe(1);
+  expect(document.body.textContent).toContain('TodoQueryData: Todo 1, Todo 2');
+});
+
+test('Refetching transitions and previous data caching', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  let resolvePromise: (value: string) => void = () => {};
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['transitions'],
+      queryFn: async () => {
+        fetchCount++;
+        return new Promise<string>((resolve) => {
+          resolvePromise = resolve;
+        });
+      },
+    });
+
+    return (
+      <div>
+        <p>Data: {() => query().data() ?? 'none'}</p>
+        <p>isPending: {() => query().isPending().toString()}</p>
+        <p>isFetching: {() => query().isFetching().toString()}</p>
+        <p>isRefetching: {() => query().isRefetching().toString()}</p>
+        <p>status: {() => query().status()}</p>
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Step 1: Initial fetch is in progress
+  await flush();
+  expect(fetchCount).toBe(1);
+  expect(document.body.textContent).toContain('Data: none');
+  expect(document.body.textContent).toContain('isPending: true');
+  expect(document.body.textContent).toContain('isFetching: true');
+  expect(document.body.textContent).toContain('isRefetching: false');
+  expect(document.body.textContent).toContain('status: pending');
+
+  // Step 2: Resolve the initial fetch
+  resolvePromise('Value 1');
+  await waitFor(() => expect(document.body.textContent).toContain('status: success'));
+  expect(document.body.textContent).toContain('Data: Value 1');
+  expect(document.body.textContent).toContain('isPending: false');
+  expect(document.body.textContent).toContain('isFetching: false');
+  expect(document.body.textContent).toContain('isRefetching: false');
+
+  // Step 3: Trigger a refetch
+  const refetchPromise = queryClient.refetchQueries({ queryKey: ['transitions'] });
+  await flush();
+
+  // During refetch, should keep displaying 'Value 1' (no layout flashing!)
+  // isPending is false (still successful status), but isFetching is true, and isRefetching is true!
+  expect(fetchCount).toBe(2);
+  expect(document.body.textContent).toContain('Data: Value 1');
+  expect(document.body.textContent).toContain('isPending: false');
+  expect(document.body.textContent).toContain('isFetching: true');
+  expect(document.body.textContent).toContain('isRefetching: true');
+
+  // Step 4: Resolve refetch with new value
+  resolvePromise('Value 2');
+  await refetchPromise;
+  await flush();
+
+  expect(document.body.textContent).toContain('Data: Value 2');
+  expect(document.body.textContent).toContain('isPending: false');
+  expect(document.body.textContent).toContain('isFetching: false');
+  expect(document.body.textContent).toContain('isRefetching: false');
+  expect(document.body.textContent).toContain('status: success');
 });

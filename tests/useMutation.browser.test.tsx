@@ -599,6 +599,105 @@ test('useMutation stays functional after queryClient.clear()', async () => {
   await waitFor(() => expect(document.body.textContent).toContain('ok: after-clear'));
 });
 
+test('Optimistic Updates with error rollback', async () => {
+  const queryClient = createQueryClient();
+
+  // Seed the query cache with initial todos
+  queryClient.setQueryData<string[]>(['todos'], ['Todo 1', 'Todo 2']);
+
+  let mutationResult: any;
+
+  function App() {
+    const todosQuery = useQuery({
+      queryKey: ['todos'],
+      queryFn: async () => {
+        return queryClient.getQueryData<string[]>(['todos']) ?? [];
+      },
+    });
+
+    const addTodoMutation = useMutation<string[], Error, string, { previousTodos: string[] }>({
+      mutationFn: async (newTodo: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        if (newTodo === 'fail-todo') {
+          throw new Error('API failure');
+        }
+        return [...(queryClient.getQueryData<string[]>(['todos']) ?? []), newTodo];
+      },
+      onMutate: async (newTodo) => {
+        // Snapshot the previous value
+        const previousTodos = queryClient.getQueryData<string[]>(['todos']) ?? [];
+
+        // Optimistically update to the new value instantly
+        queryClient.setQueryData<string[]>(['todos'], [...previousTodos, newTodo]);
+
+        // Return context containing previous value
+        return { previousTodos };
+      },
+      onError: (err, newTodo, context) => {
+        // Roll back if error occurs
+        if (context) {
+          queryClient.setQueryData<string[]>(['todos'], context.previousTodos);
+        }
+      },
+    });
+
+    mutationResult = addTodoMutation;
+
+    return (
+      <div>
+        <p>Todos: {() => todosQuery().data()?.join(', ') ?? 'none'}</p>
+        <p>MutationStatus: {() => addTodoMutation().status()}</p>
+      </div>
+    );
+  }
+
+  // Import useQuery for the App component
+  const { useQuery } = await import('../src/useQuery');
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <App />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Success path
+  await flush();
+  expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2');
+
+  // Trigger positive optimistic update
+  let p1 = mutationResult().mutate('Todo 3');
+  await flush();
+
+  // Should immediately show Todo 3 optimistically before mutationFn resolves!
+  expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3');
+  expect(document.body.textContent).toContain('MutationStatus: pending');
+
+  // Let mutation finish
+  await p1;
+  await flush();
+  expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3');
+  expect(document.body.textContent).toContain('MutationStatus: success');
+
+  // Error rollback path
+  let p2 = mutationResult()
+    .mutate('fail-todo')
+    .catch(() => {});
+  await flush();
+
+  // Should immediately show fail-todo optimistically
+  expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3, fail-todo');
+
+  // Wait for mutation to reject, triggering rollback
+  await p2;
+  await flush();
+
+  // Should have successfully rolled back to state without fail-todo!
+  expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3');
+  expect(document.body.textContent).not.toContain('fail-todo');
+  expect(document.body.textContent).toContain('MutationStatus: error');
+});
+
 test('useMutationState shows pending count for mutation started after queryClient.clear()', async () => {
   const queryClient = createQueryClient();
   let mutationResult: any;

@@ -97,7 +97,7 @@ export type QueryClient = {
   getMutationDefaults: (mutationKey?: MutationKey) => Partial<MutationOptions>;
   setMutationDefaults: (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => void;
 };
-export type QueryKey = FunctionMaybe<ObservableMaybe<string | number>[]>;
+export type QueryKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 export type QueryOptions<
   TQueryFnData = unknown,
   TError = unknown,
@@ -200,6 +200,7 @@ type Query<
   scheduleRetry: (retryAttempt: number, error: Error) => void;
   isCancelled: boolean;
   events: EventTarget;
+  inactiveCleanup?: () => void;
 };
 // #region Core
 const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>) => {
@@ -328,40 +329,59 @@ const createQuery = <
         if (query.state.fetchStatus() !== 'fetching') {
           query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
         }
-        if (query.resolvedOptions.refetchInterval) {
-          const intervalDelay = query.resolvedOptions.refetchInterval;
-          let intervalId: ReturnType<typeof setInterval>;
-          const timeoutId = setTimeout(() => {
-            intervalId = setInterval(() => {
-              query.fetch();
+        if (query.instances === 1) {
+          const cleanups: (() => void)[] = [];
+
+          if (query.resolvedOptions.refetchInterval) {
+            const intervalDelay = query.resolvedOptions.refetchInterval;
+            let intervalId: ReturnType<typeof setInterval>;
+            const timeoutId = setTimeout(() => {
+              intervalId = setInterval(() => {
+                query.fetch();
+              }, intervalDelay);
             }, intervalDelay);
-          }, intervalDelay);
-          useCleanup(() => {
-            clearTimeout(timeoutId);
-            clearInterval(intervalId);
-          });
-        }
-        if (query.resolvedOptions.networkMode === 'online') {
-          useEventListener(window, 'online', async () => {
-            if (query.resolvedOptions.refetchOnReconnect) {
-              query.state.fetchStatus('fetching');
-              query.refetch();
-            }
-          });
-          useEventListener(window, 'offline', async () => {
-            query.cancel();
-            query.state.fetchStatus('paused');
-          });
-        }
-        if (query.resolvedOptions.refetchOnWindowFocus) {
-          useEventListener(document, 'visibilitychange', () => {
-            if (
-              document.visibilityState === 'visible' &&
-              (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
-            ) {
-              query.refetch();
-            }
-          });
+            cleanups.push(() => {
+              clearTimeout(timeoutId);
+              clearInterval(intervalId);
+            });
+          }
+          if (query.resolvedOptions.networkMode === 'online') {
+            const onlineHandler = async () => {
+              if (query.resolvedOptions.refetchOnReconnect) {
+                query.state.fetchStatus('fetching');
+                query.refetch();
+              }
+            };
+            const offlineHandler = async () => {
+              query.cancel();
+              query.state.fetchStatus('paused');
+            };
+            window.addEventListener('online', onlineHandler);
+            window.addEventListener('offline', offlineHandler);
+            cleanups.push(() => {
+              window.removeEventListener('online', onlineHandler);
+              window.removeEventListener('offline', offlineHandler);
+            });
+          }
+          if (query.resolvedOptions.refetchOnWindowFocus) {
+            const focusHandler = () => {
+              if (
+                document.visibilityState === 'visible' &&
+                (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
+              ) {
+                query.refetch();
+              }
+            };
+            document.addEventListener('visibilitychange', focusHandler);
+            cleanups.push(() => {
+              document.removeEventListener('visibilitychange', focusHandler);
+            });
+          }
+
+          query.inactiveCleanup = () => {
+            cleanups.forEach((c) => c());
+            query.inactiveCleanup = undefined;
+          };
         }
       });
       return query.removeInstance;
@@ -370,18 +390,14 @@ const createQuery = <
       query.instances--;
       if (query.instances === 0) {
         query.isActive = false;
+        query.inactiveCleanup?.();
         query.scheduleDestroy();
       }
     },
     // #region cancel
     cancel: async () => {
-      return new Promise((resolve) => {
-        query.controller.abort();
-        query.isCancelled = true;
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
+      query.controller.abort();
+      query.isCancelled = true;
     },
     reset: () => {
       query.state.data(options.initialData as TData);
@@ -402,6 +418,7 @@ const createQuery = <
     },
     destroy: () => {
       query.cancel();
+      query.inactiveCleanup?.();
       query.staleDisposer();
       query.retryDisposer();
       query.stateDisposer();
@@ -467,8 +484,9 @@ const createQuery = <
         query.state.dataUpdatedAt(Date.now());
         query.state.dataUpdateCount((prev) => prev + 1);
         query.state.status('success');
-      } catch (error) {
-        if (error instanceof Error && !signal.aborted) {
+      } catch (err) {
+        if (!signal.aborted) {
+          const error = err instanceof Error ? err : new Error(String(err));
           query.state.error(error);
           query.state.status('error');
           query.state.errorUpdatedAt(Date.now());
@@ -562,33 +580,21 @@ const createQuery = <
       status,
       fetchStatus,
       isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
-      isRefetching: useMemo(
-        (): boolean =>
-          fetchStatus() === 'fetching' && status() !== 'pending',
-      ),
+      isRefetching: useMemo((): boolean => fetchStatus() === 'fetching' && status() !== 'pending'),
       isFetched: useMemo((): boolean => fetchStatus() === 'idle'),
       isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
       isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
       isPending: useMemo((): boolean => status() === 'pending'),
       isSuccess: useMemo((): boolean => status() === 'success'),
       isError: useMemo((): boolean => status() === 'error'),
-      isLoading: useMemo(
-        (): boolean =>
-          status() === 'pending' && fetchStatus() === 'fetching',
-      ),
-      isLoadingError: useMemo(
-        (): boolean => status() === 'error' && data() !== undefined,
-      ),
-      isRefetchError: useMemo(
-        (): boolean => status() === 'error' && status() !== 'pending',
-      ),
+      isLoading: useMemo((): boolean => status() === 'pending' && fetchStatus() === 'fetching'),
+      isLoadingError: useMemo((): boolean => status() === 'error' && data() !== undefined),
+      isRefetchError: useMemo((): boolean => status() === 'error' && status() !== 'pending'),
       isPlaceholderData: useMemo(
         (): boolean => options.placeholderData !== undefined && data() === undefined,
       ),
       isStale,
-      isIdle: useMemo(
-        (): boolean => fetchStatus() === 'idle' && status() === 'pending',
-      ),
+      isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
     } as QueryState<TData>;
     // Return disposer for cleanup
     return () => {
@@ -802,13 +808,23 @@ export const createQueryClient = (options?: {
   // #region setQueryData
   const setQueryData: QueryClient['setQueryData'] = (queryKey, data) => {
     const queryHash = queryKeyHashFn(queryKey);
-    const query = cache.get(queryHash);
-    if (!query) return;
-    if (typeof data === 'function') {
-      const updater = data as (previous: unknown) => unknown;
-      query.state.data((old) => updater(old));
+    let query = cache.get(queryHash);
+    if (!query) {
+      const resolvedData = typeof data === 'function' ? (data as any)(undefined) : data;
+      createQuery(queryClient, {
+        queryKey,
+        initialData: resolvedData,
+        initialDataUpdatedAt: Date.now(),
+      });
     } else {
-      query.state.data(data);
+      if (typeof data === 'function') {
+        const updater = data as (previous: unknown) => unknown;
+        query.state.data((old) => updater(old));
+      } else {
+        query.state.data(data);
+      }
+      query.state.dataUpdatedAt(Date.now());
+      query.state.status('success');
     }
   };
   // #region invalidateQueries

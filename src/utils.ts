@@ -25,7 +25,8 @@ export const hashFn = (queryKey: QueryKey | MutationKey): string => {
 };
 
 export const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
-  return useResolved($$(queryKey)) as unknown[];
+  const resolved = useResolved($$(queryKey));
+  return Array.isArray(resolved) ? resolved.map((item) => $$(item)) : [];
 };
 
 export const partialMatchKey = (
