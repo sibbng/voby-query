@@ -23,9 +23,7 @@ jobs:
           node-version: 22
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4 # Uses the official pnpm action
-        with:
-          version: 10 # Specify pnpm version, adjust if needed based on project's pnpm version
+        uses: pnpm/action-setup@v4 # Reads version from packageManager field in package.json
 
       - name: Install dependencies
         run: pnpm install

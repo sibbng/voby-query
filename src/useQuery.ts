@@ -17,6 +17,8 @@ import { QueryClientContext } from './context';
 import type { MutationFilters, MutationKey, MutationObject, MutationOptions } from './useMutation';
 import { hashFn, partialMatchKey, replaceEqualDeep } from './utils';
 
+const isBrowser = typeof window !== 'undefined';
+
 // #region Types
 export type MutationCache = {
   size: number;
@@ -327,7 +329,7 @@ const createQuery = <
           }
         }
         if (query.state.fetchStatus() !== 'fetching') {
-          query.state.fetchStatus(window.navigator.onLine ? 'idle' : 'paused');
+          query.state.fetchStatus(!isBrowser || window.navigator.onLine ? 'idle' : 'paused');
         }
         if (query.instances === 1) {
           const cleanups: (() => void)[] = [];
@@ -345,7 +347,7 @@ const createQuery = <
               clearInterval(intervalId);
             });
           }
-          if (query.resolvedOptions.networkMode === 'online') {
+          if (query.resolvedOptions.networkMode === 'online' && isBrowser) {
             const onlineHandler = async () => {
               if (query.resolvedOptions.refetchOnReconnect) {
                 query.state.fetchStatus('fetching');
@@ -363,7 +365,7 @@ const createQuery = <
               window.removeEventListener('offline', offlineHandler);
             });
           }
-          if (query.resolvedOptions.refetchOnWindowFocus) {
+          if (query.resolvedOptions.refetchOnWindowFocus && isBrowser) {
             const focusHandler = () => {
               if (
                 document.visibilityState === 'visible' &&
@@ -531,6 +533,7 @@ const createQuery = <
       const delay =
         typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
       if (
+        isBrowser &&
         query.resolvedOptions.networkMode === 'online' &&
         query.state.fetchStatus() === 'paused'
       ) {
@@ -581,15 +584,15 @@ const createQuery = <
       fetchStatus,
       isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
       isRefetching: useMemo((): boolean => fetchStatus() === 'fetching' && status() !== 'pending'),
-      isFetched: useMemo((): boolean => fetchStatus() === 'idle'),
+      isFetched: useMemo((): boolean => dataUpdateCount() > 0 || errorUpdateCount() > 0),
       isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
       isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
       isPending: useMemo((): boolean => status() === 'pending'),
       isSuccess: useMemo((): boolean => status() === 'success'),
       isError: useMemo((): boolean => status() === 'error'),
       isLoading: useMemo((): boolean => status() === 'pending' && fetchStatus() === 'fetching'),
-      isLoadingError: useMemo((): boolean => status() === 'error' && data() !== undefined),
-      isRefetchError: useMemo((): boolean => status() === 'error' && status() !== 'pending'),
+      isLoadingError: useMemo((): boolean => status() === 'error' && dataUpdateCount() === 0),
+      isRefetchError: useMemo((): boolean => status() === 'error' && dataUpdateCount() > 0),
       isPlaceholderData: useMemo(
         (): boolean => options.placeholderData !== undefined && data() === undefined,
       ),
@@ -649,7 +652,7 @@ export const createQueryClient = (options?: {
     throwOnError: false,
     gcTime: 1000 * 60 * 5,
     staleTime: 0,
-    refetchInterval: 1000 * 60 * 5,
+    refetchInterval: undefined as number | undefined,
     networkMode: 'online' as const,
     retry: 3,
     retryOnMount: true,
@@ -919,9 +922,8 @@ export const createQueryClient = (options?: {
       ([, query]) => !queryKey || matchesQueryKey(query, queryKey, exact),
     );
 
-    for (const [hash, query] of queriesToRemove) {
+    for (const [, query] of queriesToRemove) {
       query.destroy();
-      cache.delete(hash);
     }
   };
   const resetQueries = async (
