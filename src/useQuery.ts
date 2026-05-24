@@ -1,5 +1,4 @@
 import { isDevelopment } from 'std-env';
-const isBrowser = typeof window !== 'undefined';
 import {
   $,
   $$,
@@ -17,6 +16,8 @@ import {
 import { QueryClientContext } from './context';
 import type { MutationFilters, MutationKey, MutationObject, MutationOptions } from './useMutation';
 import { hashFn, partialMatchKey, replaceEqualDeep } from './utils';
+
+const isBrowser = typeof window !== 'undefined';
 
 // #region Types
 export type MutationCache = {
@@ -583,14 +584,14 @@ const createQuery = <
       fetchStatus,
       isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
       isRefetching: useMemo((): boolean => fetchStatus() === 'fetching' && status() !== 'pending'),
-      isFetched: useMemo((): boolean => dataUpdateCount() > 0),
+      isFetched: useMemo((): boolean => dataUpdateCount() > 0 || errorUpdateCount() > 0),
       isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
       isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
       isPending: useMemo((): boolean => status() === 'pending'),
       isSuccess: useMemo((): boolean => status() === 'success'),
       isError: useMemo((): boolean => status() === 'error'),
       isLoading: useMemo((): boolean => status() === 'pending' && fetchStatus() === 'fetching'),
-      isLoadingError: useMemo((): boolean => status() === 'error' && data() !== undefined),
+      isLoadingError: useMemo((): boolean => status() === 'error' && dataUpdateCount() === 0),
       isRefetchError: useMemo((): boolean => status() === 'error' && dataUpdateCount() > 0),
       isPlaceholderData: useMemo(
         (): boolean => options.placeholderData !== undefined && data() === undefined,
@@ -651,7 +652,7 @@ export const createQueryClient = (options?: {
     throwOnError: false,
     gcTime: 1000 * 60 * 5,
     staleTime: 0,
-    refetchInterval: undefined,
+    refetchInterval: undefined as number | undefined,
     networkMode: 'online' as const,
     retry: 3,
     retryOnMount: true,
