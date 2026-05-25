@@ -39,6 +39,10 @@ export type CancelOptions = {
   silent?: boolean;
   revert?: boolean;
 };
+export type QueryRefetchOptions = {
+  throwOnError?: boolean;
+  cancelRefetch?: boolean;
+};
 export class CancelledError extends Error {
   revert: boolean;
   silent: boolean;
@@ -62,20 +66,14 @@ export type QueryClient = {
     filters?: QueryFilters & {
       refetchType?: 'active' | 'inactive' | 'all' | 'none';
     },
-    options?: {
-      throwOnError?: boolean;
-      cancelRefetch?: boolean;
-    },
+    options?: QueryRefetchOptions,
   ) => Promise<void>;
   ensureQueryData: <T>(options: QueryOptions<T>) => Promise<T>;
   fetchQuery: <T>(options: QueryOptions<T>) => Promise<T>;
   prefetchQuery: <T>(options: QueryOptions<T>) => Promise<void>;
   refetchQueries: (
     filters?: QueryFilters,
-    options?: {
-      throwOnError?: boolean;
-      cancelRefetch?: boolean;
-    },
+    options?: QueryRefetchOptions,
   ) => Promise<void>;
   cancelQueries: (
     filters?: QueryFilters,
@@ -84,10 +82,7 @@ export type QueryClient = {
   removeQueries: (filters?: QueryFilters) => void;
   resetQueries: (
     filters?: QueryFilters,
-    options?: {
-      throwOnError?: boolean;
-      cancelRefetch?: boolean;
-    },
+    options?: QueryRefetchOptions,
   ) => Promise<void>;
   isFetching: (filters?: QueryFilters) => number;
   isMutating: (filters?: MutationFilters) => number;
@@ -146,11 +141,11 @@ export type QueryOptions<
 };
 export type QueryStatus = 'pending' | 'error' | 'success';
 export type FetchStatus = 'fetching' | 'paused' | 'idle';
-type QueryState<D = undefined> = {
+type QueryState<D = undefined, TError = Error> = {
   data: Observable<D>;
   dataUpdateCount: Observable<number>;
   dataUpdatedAt: Observable<number>;
-  error: Observable<Error | null>;
+  error: Observable<TError | null>;
   errorUpdateCount: Observable<number>;
   errorUpdatedAt: Observable<number>;
   meta: Observable<null>;
@@ -172,16 +167,16 @@ type QueryState<D = undefined> = {
   isStale: Observable<boolean>;
   isIdle: ObservableReadonly<boolean>;
 };
-type QueryStateReadonly<D> = {
-  [K in keyof Omit<QueryState<D>, 'meta'>]: ObservableReadonly<
-    Awaited<ReturnType<QueryState<D>[K]>>
+type QueryStateReadonly<D, TError = Error> = {
+  [K in keyof Omit<QueryState<D, TError>, 'meta'>]: ObservableReadonly<
+    Awaited<ReturnType<QueryState<D, TError>[K]>>
   >;
-} & { meta: QueryState<D>['meta'] };
-type QueryStateSnapshot<D = undefined> = {
+} & { meta: QueryState<D, TError>['meta'] };
+type QueryStateSnapshot<D = undefined, TError = Error> = {
   data: D;
   dataUpdateCount: number;
   dataUpdatedAt: number;
-  error: Error | null;
+  error: TError | null;
   errorUpdateCount: number;
   errorUpdatedAt: number;
   isInvalidated: boolean;
@@ -198,7 +193,7 @@ type Query<
   R = void,
 > = {
   isActive: boolean;
-  state: QueryState<TData>;
+  state: QueryState<TData, TError>;
   cancel: (options?: CancelOptions) => Promise<void>;
   destroy: () => void;
   fetch: (options?: {
@@ -206,13 +201,13 @@ type Query<
     throwOnError?: boolean;
     force?: boolean;
   }) => Promise<void>;
-  refetch: (options?: { throwOnError?: boolean; cancelRefetch?: boolean }) => Promise<void>;
+  refetch: (options?: QueryRefetchOptions) => Promise<void>;
   resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
   instances: number;
   controller: AbortController;
   isFetching: boolean;
   fetchPromise?: Promise<void>;
-  revertState?: QueryStateSnapshot<TData>;
+  revertState?: QueryStateSnapshot<TData, TError>;
   destroyDisposer: () => void;
   stateDisposer: () => void;
   staleDisposer: () => void;
@@ -221,11 +216,26 @@ type Query<
   removeInstance: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
-  scheduleRetry: (retryAttempt: number, error: Error) => void;
+  scheduleRetry: (retryAttempt: number, error: TError) => void;
   isCancelled: boolean;
   events: EventTarget;
   inactiveCleanup?: () => void;
 };
+type UseQueryResultMethods<TError = Error> = {
+  refetch: (options?: QueryRefetchOptions) => Promise<void>;
+  cancel: (options?: CancelOptions) => Promise<void>;
+};
+type UseQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
+  UseQueryResultMethods<TError>;
+export type UseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseQueryResultValue<TData | undefined, TError>
+>;
+type DefinedUseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseQueryResultValue<TData, TError>
+>;
+type UseQueryReturn<TData, TError, TInitialData> = TInitialData extends undefined
+  ? UseQueryResult<TData, TError>
+  : DefinedUseQueryResult<TData, TError>;
 // #region Core
 const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>) => {
   return cache ?? new Map<string, Query<any, any, any, any>>();
@@ -263,7 +273,9 @@ const createMutationCache = (cache?: Map<string, MutationObject<any, any, any, a
   };
 };
 
-const createQueryStateSnapshot = <D>(state: QueryState<D>): QueryStateSnapshot<D> => ({
+const createQueryStateSnapshot = <D, TError>(
+  state: QueryState<D, TError>,
+): QueryStateSnapshot<D, TError> => ({
   data: state.data(),
   dataUpdateCount: state.dataUpdateCount(),
   dataUpdatedAt: state.dataUpdatedAt(),
@@ -276,7 +288,10 @@ const createQueryStateSnapshot = <D>(state: QueryState<D>): QueryStateSnapshot<D
   isStale: state.isStale(),
 });
 
-const restoreQueryStateSnapshot = <D>(state: QueryState<D>, snapshot: QueryStateSnapshot<D>) => {
+const restoreQueryStateSnapshot = <D, TError>(
+  state: QueryState<D, TError>,
+  snapshot: QueryStateSnapshot<D, TError>,
+) => {
   state.data(snapshot.data);
   state.dataUpdateCount(snapshot.dataUpdateCount);
   state.dataUpdatedAt(snapshot.dataUpdatedAt);
@@ -375,7 +390,7 @@ const createQuery = <
             return false;
           })();
           if (shouldRefetch) {
-            query.fetch();
+            query.refetch();
           }
         }
         if (query.state.fetchStatus() !== 'fetching') {
@@ -389,7 +404,7 @@ const createQuery = <
             let intervalId: ReturnType<typeof setInterval>;
             const timeoutId = setTimeout(() => {
               intervalId = setInterval(() => {
-                query.fetch();
+                query.refetch();
               }, intervalDelay);
             }, intervalDelay);
             cleanups.push(() => {
@@ -451,8 +466,10 @@ const createQuery = <
       const wasFetching = query.isFetching || query.fetchPromise !== undefined;
       const hadPreviousData = query.revertState?.data !== undefined;
 
-      query.controller.abort();
-      query.isCancelled = true;
+      if (wasFetching) {
+        query.controller.abort();
+      }
+      query.isCancelled = wasFetching;
       query.retryDisposer();
       query.retryDisposer = () => {};
       query.isFetching = false;
@@ -501,7 +518,7 @@ const createQuery = <
     refetch: async ({
       throwOnError = resolvedOptions.throwOnError,
       cancelRefetch = resolvedOptions.cancelRefetch,
-    } = {}) => {
+    }: QueryRefetchOptions = {}) => {
       if (!query.resolvedOptions.enabled) return;
       if (cancelRefetch) {
         await query.cancel({ revert: false, silent: true });
@@ -564,7 +581,7 @@ const createQuery = <
           query.state.status('success');
         } catch (err) {
           if (!signal.aborted) {
-            const error = err instanceof Error ? err : new Error(String(err));
+            const error = (err instanceof Error ? err : new Error(String(err))) as TError;
             query.state.error(error);
             query.state.status('error');
             query.state.errorUpdatedAt(Date.now());
@@ -614,7 +631,7 @@ const createQuery = <
       return fetchPromise;
     },
     // #region retry
-    scheduleRetry: (attempt: number, error: Error) => {
+    scheduleRetry: (attempt: number, error: TError) => {
       const { retry, retryDelay } = query.resolvedOptions;
       if (retry === false) return;
       if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
@@ -650,7 +667,7 @@ const createQuery = <
     const data = $(options.initialData as TData, { equals: false });
     const dataUpdateCount = $(0);
     const dataUpdatedAt = $(options.initialDataUpdatedAt ?? 0);
-    const error = $<Error | null>(null, { equals: false });
+    const error = $<TError | null>(null, { equals: false });
     const errorUpdateCount = $(0);
     const errorUpdatedAt = $(0);
     const meta = $(null);
@@ -686,7 +703,7 @@ const createQuery = <
       ),
       isStale,
       isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
-    } as QueryState<TData>;
+    } as QueryState<TData, TError>;
     // Return disposer for cleanup
     return () => {
       // No-op for now, but could add cleanup logic if needed
@@ -746,7 +763,7 @@ export const createQueryClient = (options?: {
     retry: 3,
     retryOnMount: true,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
-    cancelRefetch: true,
+    cancelRefetch: false,
     refetchOnWindowFocus: true,
     structuralSharing: true,
     refetchOnReconnect: options?.defaultOptions?.queries?.networkMode
@@ -965,10 +982,7 @@ export const createQueryClient = (options?: {
   // #region refetchQueries
   const refetchQueries = async (
     filters?: QueryFilters,
-    options?: {
-      throwOnError?: boolean;
-      cancelRefetch?: boolean;
-    },
+    options?: QueryRefetchOptions,
   ): Promise<void> => {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
@@ -1014,10 +1028,7 @@ export const createQueryClient = (options?: {
   };
   const resetQueries: QueryClient['resetQueries'] = async (
     filters,
-    options?: {
-      throwOnError?: boolean;
-      cancelRefetch?: boolean;
-    },
+    options?: QueryRefetchOptions,
   ): Promise<void> => {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
@@ -1186,7 +1197,7 @@ type Prettify<T> = {
 } & {};
 export function useQuery<
   TQueryFnData = unknown,
-  TError = unknown,
+  TError = Error,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
   TInitialData extends TQueryFnData | undefined = undefined,
@@ -1194,12 +1205,7 @@ export function useQuery<
   D = R extends void ? (TInitialData extends TQueryFnData ? TInitialData : TQueryFnData) : R,
 >(
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
-): ObservableReadonly<
-  QueryStateReadonly<TInitialData extends undefined ? D | undefined : D> & {
-    refetch: () => Promise<void>;
-    cancel: () => void;
-  }
-> {
+): UseQueryReturn<Awaited<D>, TError, TInitialData> {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
     const query = createQuery<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>(
@@ -1228,5 +1234,5 @@ export function useQuery<
       refetch: query().refetch,
       cancel: query().cancel,
     };
-  });
+  }) as UseQueryReturn<Awaited<D>, TError, TInitialData>;
 }

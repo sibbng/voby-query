@@ -42,6 +42,50 @@ const query = useQuery({
 });
 ```
 
+You can also annotate a query result explicitly with `UseQueryResult<TData, TError>`. Since `useQuery` returns a read-only observable in Voby, read values through `query()` instead of destructuring.
+
+```tsx
+import { For, If } from 'voby';
+import { useQuery, type UseQueryResult } from 'voby-query';
+
+type Todo = {
+  id: number;
+  title: string;
+};
+
+async function fetchTodos(): Promise<Todo[]> {
+  const response = await fetch('https://jsonplaceholder.typicode.com/todos');
+  return response.json();
+}
+
+function TodoList(props: { query: UseQueryResult<Todo[], Error> }) {
+  return (
+    <>
+      <If when={() => props.query().isLoading()}>
+        <div>Loading...</div>
+      </If>
+      <If when={() => props.query().isError()}>
+        <div>{() => props.query().error()?.message ?? 'Failed to load todos'}</div>
+      </If>
+      <ul>
+        <For values={() => props.query().data() ?? []}>
+          {(todo) => <li>{todo.title}</li>}
+        </For>
+      </ul>
+    </>
+  );
+}
+
+export function App() {
+  const query: UseQueryResult<Todo[], Error> = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  });
+
+  return <TodoList query={query} />;
+}
+```
+
 To learn more about usage visit [React Query's documentation](https://tanstack.com/query/latest).
 
 ## License

@@ -449,6 +449,94 @@ test('useQuery refetchOnWindowFocus: false', async () => {
   expect(queryFnMock).toHaveBeenCalledTimes(1); // Should NOT be called again
 });
 
+test('useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  const abortedSignals: AbortSignal[] = [];
+  const resolveFetches = new Map<number, (value: string) => void>();
+  let refetch: () => Promise<void> = async () => {};
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['refetch-focus-cancel-refetch'],
+      queryFn: async ({ signal }) => {
+        fetchCount++;
+        const requestId = fetchCount;
+
+        signal.addEventListener(
+          'abort',
+          () => {
+            abortedSignals.push(signal);
+          },
+          { once: true },
+        );
+
+        return new Promise<string>((resolve, reject) => {
+          const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+
+          signal.addEventListener('abort', onAbort, { once: true });
+          resolveFetches.set(requestId, (value) => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(value);
+          });
+        });
+      },
+      staleTime: 0,
+      cancelRefetch: true,
+      refetchOnWindowFocus: true,
+    });
+
+    refetch = () => query().refetch();
+
+    return <div>{() => query().data() ?? 'Loading...'}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await flush();
+  expect(fetchCount).toBe(1);
+
+  resolveFetches.get(1)?.('Initial value');
+  await waitFor(() => expect(document.body.textContent).toBe('Initial value'));
+
+  const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => 'visible',
+  });
+
+  const refetchPromise = refetch();
+  await flush();
+  expect(fetchCount).toBe(2);
+
+  document.dispatchEvent(new Event('visibilitychange'));
+  await flush();
+
+  if (originalVisibility) {
+    Object.defineProperty(document, 'visibilityState', originalVisibility);
+  }
+
+  expect(fetchCount).toBe(3);
+  expect(abortedSignals).toHaveLength(1);
+  expect(abortedSignals[0]?.aborted).toBe(true);
+
+  resolveFetches.get(2)?.('Stale value');
+  await flush();
+  expect(document.body.textContent).toBe('Initial value');
+
+  resolveFetches.get(3)?.('Focused value');
+  await refetchPromise;
+  await waitFor(() => expect(document.body.textContent).toBe('Focused value'));
+});
+
 test('useQuery refetchInterval: data refetches periodically', { retry: 10 }, async () => {
   const queryClient = createQueryClient();
   const queryFnMock = vi.fn(async () => {
@@ -507,6 +595,82 @@ test('useQuery refetchInterval: data refetches periodically', { retry: 10 }, asy
   showComponent(false);
   await flush();
 }); // Retry to account for timing issues
+
+test('useQuery refetchInterval cancels the active request when cancelRefetch is true', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  const abortedSignals: AbortSignal[] = [];
+  const resolveFetches = new Map<number, (value: string) => void>();
+  const intervalMs = 50;
+  const showComponent = $(true);
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['refetch-interval-cancel-refetch'],
+      queryFn: async ({ signal }) => {
+        fetchCount++;
+        const requestId = fetchCount;
+
+        signal.addEventListener(
+          'abort',
+          () => {
+            abortedSignals.push(signal);
+          },
+          { once: true },
+        );
+
+        return new Promise<string>((resolve, reject) => {
+          const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+
+          signal.addEventListener('abort', onAbort, { once: true });
+          resolveFetches.set(requestId, (value) => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(value);
+          });
+        });
+      },
+      refetchInterval: intervalMs,
+      cancelRefetch: true,
+    });
+
+    return <div>{() => query().data() ?? 'Loading...'}</div>;
+  }
+
+  function App() {
+    return (
+      <QueryClientProvider value={queryClient}>
+        <If when={showComponent}>
+          <TestComponent />
+        </If>
+      </QueryClientProvider>
+    );
+  }
+
+  render(<App />, document.body);
+
+  await flush();
+  expect(fetchCount).toBe(1);
+
+  await new Promise((resolve) => setTimeout(resolve, intervalMs * 2 + 20));
+  await flush();
+
+  expect(fetchCount).toBe(2);
+  expect(abortedSignals).toHaveLength(1);
+  expect(abortedSignals[0]?.aborted).toBe(true);
+
+  resolveFetches.get(1)?.('Stale interval value');
+  await flush();
+  expect(document.body.textContent).toBe('Loading...');
+
+  resolveFetches.get(2)?.('Interval value');
+  await waitFor(() => expect(document.body.textContent).toBe('Interval value'));
+
+  showComponent(false);
+  await flush();
+});
 
 test('useQuery refetchInterval: stops if component unmounts', async () => {
   const queryClient = createQueryClient();
@@ -865,4 +1029,121 @@ test('Refetching transitions and previous data caching', async () => {
   expect(document.body.textContent).toContain('isFetching: false');
   expect(document.body.textContent).toContain('isRefetching: false');
   expect(document.body.textContent).toContain('status: success');
+});
+
+test('refetch reuses the active request by default', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  let resolveFetch: (value: string) => void = () => {};
+  let refetch: () => Promise<void> = async () => {};
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['deduped-refetch'],
+      queryFn: async () => {
+        fetchCount++;
+        return new Promise<string>((resolve) => {
+          resolveFetch = resolve;
+        });
+      },
+    });
+
+    refetch = () => query().refetch();
+
+    return <div>{() => query().data() ?? 'Loading...'}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await flush();
+  expect(fetchCount).toBe(1);
+  expect(queryClient.isFetching({ queryKey: ['deduped-refetch'] })).toBe(1);
+
+  const refetchPromise = refetch();
+  await flush();
+
+  expect(fetchCount).toBe(1);
+  expect(queryClient.isFetching({ queryKey: ['deduped-refetch'] })).toBe(1);
+
+  resolveFetch('First result');
+  await refetchPromise;
+  await waitFor(() => expect(document.body.textContent).toBe('First result'));
+
+  expect(fetchCount).toBe(1);
+  expect(queryClient.isFetching({ queryKey: ['deduped-refetch'] })).toBe(0);
+});
+
+test('refetch with cancelRefetch cancels the active request and starts a new one', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+  const abortedSignals: AbortSignal[] = [];
+  const resolveFetches = new Map<number, (value: string) => void>();
+  let refetch: (options?: { cancelRefetch?: boolean }) => Promise<void> = async () => {};
+
+  function TestComponent() {
+    const query = useQuery({
+      queryKey: ['cancel-refetch'],
+      queryFn: async ({ signal }) => {
+        fetchCount++;
+        const requestId = fetchCount;
+
+        signal.addEventListener('abort', () => {
+          abortedSignals.push(signal);
+        });
+
+        return new Promise<string>((resolve, reject) => {
+          const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+
+          signal.addEventListener('abort', onAbort, { once: true });
+          resolveFetches.set(requestId, (value) => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(value);
+          });
+        });
+      },
+    });
+
+    refetch = query().refetch;
+
+    return <div>{() => query().data() ?? 'Loading...'}</div>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await flush();
+  expect(fetchCount).toBe(1);
+  expect(queryClient.isFetching({ queryKey: ['cancel-refetch'] })).toBe(1);
+
+  const refetchPromise = refetch({ cancelRefetch: true });
+  await flush();
+
+  expect(fetchCount).toBe(2);
+  expect(abortedSignals).toHaveLength(1);
+  expect(abortedSignals[0]?.aborted).toBe(true);
+  expect(queryClient.isFetching({ queryKey: ['cancel-refetch'] })).toBe(1);
+
+  resolveFetches.get(1)?.('stale result');
+  await flush();
+  expect(document.body.textContent).toBe('Loading...');
+
+  resolveFetches.get(2)?.('Fresh result');
+  await refetchPromise;
+  await waitFor(() => expect(document.body.textContent).toBe('Fresh result'));
+
+  expect(fetchCount).toBe(2);
+  expect(queryClient.getQueryData(['cancel-refetch'])).toBe('Fresh result');
+  expect(queryClient.isFetching({ queryKey: ['cancel-refetch'] })).toBe(0);
 });
