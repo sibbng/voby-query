@@ -1,366 +1,185 @@
-import { $, For, If, render } from 'voby';
-import {
-  QueryClientProvider,
-  createQueryClient,
-  useQuery,
-  useMutation,
-  useMutationState,
-} from 'voby-query';
+import { $, For, render } from 'voby';
+import { QueryClientProvider } from 'voby-query';
 import './styles.css';
+import { queryClient } from './client';
+import { ProfileDemo, meta as profileMeta } from '../examples/profile';
+import { TodosDemo, meta as todosMeta } from '../examples/todos';
+import { CacheDemo, meta as cacheMeta } from '../examples/cache';
+import { BasicQueryDemo, meta as basicQueryMeta } from '../examples/basic-query';
+import { OptimisticDemo, meta as optimisticMeta } from '../examples/optimistic';
+import { DependentDemo, meta as dependentMeta } from '../examples/dependent';
+import { ParallelDemo, meta as parallelMeta } from '../examples/parallel';
+import { PrefetchDemo, meta as prefetchMeta } from '../examples/prefetch';
+import { CancellationDemo, meta as cancellationMeta } from '../examples/cancellation';
+import { SelectDemo, meta as selectMeta } from '../examples/select';
+import { StaleTimeDemo, meta as staleTimeMeta } from '../examples/stale-time';
+import { DebugPanel, type DebugScope } from './debug-panel';
 
-type Todo = { id: number; title: string; completed: boolean };
-type Profile = { id: number; name: string; handle: string; bio: string };
+const SESSION_KEY = 'voby-query-playground-example';
 
-const wait = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    const id = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      cleanup();
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-    const cleanup = () => {
-      clearTimeout(id);
-      signal?.removeEventListener('abort', onAbort);
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+type ExampleMeta = { id: string; label: string };
+type Example = ExampleMeta & { component: () => JSX.Element; debug: DebugScope };
 
-const PROFILES: Profile[] = [
+const examples: Example[] = [
   {
-    id: 1,
-    name: 'Ada Lovelace',
-    handle: '@ada',
-    bio: 'Drives architecture and roadmap decisions.',
+    ...basicQueryMeta,
+    component: BasicQueryDemo,
+    debug: {
+      queryPrefixes: [['basic-posts']],
+      note: 'Tracks the single reactive post query used by this example.',
+    },
   },
   {
-    id: 2,
-    name: 'Grace Hopper',
-    handle: '@grace',
-    bio: 'Keeps delivery predictable and observable.',
+    ...profileMeta,
+    component: ProfileDemo,
+    debug: {
+      queryPrefixes: [['profile']],
+      note: 'Filters down to the profile query keyed by the selected user id.',
+    },
   },
   {
-    id: 3,
-    name: 'Margaret Hamilton',
-    handle: '@margaret',
-    bio: 'Turns edge cases into boring incidents.',
+    ...dependentMeta,
+    component: DependentDemo,
+    debug: {
+      queryPrefixes: [['dep-user'], ['dep-posts']],
+      note: 'Shows both the source query and the dependent posts query for the current user id.',
+    },
+  },
+  {
+    ...parallelMeta,
+    component: ParallelDemo,
+    debug: {
+      queryPrefixes: [['par-users'], ['par-posts'], ['par-todos']],
+      note: 'Parallel queries stay grouped together so fetch timing and staleness are easy to compare.',
+    },
+  },
+  {
+    ...selectMeta,
+    component: SelectDemo,
+    debug: {
+      queryPrefixes: [['select-users']],
+      note: 'Both raw and selected observers share the same cache entry here.',
+    },
+  },
+  {
+    ...staleTimeMeta,
+    component: StaleTimeDemo,
+    debug: {
+      queryPrefixes: [['stale-demo'], ['stale-tick']],
+      note: 'Pairs the sampled query with the ticking helper query that demonstrates staleness over time.',
+    },
+  },
+  {
+    ...todosMeta,
+    component: TodosDemo,
+    debug: {
+      queryPrefixes: [['todos']],
+      mutationPrefixes: [['todos']],
+      note: 'Includes the todos query plus add and toggle mutations so invalidation effects stay visible.',
+    },
+  },
+  {
+    ...optimisticMeta,
+    component: OptimisticDemo,
+    debug: {
+      mutationPrefixes: [['optimistic']],
+      note: 'Focused on the optimistic toggle mutation and its rollback cycle.',
+    },
+  },
+  {
+    ...prefetchMeta,
+    component: PrefetchDemo,
+    debug: {
+      queryPrefixes: [['pf-user']],
+      note: 'Prefetched and selected profile queries share the same prefix for cache inspection.',
+    },
+  },
+  {
+    ...cancellationMeta,
+    component: CancellationDemo,
+    debug: {
+      queryPrefixes: [['cancellation-search']],
+      note: 'Watch aborts, refetches, and stale transitions on the live search query.',
+    },
+  },
+  {
+    ...cacheMeta,
+    component: CacheDemo,
+    debug: {
+      includeAllQueries: true,
+      note: 'This example samples the whole client, so the panel switches to the full query cache in example mode.',
+    },
   },
 ];
 
-const todoStore = {
-  value: [
-    { id: 1, title: 'Document reactive query keys', completed: false },
-    { id: 2, title: 'Add mutation invalidation demo', completed: true },
-    { id: 3, title: 'Wire playground into pnpm workspace', completed: false },
-  ] as Todo[],
+const getInitialExample = () => {
+  const saved = sessionStorage.getItem(SESSION_KEY);
+  return examples.find((e) => e.id === saved) ?? examples[0];
 };
 
-const queryClient = createQueryClient({
-  defaultOptions: {
-    queries: { refetchOnWindowFocus: false, refetchInterval: 0, staleTime: 15_000 },
-  },
-});
-
-const profileApi = {
-  async get(id: number, signal?: AbortSignal) {
-    await wait(350, signal);
-    const p = PROFILES.find((x) => x.id === id);
-    if (!p) throw new Error(`Profile ${id} not found`);
-    return { ...p, fetchedAt: new Date().toLocaleTimeString() };
-  },
-};
-
-const todoApi = {
-  async list(signal?: AbortSignal) {
-    await wait(250, signal);
-    return todoStore.value.map((t) => ({ ...t }));
-  },
-  async add(title: string) {
-    await wait(400);
-    const next = { id: Math.max(...todoStore.value.map((t) => t.id)) + 1, title, completed: false };
-    todoStore.value = [...todoStore.value, next];
-    return next;
-  },
-  async toggle(id: number) {
-    await wait(300);
-    todoStore.value = todoStore.value.map((t) =>
-      t.id === id ? { ...t, completed: !t.completed } : t,
-    );
-    return todoStore.value.find((t) => t.id === id)!;
-  },
-};
-
-const Tag = ({ children }: { children: any }) => (
-  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-white/5 text-white/40 border border-white/10">
-    {children}
-  </span>
-);
-
-const Card = ({ children }: { children: any }) => (
-  <div class="rounded-xl border border-white/8 bg-[#111] p-5 flex flex-col gap-4">{children}</div>
-);
-
-const Btn = ({
-  children,
-  onClick,
-  type = 'button',
+const Sidebar = ({
+  active,
+  onSelect,
 }: {
-  children: any;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
+  active: () => Example;
+  onSelect: (e: Example) => void;
 }) => (
-  <button
-    type={type}
-    onClick={onClick}
-    class="px-3 py-1.5 rounded-lg text-sm font-medium bg-white/8 text-white/70 border border-white/10 hover:bg-white/12 hover:text-white transition-colors cursor-pointer"
-  >
-    {children}
-  </button>
-);
-
-// ── Demo 1: Reactive query key ──────────────────────────────────────────────
-const ProfileDemo = () => {
-  const id = $(1);
-  const enabled = $(true);
-
-  const profile = useQuery({
-    queryKey: ['profile', id],
-    enabled,
-    placeholderData: {
-      id: 0,
-      name: '—',
-      handle: '—',
-      bio: 'Enable the query to load.',
-      fetchedAt: '—',
-    },
-    queryFn: ({ signal }) => profileApi.get(id(), signal),
-  });
-
-  return (
-    <Card>
-      <div class="flex items-start justify-between gap-2">
-        <div>
-          <p class="text-xs font-mono text-white/30 uppercase tracking-widest mb-1">Demo 01</p>
-          <h2 class="text-base font-semibold text-white">Reactive query key</h2>
-          <p class="text-sm text-white/40 mt-0.5">
-            Observable key — query re-runs when it changes.
-          </p>
-        </div>
-        <Tag>{() => profile().fetchStatus()}</Tag>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
-        <Btn onClick={() => id((n) => (n % PROFILES.length) + 1)}>Next profile</Btn>
-        <Btn onClick={() => enabled((v) => !v)}>{() => (enabled() ? 'Disable' : 'Enable')}</Btn>
-        <Btn onClick={() => profile().refetch()}>Refetch</Btn>
-      </div>
-
-      <div class="grid grid-cols-3 gap-3 text-sm">
-        <div>
-          <p class="text-white/30 text-xs mb-0.5">id</p>
-          <p class="font-mono">{id}</p>
-        </div>
-        <div>
-          <p class="text-white/30 text-xs mb-0.5">status</p>
-          <p class="font-mono">{() => profile().status()}</p>
-        </div>
-        <div>
-          <p class="text-white/30 text-xs mb-0.5">fetched at</p>
-          <p class="font-mono">{() => profile().data()?.fetchedAt}</p>
-        </div>
-      </div>
-
-      <div class="rounded-lg bg-white/4 border border-white/6 p-4">
-        <p class="font-semibold text-white">{() => profile().data()?.name}</p>
-        <p class="text-xs font-mono text-white/30 mt-0.5">{() => profile().data()?.handle}</p>
-        <p class="text-sm text-white/50 mt-2">{() => profile().data()?.bio}</p>
-      </div>
-    </Card>
-  );
-};
-
-// ── Demo 2: Mutations + invalidation ───────────────────────────────────────
-const TodosDemo = () => {
-  const draft = $('');
-
-  const todos = useQuery({ queryKey: ['todos'], queryFn: ({ signal }) => todoApi.list(signal) });
-
-  const addTodo = useMutation<Todo, Error, string>({
-    mutationKey: ['todos', 'add'],
-    mutationFn: (title) => todoApi.add(title),
-    onSuccess: async () => {
-      await todos().refetch();
-      draft('');
-    },
-  });
-
-  const toggleTodo = useMutation<Todo, Error, number>({
-    mutationKey: ['todos', 'toggle'],
-    mutationFn: (id) => todoApi.toggle(id),
-    onSuccess: async () => {
-      await todos().refetch();
-    },
-  });
-
-  // Reactive pending list via useMutationState — now properly reactive
-  const pending = useMutationState({
-    filters: { status: 'pending' },
-    select: (m) => ({
-      key: (m.resolvedOptions.mutationKey as (string | number)[]).join('/'),
-      at: m.state.submittedAt() ?? 0,
-    }),
-  });
-
-  return (
-    <Card>
-      <div class="flex items-start justify-between gap-2">
-        <div>
-          <p class="text-xs font-mono text-white/30 uppercase tracking-widest mb-1">Demo 02</p>
-          <h2 class="text-base font-semibold text-white">Mutations + invalidation</h2>
-          <p class="text-sm text-white/40 mt-0.5">
-            Write through mutation, refresh via cache invalidation.
-          </p>
-        </div>
-        <Tag>{() => `${pending().length} pending`}</Tag>
-      </div>
-
-      <form
-        class="flex flex-wrap gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const t = draft().trim();
-          if (t) void addTodo().mutate(t);
-        }}
-      >
-        <input
-          value={draft}
-          onInput={(e) => draft(e.currentTarget.value)}
-          placeholder="New todo…"
-          class="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white placeholder-white/20 outline-none focus:border-white/20"
-        />
-        <Btn type="submit">Add</Btn>
-        <Btn onClick={() => queryClient.invalidateQueries({ queryKey: ['todos'] })}>Invalidate</Btn>
-      </form>
-
-      <If when={() => addTodo().isError() || toggleTodo().isError()}>
-        <p class="text-xs text-red-400 font-mono">
-          {() => addTodo().error()?.message ?? toggleTodo().error()?.message}
-        </p>
-      </If>
-
-      <div class="flex flex-col gap-1">
-        <For
-          values={() => todos().data() ?? []}
-          fallback={<p class="text-sm text-white/30">Loading…</p>}
-        >
-          {(todo) => (
-            <button
-              onClick={() => toggleTodo().mutate(todo.id)}
-              class="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/3 hover:bg-white/6 border border-white/6 text-sm text-left transition-colors cursor-pointer"
-            >
-              <span class="font-mono text-xs text-white/30">
-                {() => (todo.completed ? '✓' : '○')}
-              </span>
-              <span class={() => (todo.completed ? 'line-through text-white/30' : 'text-white/70')}>
-                {() => todo.title}
-              </span>
-            </button>
-          )}
-        </For>
-      </div>
-
-      <If when={() => pending().length > 0}>
-        <div class="rounded-lg bg-white/3 border border-white/6 p-3">
-          <p class="text-xs font-mono text-white/30 mb-2 uppercase tracking-widest">
-            Active mutations
-          </p>
-          <For values={pending}>
-            {(entry) => (
-              <p class="text-xs font-mono text-white/50">
-                <span class="text-white/70">{() => entry.key}</span>
-                {' — '}
-                {() => new Date(entry.at).toLocaleTimeString()}
-              </p>
-            )}
-          </For>
-        </div>
-      </If>
-    </Card>
-  );
-};
-
-// ── Demo 3: Cache inspector ─────────────────────────────────────────────────
-const CacheDemo = () => {
-  const info = useQuery({
-    queryKey: ['cache-summary'],
-    queryFn: async () => ({
-      total: queryClient.getQueryCache().size,
-      todos: (queryClient.getQueryData<Todo[]>(['todos']) ?? []).length,
-      at: new Date().toLocaleTimeString(),
-    }),
-    refetchInterval: 1000,
-  });
-
-  return (
-    <Card>
-      <div class="flex items-start justify-between gap-2">
-        <div>
-          <p class="text-xs font-mono text-white/30 uppercase tracking-widest mb-1">Demo 03</p>
-          <h2 class="text-base font-semibold text-white">Cache inspector</h2>
-          <p class="text-sm text-white/40 mt-0.5">
-            Polls the client every second to report cache state.
-          </p>
-        </div>
-        <Tag>{() => info().status()}</Tag>
-      </div>
-
-      <div class="rounded-lg bg-white/4 border border-white/6 p-4 font-mono text-sm flex flex-col gap-2">
-        <div class="flex justify-between">
-          <span class="text-white/30">total queries</span>
-          <span class="text-white">{() => info().data()?.total ?? '—'}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-white/30">cached todos</span>
-          <span class="text-white">{() => info().data()?.todos ?? '—'}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-white/30">last sampled</span>
-          <span class="text-white/50">{() => info().data()?.at ?? '—'}</span>
-        </div>
-      </div>
-
-      <Btn onClick={() => queryClient.clear()}>Clear cache</Btn>
-    </Card>
-  );
-};
-
-// ── App ─────────────────────────────────────────────────────────────────────
-const App = () => (
-  <QueryClientProvider value={queryClient}>
-    <div class="min-h-screen bg-[#0a0a0a] text-white antialiased">
-      <div class="max-w-5xl mx-auto px-4 py-16">
-        <header class="mb-12">
-          <p class="text-xs font-mono text-white/25 uppercase tracking-widest mb-3">
-            voby-query / playground
-          </p>
-          <h1 class="text-3xl font-bold tracking-tight text-white mb-2">Query demos</h1>
-          <p class="text-sm text-white/40 max-w-xl">
-            Live examples wired to the local workspace package. Edit{' '}
-            <code class="font-mono bg-white/8 px-1 rounded">src/</code> and the playground updates
-            instantly.
-          </p>
-        </header>
-
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <ProfileDemo />
-          <TodosDemo />
-          <CacheDemo />
-        </div>
-      </div>
+  <aside class="w-52 shrink-0 border-r border-white/8 flex flex-col">
+    <div class="px-4 py-4 border-b border-white/8">
+      <p class="text-xs font-mono text-white/25 uppercase tracking-widest mb-0.5">voby-query</p>
+      <p class="text-sm font-semibold text-white">Playground</p>
     </div>
-  </QueryClientProvider>
+    <nav class="flex-1 overflow-y-auto py-2 px-2">
+      <For values={examples}>
+        {(example) => {
+          const isActive = () => active().id === example.id;
+          return (
+            <button
+              onClick={() => onSelect(example)}
+              class={() =>
+                `w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer mb-0.5 ${
+                  isActive()
+                    ? 'bg-white/10 text-white font-medium'
+                    : 'text-white/45 hover:text-white/80 hover:bg-white/5'
+                }`
+              }
+            >
+              {example.label}
+            </button>
+          );
+        }}
+      </For>
+    </nav>
+  </aside>
 );
+
+const App = () => {
+  const active = $(getInitialExample());
+
+  const select = (example: Example) => {
+    sessionStorage.setItem(SESSION_KEY, example.id);
+    active(example);
+  };
+
+  return (
+    <QueryClientProvider value={queryClient}>
+      <div class="flex h-screen bg-bg text-white antialiased overflow-hidden">
+        <Sidebar active={active} onSelect={select} />
+        <main class="flex-1 overflow-y-auto pt-94 md:pt-0 md:pr-100">
+          <div class="max-w-xl mx-auto px-8 py-10">
+            <header class="mb-8">
+              <h1 class="text-lg font-semibold text-white">{() => active().label}</h1>
+            </header>
+            {() => {
+              const Component = active().component;
+              return <Component />;
+            }}
+          </div>
+        </main>
+        <DebugPanel active={active} />
+      </div>
+    </QueryClientProvider>
+  );
+};
 
 render(<App />, document.querySelector('#app')!);

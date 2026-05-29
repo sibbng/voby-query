@@ -15,7 +15,7 @@ import {
 } from 'voby';
 import { QueryClientContext } from './context';
 import type { MutationFilters, MutationKey, MutationObject, MutationOptions } from './useMutation';
-import { hashFn, partialMatchKey, replaceEqualDeep } from './utils';
+import { hashFn, partialMatchKey, replaceEqualDeep, resolveKey } from './utils';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -33,6 +33,9 @@ export type MutationCache = {
   values: () => IterableIterator<MutationObject<any, any, any, any>>;
   entries: () => IterableIterator<[string, MutationObject<any, any, any, any>]>;
   keys: () => IterableIterator<string>;
+  version: Observable<number>;
+};
+export type QueryCache = Map<string, Query<any, any, any, any>> & {
   version: Observable<number>;
 };
 export type CancelOptions = {
@@ -55,7 +58,7 @@ export class CancelledError extends Error {
   }
 }
 export type QueryClient = {
-  cache: Map<string, Query<any, any, any, any>>;
+  cache: QueryCache;
   mutationCache: MutationCache;
   jobQueue: Map<string, number[]>;
   startQueueJob: (queueKey: string) => void;
@@ -86,7 +89,10 @@ export type QueryClient = {
   ) => Promise<void>;
   isFetching: (filters?: QueryFilters) => number;
   isMutating: (filters?: MutationFilters) => number;
-  getQueryCache: () => Map<string, Query>;
+  getQueryCache: () => QueryCache;
+  getQuerySnapshots: <TData = unknown, TError = unknown>(
+    filters?: QueryFilters,
+  ) => QuerySnapshot<TData, TError>[];
   getMutationCache: () => MutationCache;
   clear: () => void;
   getDefaultOptions: () => {
@@ -184,6 +190,42 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   fetchStatus: FetchStatus;
   isStale: boolean;
 };
+export type QuerySnapshot<TData = unknown, TError = Error> = {
+  queryHash: string;
+  queryKey: unknown[];
+  status: QueryStatus;
+  fetchStatus: FetchStatus;
+  enabled: boolean;
+  isActive: boolean;
+  isCancelled: boolean;
+  isFetching: boolean;
+  isRefetching: boolean;
+  isRefetchError: boolean;
+  isFetched: boolean;
+  isFetchedAfterMount: boolean;
+  isPaused: boolean;
+  isPending: boolean;
+  isSuccess: boolean;
+  isError: boolean;
+  isLoading: boolean;
+  isLoadingError: boolean;
+  isPlaceholderData: boolean;
+  isStale: boolean;
+  isIdle: boolean;
+  isInvalidated: boolean;
+  observers: number;
+  hasData: boolean;
+  data: TData | undefined;
+  dataUpdateCount: number;
+  dataUpdatedAt: number;
+  error: TError | null;
+  errorUpdateCount: number;
+  errorUpdatedAt: number;
+  gcTime: number | typeof Infinity;
+  staleTime: number | 'static';
+  refetchInterval: number | undefined;
+  networkMode: QueryOptions<TData, TError>['networkMode'];
+};
 type Query<
   TQueryFnData = unknown,
   TError = unknown,
@@ -237,8 +279,32 @@ type UseQueryReturn<TData, TError, TInitialData> = TInitialData extends undefine
   ? UseQueryResult<TData, TError>
   : DefinedUseQueryResult<TData, TError>;
 // #region Core
-const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>) => {
-  return cache ?? new Map<string, Query<any, any, any, any>>();
+const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>): QueryCache => {
+  const map = (cache ?? new Map<string, Query<any, any, any, any>>()) as QueryCache;
+  const version = map.version ?? $(0);
+  const bump = () => version((value) => value + 1);
+  const baseSet = Map.prototype.set.bind(map);
+  const baseDelete = Map.prototype.delete.bind(map);
+  const baseClear = Map.prototype.clear.bind(map);
+
+  map.version = version;
+  map.set = ((key, value) => {
+    baseSet(key, value);
+    bump();
+    return map;
+  }) as QueryCache['set'];
+  map.delete = ((key) => {
+    const deleted = baseDelete(key);
+    if (deleted) bump();
+    return deleted;
+  }) as QueryCache['delete'];
+  map.clear = (() => {
+    if (map.size === 0) return;
+    baseClear();
+    bump();
+  }) as QueryCache['clear'];
+
+  return map;
 };
 const createMutationCache = (cache?: Map<string, MutationObject<any, any, any, any>>) => {
   const map = cache ?? new Map<string, MutationObject<any, any, any, any>>();
@@ -302,6 +368,57 @@ const restoreQueryStateSnapshot = <D, TError>(
   state.status(snapshot.status);
   state.fetchStatus(snapshot.fetchStatus);
   state.isStale(snapshot.isStale);
+};
+
+const resolveStaleTime = (query: Query<any, any, any, any, any, any>): number | 'static' => {
+  const staleTime = query.resolvedOptions.staleTime ?? 0;
+  return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+};
+
+const createQuerySnapshot = <TData = unknown, TError = Error>(
+  queryHash: string,
+  query: Query<any, TError, TData, any, any, any>,
+): QuerySnapshot<TData, TError> => {
+  const { state } = query;
+  const data = state.data();
+  const error = state.error();
+
+  return {
+    queryHash,
+    queryKey: resolveKey(query.resolvedOptions.queryKey),
+    status: state.status(),
+    fetchStatus: state.fetchStatus(),
+    enabled: Boolean(query.resolvedOptions.enabled),
+    isActive: query.isActive,
+    isCancelled: query.isCancelled,
+    isFetching: state.isFetching(),
+    isRefetching: state.isRefetching(),
+    isRefetchError: state.isRefetchError(),
+    isFetched: state.isFetched(),
+    isFetchedAfterMount: state.isFetchedAfterMount(),
+    isPaused: state.isPaused(),
+    isPending: state.isPending(),
+    isSuccess: state.isSuccess(),
+    isError: state.isError(),
+    isLoading: state.isLoading(),
+    isLoadingError: state.isLoadingError(),
+    isPlaceholderData: state.isPlaceholderData(),
+    isStale: state.isStale(),
+    isIdle: state.isIdle(),
+    isInvalidated: state.isInvalidated(),
+    observers: query.instances,
+    hasData: data !== undefined,
+    data,
+    dataUpdateCount: state.dataUpdateCount(),
+    dataUpdatedAt: state.dataUpdatedAt(),
+    error,
+    errorUpdateCount: state.errorUpdateCount(),
+    errorUpdatedAt: state.errorUpdatedAt(),
+    gcTime: query.resolvedOptions.gcTime ?? Infinity,
+    staleTime: resolveStaleTime(query),
+    refetchInterval: query.resolvedOptions.refetchInterval,
+    networkMode: query.resolvedOptions.networkMode,
+  };
 };
 
 // #region createQuery
@@ -496,6 +613,7 @@ const createQuery = <
       query.state.errorUpdatedAt(0);
       query.state.status('pending');
       query.state.fetchStatus('idle');
+      query.state.isInvalidated(false);
       query.state.isStale(false);
     },
     scheduleDestroy: () => {
@@ -578,6 +696,7 @@ const createQuery = <
           query.state.data(newData);
           query.state.dataUpdatedAt(Date.now());
           query.state.dataUpdateCount((prev) => prev + 1);
+          query.state.isInvalidated(false);
           query.state.status('success');
         } catch (err) {
           if (!signal.aborted) {
@@ -949,6 +1068,7 @@ export const createQueryClient = (options?: {
     );
 
     for (const query of queriesToInvalidate) {
+      query.state.isInvalidated(true);
       query.state.isStale(true);
     }
 
@@ -1141,8 +1261,15 @@ export const createQueryClient = (options?: {
     const mutations = Array.from(mutationCache.values());
     return mutations.filter((mutation) => matchesMutationFilters(mutation, filters)).length;
   };
-  const getQueryCache = (): Map<string, Query> => {
+  const getQueryCache = (): QueryCache => {
     return cache;
+  };
+
+  const getQuerySnapshots: QueryClient['getQuerySnapshots'] = (filters) => {
+    cache.version();
+    return Array.from(cache.entries())
+      .filter(([, query]) => matchesQueryFilters(query, filters))
+      .map(([queryHash, query]) => createQuerySnapshot(queryHash, query));
   };
 
   const getMutationCache = (): MutationCache => {
@@ -1180,6 +1307,7 @@ export const createQueryClient = (options?: {
     jobQueue,
     startQueueJob,
     finishQueueJob,
+    getQuerySnapshots,
   };
   return queryClient;
 };

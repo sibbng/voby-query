@@ -8,3 +8,24 @@
   --color-accent: #a78bfa;
   --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
 }
+
+@layer utilities {
+  .debug-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  }
+
+  .debug-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .debug-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .debug-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+}

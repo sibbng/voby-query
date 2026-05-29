@@ -24,6 +24,57 @@ test('useQuery basic functionality', async () => {
   expect(cachedData).toBe('test data');
 });
 
+test('queryClient.getQuerySnapshots exposes debug-friendly query state', async () => {
+  const queryClient = createQueryClient();
+
+  expect(queryClient.getQueryCache().version()).toBe(0);
+
+  await queryClient.fetchQuery({
+    queryKey: ['snapshot-test', 1],
+    queryFn: async () => ({ id: 1, label: 'alpha' }),
+    staleTime: 60_000,
+  });
+
+  expect(queryClient.getQueryCache().version()).toBe(1);
+
+  const [snapshot] = queryClient.getQuerySnapshots<{ id: number; label: string }>({
+    queryKey: ['snapshot-test'],
+  });
+
+  expect(snapshot).toMatchObject({
+    queryHash: '["snapshot-test",1]',
+    queryKey: ['snapshot-test', 1],
+    status: 'success',
+    fetchStatus: 'idle',
+    enabled: true,
+    isActive: false,
+    isCancelled: false,
+    isFetching: false,
+    isSuccess: true,
+    isError: false,
+    isLoading: false,
+    isStale: false,
+    isInvalidated: false,
+    observers: 0,
+    hasData: true,
+    data: { id: 1, label: 'alpha' },
+    gcTime: 300000,
+    staleTime: 60000,
+    networkMode: 'online',
+  });
+
+  await queryClient.invalidateQueries({ queryKey: ['snapshot-test'], refetchType: 'none' });
+
+  const [invalidatedSnapshot] = queryClient.getQuerySnapshots({ queryKey: ['snapshot-test'] });
+  expect(invalidatedSnapshot.isInvalidated).toBe(true);
+  expect(invalidatedSnapshot.isStale).toBe(true);
+
+  queryClient.removeQueries({ queryKey: ['snapshot-test'] });
+
+  expect(queryClient.getQueryCache().version()).toBe(2);
+  expect(queryClient.getQuerySnapshots({ queryKey: ['snapshot-test'] })).toEqual([]);
+});
+
 test('useQuery error handling', async () => {
   const queryClient = createQueryClient();
 
