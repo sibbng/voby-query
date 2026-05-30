@@ -300,8 +300,13 @@ const createQueryCache = (cache?: Map<string, Query<any, any, any, any>>): Query
   }) as QueryCache['delete'];
   map.clear = (() => {
     if (map.size === 0) return;
-    baseClear();
-    bump();
+    for (const query of Array.from(map.values())) {
+      query.destroy();
+    }
+    if (map.size > 0) {
+      baseClear();
+      bump();
+    }
   }) as QueryCache['clear'];
 
   return map;
@@ -373,6 +378,46 @@ const restoreQueryStateSnapshot = <D, TError>(
 const resolveStaleTime = (query: Query<any, any, any, any, any, any>): number | 'static' => {
   const staleTime = query.resolvedOptions.staleTime ?? 0;
   return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+};
+
+const scheduleQueryStale = (query: Query<any, any, any, any, any, any>) => {
+  query.staleDisposer();
+  query.staleDisposer = () => {};
+
+  if (query.state.data() === undefined) {
+    query.state.isStale(true);
+    return;
+  }
+
+  query.state.isStale(false);
+
+  const staleTime = resolveStaleTime(query);
+  if (staleTime === 'static' || staleTime === Infinity) return;
+
+  if (staleTime <= 0) {
+    query.state.isStale(true);
+    return;
+  }
+
+  const id = setTimeout(() => {
+    query.state.isStale(true);
+  }, staleTime);
+  query.staleDisposer = () => clearTimeout(id);
+};
+
+const setQuerySuccessData = (
+  query: Query<any, any, any, any, any, any>,
+  data: unknown,
+  dataUpdatedAt = Date.now(),
+  scheduleStale = true,
+) => {
+  query.state.data(data);
+  query.state.dataUpdatedAt(dataUpdatedAt);
+  query.state.dataUpdateCount((prev) => prev + 1);
+  query.state.error(null);
+  query.state.isInvalidated(false);
+  query.state.status('success');
+  if (scheduleStale) scheduleQueryStale(query);
 };
 
 const createQuerySnapshot = <TData = unknown, TError = Error>(
@@ -665,6 +710,7 @@ const createQuery = <
       const signal = query.controller.signal;
       query.revertState = createQueryStateSnapshot(query.state);
       let fetchPromise!: Promise<void>;
+      let didFetchSucceed = false;
       fetchPromise = (async () => {
         try {
           query.state.fetchStatus('fetching');
@@ -693,11 +739,8 @@ const createQuery = <
             newData = replaceEqualDeep(query.state.data(), result) as TData;
           }
 
-          query.state.data(newData);
-          query.state.dataUpdatedAt(Date.now());
-          query.state.dataUpdateCount((prev) => prev + 1);
-          query.state.isInvalidated(false);
-          query.state.status('success');
+          setQuerySuccessData(query, newData, Date.now(), false);
+          didFetchSucceed = true;
         } catch (err) {
           if (!signal.aborted) {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
@@ -705,6 +748,10 @@ const createQuery = <
             query.state.status('error');
             query.state.errorUpdatedAt(Date.now());
             query.state.errorUpdateCount((prev) => prev + 1);
+            query.state.isInvalidated(query.state.data() !== undefined);
+            query.staleDisposer();
+            query.staleDisposer = () => {};
+            query.state.isStale(true);
             if (throwOnError) {
               throw error;
             }
@@ -725,21 +772,7 @@ const createQuery = <
             if (query.state.fetchStatus() !== 'paused') {
               query.state.fetchStatus('idle');
             }
-            query.staleDisposer();
-            query.state.isStale(false);
-            const rawStaleTime = query.resolvedOptions.staleTime;
-            const staleTime =
-              typeof rawStaleTime === 'function' ? rawStaleTime(query as Query) : rawStaleTime;
-            if (staleTime === 'static' || staleTime === Infinity) {
-              // data never goes stale
-            } else if (staleTime === 0) {
-              query.state.isStale(true);
-            } else {
-              const id = setTimeout(() => {
-                query.state.isStale(true);
-              }, staleTime);
-              query.staleDisposer = () => clearTimeout(id);
-            }
+            if (didFetchSucceed) scheduleQueryStale(query);
             events.dispatchEvent(new CustomEvent('fetch:done'));
           }
         }
@@ -782,7 +815,9 @@ const createQuery = <
   };
 
   // Use useRoot to create the query state in a detached reactive scope
-  query.stateDisposer = useRoot(() => {
+  useRoot((dispose) => {
+    query.stateDisposer = dispose;
+
     const data = $(options.initialData as TData, { equals: false });
     const dataUpdateCount = $(0);
     const dataUpdatedAt = $(options.initialDataUpdatedAt ?? 0);
@@ -823,10 +858,6 @@ const createQuery = <
       isStale,
       isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
     } as QueryState<TData, TError>;
-    // Return disposer for cleanup
-    return () => {
-      // No-op for now, but could add cleanup logic if needed
-    };
   });
 
   cache.set(queryHash, query as Query);
@@ -1039,23 +1070,18 @@ export const createQueryClient = (options?: {
   const setQueryData: QueryClient['setQueryData'] = (queryKey, data) => {
     const queryHash = queryKeyHashFn(queryKey);
     let query = cache.get(queryHash);
+    const resolvedData =
+      typeof data === 'function'
+        ? (data as (previous: unknown) => unknown)(query?.state.data())
+        : data;
+
     if (!query) {
-      const resolvedData = typeof data === 'function' ? (data as any)(undefined) : data;
-      createQuery(queryClient, {
+      query = createQuery(queryClient, {
         queryKey,
-        initialData: resolvedData,
-        initialDataUpdatedAt: Date.now(),
       });
-    } else {
-      if (typeof data === 'function') {
-        const updater = data as (previous: unknown) => unknown;
-        query.state.data((old) => updater(old));
-      } else {
-        query.state.data(data);
-      }
-      query.state.dataUpdatedAt(Date.now());
-      query.state.status('success');
     }
+
+    setQuerySuccessData(query, resolvedData);
   };
   // #region invalidateQueries
   const invalidateQueries: QueryClient['invalidateQueries'] = async (

@@ -196,6 +196,28 @@ test('queryClient.removeQueries', async () => {
   expect(() => queryClient.removeQueries({ queryKey: ['non-existent'] })).not.toThrow();
 });
 
+test('queryClient.removeQueries disposes detached query state memos', async () => {
+  const queryClient = createQueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['dispose-query-state'],
+    queryFn: async () => 'data',
+    staleTime: 1000,
+  });
+
+  const query = findQuery(queryClient, 'dispose-query-state');
+  if (!query) {
+    throw new Error('Expected query to exist in cache');
+  }
+
+  expect(query.state.isFetching()).toBe(false);
+
+  queryClient.removeQueries({ queryKey: ['dispose-query-state'] });
+
+  query.state.fetchStatus('fetching');
+  expect(query.state.isFetching()).toBe(false);
+});
+
 test('queryClient.clear', async () => {
   const queryClient = createQueryClient();
   const queryKey1 = ['clear-test-1'];
@@ -217,6 +239,34 @@ test('queryClient.clear', async () => {
   // 4. Verify data is undefined for all keys
   expect(queryClient.getQueryData(queryKey1)).toBeUndefined();
   expect(queryClient.getQueryData(queryKey2)).toBeUndefined();
+});
+
+test('queryClient.clear destroys queries and aborts in-flight fetches', async () => {
+  const queryClient = createQueryClient();
+  let abortCount = 0;
+
+  queryClient
+    .fetchQuery({
+      queryKey: ['clear-aborts-fetch'],
+      queryFn: async ({ signal }) =>
+        new Promise<string>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              abortCount++;
+              reject(new Error('aborted'));
+            },
+            { once: true },
+          );
+        }),
+    })
+    .catch(() => undefined);
+
+  await Promise.resolve();
+  queryClient.clear();
+
+  expect(abortCount).toBe(1);
+  expect(queryClient.getQuerySnapshots({ queryKey: ['clear-aborts-fetch'] })).toEqual([]);
 });
 
 test('queryClient.ensureQueryData fetches uncached queries', async () => {
@@ -312,6 +362,27 @@ test('queryClient matches partial query keys for invalidate and refetch', async 
 
   expect(callCount).toBe(2);
   expect(queryClient.getQueryData(['todos', 1])).toBe('todo 2');
+});
+
+test('queryClient matches partial object query keys', async () => {
+  const queryClient = createQueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['object-filter', { status: 'open', page: 1 }],
+    queryFn: async () => 'open page',
+    staleTime: 1000,
+  });
+
+  await queryClient.invalidateQueries({
+    queryKey: ['object-filter', { status: 'open' }],
+    refetchType: 'none',
+  });
+
+  const [snapshot] = queryClient.getQuerySnapshots({
+    queryKey: ['object-filter', { status: 'open', page: 1 }],
+  });
+  expect(snapshot.isInvalidated).toBe(true);
+  expect(snapshot.isStale).toBe(true);
 });
 
 test('queryClient matches partial query keys for removeQueries', async () => {
@@ -594,6 +665,99 @@ test('queryClient getQueryData and setQueryData expose safe types and direct val
 
   queryClient.setQueryData<string>(['set-data'], (previous) => `${previous} updated`);
   expect(queryClient.getQueryData<string>(['set-data'])).toBe('new value updated');
+});
+
+test('queryClient.setQueryData marks manual writes as fresh successful data', async () => {
+  const queryClient = createQueryClient({
+    defaultOptions: {
+      queries: { staleTime: 1000 },
+    },
+  });
+
+  queryClient.setQueryData<string>(['manual-created'], 'created value');
+
+  const [createdSnapshot] = queryClient.getQuerySnapshots<string>({
+    queryKey: ['manual-created'],
+  });
+  expect(createdSnapshot).toMatchObject({
+    data: 'created value',
+    dataUpdateCount: 1,
+    error: null,
+    isFetched: true,
+    isInvalidated: false,
+    isStale: false,
+    status: 'success',
+  });
+
+  await queryClient.fetchQuery({
+    queryKey: ['manual-existing'],
+    queryFn: async () => 'server value',
+    staleTime: 1000,
+  });
+
+  await queryClient.invalidateQueries({ queryKey: ['manual-existing'], refetchType: 'none' });
+  queryClient.setQueryData<string>(['manual-existing'], 'manual value');
+
+  const [updatedSnapshot] = queryClient.getQuerySnapshots<string>({
+    queryKey: ['manual-existing'],
+  });
+  expect(updatedSnapshot).toMatchObject({
+    data: 'manual value',
+    dataUpdateCount: 2,
+    error: null,
+    isFetched: true,
+    isInvalidated: false,
+    isStale: false,
+    status: 'success',
+  });
+});
+
+test('failed fetches remain stale and background errors invalidate existing data', async () => {
+  const queryClient = createQueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['initial-error-stale'],
+    queryFn: async () => {
+      throw new Error('initial failure');
+    },
+    retry: false,
+    staleTime: 1000,
+  });
+
+  const [initialErrorSnapshot] = queryClient.getQuerySnapshots({
+    queryKey: ['initial-error-stale'],
+  });
+  expect(initialErrorSnapshot.status).toBe('error');
+  expect(initialErrorSnapshot.hasData).toBe(false);
+  expect(initialErrorSnapshot.isStale).toBe(true);
+
+  await queryClient.fetchQuery({
+    queryKey: ['background-error-stale'],
+    queryFn: async () => 'cached value',
+    retry: false,
+    staleTime: 1000,
+  });
+
+  const query = findQuery(queryClient, 'background-error-stale');
+  if (!query) {
+    throw new Error('Expected query to exist in cache');
+  }
+  query.resolvedOptions.queryFn = async () => {
+    throw new Error('background failure');
+  };
+
+  await queryClient.refetchQueries({ queryKey: ['background-error-stale'] });
+
+  const [backgroundErrorSnapshot] = queryClient.getQuerySnapshots({
+    queryKey: ['background-error-stale'],
+  });
+  expect(backgroundErrorSnapshot).toMatchObject({
+    data: 'cached value',
+    hasData: true,
+    isInvalidated: true,
+    isStale: true,
+    status: 'error',
+  });
 });
 
 // #region staleTime tests

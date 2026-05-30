@@ -98,8 +98,8 @@ const examples: Example[] = [
     ...cancellationMeta,
     component: CancellationDemo,
     debug: {
-      queryPrefixes: [['cancellation-search']],
-      note: 'Watch aborts, refetches, and stale transitions on the live search query.',
+      queryPrefixes: [['cancellation-demo']],
+      note: 'Shows the single abortable query used by the cancellation controls.',
     },
   },
   {

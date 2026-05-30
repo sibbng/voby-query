@@ -38,23 +38,21 @@ export const partialMatchKey = (
 
   if (resolvedFilterKey.length > resolvedQueryKey.length) return false;
 
-  return resolvedFilterKey.every((value, index) => deepEqual(value, resolvedQueryKey[index]));
+  return resolvedFilterKey.every((value, index) => partialDeepMatch(value, resolvedQueryKey[index]));
 };
 
-const deepEqual = (a: unknown, b: unknown): boolean => {
+const partialDeepMatch = (a: unknown, b: unknown): boolean => {
   if (a === b) return true;
 
   if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((value, index) => deepEqual(value, b[index]));
+    if (a.length > b.length) return false;
+    return a.every((value, index) => partialDeepMatch(value, b[index]));
   }
 
   if (isPlainObject(a) && isPlainObject(b)) {
     const aKeys = Object.keys(a);
-    const bKeys = Object.keys(b);
-    if (aKeys.length !== bKeys.length) return false;
     return aKeys.every((key) =>
-      deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+      partialDeepMatch((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     );
   }
 
