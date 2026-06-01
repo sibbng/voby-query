@@ -20,7 +20,7 @@ export const PrefetchDemo = () => {
   const onHover = (id: number) => {
     if (prefetched().has(id)) return;
     prefetched((s) => new Set([...(s ?? []), id]));
-    queryClient.prefetchQuery({
+    void queryClient.prefetchQuery({
       queryKey: ['pf-user', id],
       queryFn: ({ signal }) => fetchUser(id, signal),
       staleTime: 60_000,

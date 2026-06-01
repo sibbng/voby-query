@@ -1,0 +1,590 @@
+import { isDevelopment } from 'std-env';
+import { $, $$, untrack, useEventListener, useMemo, useRoot } from 'voby';
+import type {
+  CancelOptions,
+  FetchStatus,
+  QueryCache,
+  QueryClient,
+  QueryKey,
+  QueryOptions,
+  QueryRefetchOptions,
+  QuerySnapshot,
+  QueryState,
+  QueryStatus,
+} from './types.ts';
+import { replaceEqualDeep, resolveKey } from './utils.ts';
+
+const isBrowser = typeof window !== 'undefined';
+
+export class CancelledError extends Error {
+  revert: boolean;
+  silent: boolean;
+
+  constructor({ revert = true, silent = false }: CancelOptions = {}) {
+    super('Query was cancelled');
+    this.name = 'CancelledError';
+    this.revert = revert;
+    this.silent = silent;
+  }
+}
+type QueryStateSnapshot<D = undefined, TError = Error> = {
+  data: D;
+  dataUpdateCount: number;
+  dataUpdatedAt: number;
+  error: TError | null;
+  errorUpdateCount: number;
+  errorUpdatedAt: number;
+  isInvalidated: boolean;
+  status: QueryStatus;
+  fetchStatus: FetchStatus;
+  isStale: boolean;
+};
+export type Query<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TInitialData extends TQueryFnData | undefined = undefined,
+  R = void,
+> = {
+  queryHash: string;
+  isActive: boolean;
+  state: QueryState<TData, TError>;
+  cancel: (options?: CancelOptions) => Promise<void>;
+  destroy: () => void;
+  fetch: (options?: {
+    retryAttempt?: number;
+    throwOnError?: boolean;
+    force?: boolean;
+  }) => Promise<void>;
+  refetch: (options?: QueryRefetchOptions) => Promise<void>;
+  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
+  instances: number;
+  controller: AbortController;
+  isFetching: boolean;
+  fetchPromise?: Promise<void>;
+  revertState?: QueryStateSnapshot<TData, TError>;
+  destroyDisposer: () => void;
+  stateDisposer: () => void;
+  staleDisposer: () => void;
+  retryDisposer: () => void;
+  addInstance: () => () => void;
+  removeInstance: () => void;
+  scheduleDestroy: () => void;
+  reset: () => void;
+  scheduleRetry: (retryAttempt: number, error: TError) => void;
+  isCancelled: boolean;
+  events: EventTarget;
+  inactiveCleanup?: () => void;
+};
+
+const createQueryStateSnapshot = <D, TError>(
+  state: QueryState<D, TError>,
+): QueryStateSnapshot<D, TError> => ({
+  data: state.data(),
+  dataUpdateCount: state.dataUpdateCount(),
+  dataUpdatedAt: state.dataUpdatedAt(),
+  error: state.error(),
+  errorUpdateCount: state.errorUpdateCount(),
+  errorUpdatedAt: state.errorUpdatedAt(),
+  isInvalidated: state.isInvalidated(),
+  status: state.status(),
+  fetchStatus: state.fetchStatus(),
+  isStale: state.isStale(),
+});
+
+const restoreQueryStateSnapshot = <D, TError>(
+  state: QueryState<D, TError>,
+  snapshot: QueryStateSnapshot<D, TError>,
+) => {
+  state.data(snapshot.data);
+  state.dataUpdateCount(snapshot.dataUpdateCount);
+  state.dataUpdatedAt(snapshot.dataUpdatedAt);
+  state.error(snapshot.error);
+  state.errorUpdateCount(snapshot.errorUpdateCount);
+  state.errorUpdatedAt(snapshot.errorUpdatedAt);
+  state.isInvalidated(snapshot.isInvalidated);
+  state.status(snapshot.status);
+  state.fetchStatus(snapshot.fetchStatus);
+  state.isStale(snapshot.isStale);
+};
+
+export const resolveQueryOptions = <
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TInitialData extends TQueryFnData | undefined = undefined,
+  R = void,
+>(
+  queryClient: QueryClient,
+  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+): QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
+  const resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
+    queryClient,
+    ...(queryClient.getDefaultOptions().queries as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey,
+      TInitialData,
+      R
+    >),
+    ...(queryClient.getQueryDefaults(options.queryKey) as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey,
+      TInitialData,
+      R
+    >),
+    ...options,
+  };
+
+  resolvedOptions.enabled = $$(resolvedOptions.enabled);
+
+  return resolvedOptions;
+};
+
+export const resolveStaleTime = (query: Query<any, any, any, any, any, any>): number | 'static' => {
+  const staleTime = query.resolvedOptions.staleTime ?? 0;
+  return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+};
+
+const scheduleQueryStale = (query: Query<any, any, any, any, any, any>) => {
+  query.staleDisposer();
+  query.staleDisposer = () => {};
+
+  if (query.state.data() === undefined) {
+    query.state.isStale(true);
+    return;
+  }
+
+  query.state.isStale(false);
+
+  const staleTime = resolveStaleTime(query);
+  if (staleTime === 'static' || staleTime === Infinity) return;
+
+  if (staleTime <= 0) {
+    query.state.isStale(true);
+    return;
+  }
+
+  const id = setTimeout(() => {
+    query.state.isStale(true);
+  }, staleTime);
+  query.staleDisposer = () => clearTimeout(id);
+};
+
+export const setQuerySuccessData = (
+  query: Query<any, any, any, any, any, any>,
+  data: unknown,
+  dataUpdatedAt = Date.now(),
+  scheduleStale = true,
+) => {
+  query.state.data(data);
+  query.state.dataUpdatedAt(dataUpdatedAt);
+  query.state.dataUpdateCount((previous) => previous + 1);
+  query.state.error(null);
+  query.state.isInvalidated(false);
+  query.state.status('success');
+  if (scheduleStale) scheduleQueryStale(query);
+};
+
+export const createQuerySnapshot = <TData = unknown, TError = Error>(
+  query: Query<any, TError, TData, any, any, any>,
+): QuerySnapshot<TData, TError> => {
+  const { state } = query;
+  const data = state.data();
+  const error = state.error();
+
+  return {
+    queryHash: query.queryHash,
+    queryKey: resolveKey(query.resolvedOptions.queryKey),
+    status: state.status(),
+    fetchStatus: state.fetchStatus(),
+    enabled: Boolean(query.resolvedOptions.enabled),
+    isActive: query.isActive,
+    isCancelled: query.isCancelled,
+    isFetching: state.isFetching(),
+    isRefetching: state.isRefetching(),
+    isRefetchError: state.isRefetchError(),
+    isFetched: state.isFetched(),
+    isFetchedAfterMount: state.isFetchedAfterMount(),
+    isPaused: state.isPaused(),
+    isPending: state.isPending(),
+    isSuccess: state.isSuccess(),
+    isError: state.isError(),
+    isLoading: state.isLoading(),
+    isLoadingError: state.isLoadingError(),
+    isPlaceholderData: state.isPlaceholderData(),
+    isStale: state.isStale(),
+    isIdle: state.isIdle(),
+    isInvalidated: state.isInvalidated(),
+    observers: query.instances,
+    hasData: data !== undefined,
+    data,
+    dataUpdateCount: state.dataUpdateCount(),
+    dataUpdatedAt: state.dataUpdatedAt(),
+    error,
+    errorUpdateCount: state.errorUpdateCount(),
+    errorUpdatedAt: state.errorUpdatedAt(),
+    gcTime: query.resolvedOptions.gcTime ?? Infinity,
+    staleTime: resolveStaleTime(query),
+    refetchInterval: query.resolvedOptions.refetchInterval,
+    networkMode: query.resolvedOptions.networkMode,
+  };
+};
+
+export const createQuery = <
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TInitialData extends TQueryFnData | undefined = undefined,
+  R = void,
+>({
+  cache,
+  queryHash,
+  resolvedOptions,
+}: {
+  cache: QueryCache;
+  queryHash: string;
+  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
+}): Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
+  const events = new EventTarget();
+
+  const query: Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
+    queryHash,
+    isActive: false,
+    events,
+    resolvedOptions,
+    instances: 0,
+    state: undefined as any,
+    controller: new AbortController(),
+    isCancelled: false,
+    destroyDisposer: () => {},
+    stateDisposer: () => {},
+    staleDisposer: () => {},
+    retryDisposer: () => {},
+    fetchPromise: undefined,
+    revertState: undefined,
+    addInstance: () => {
+      query.destroyDisposer();
+      query.isActive = true;
+      query.instances++;
+      untrack(() => {
+        if (query.resolvedOptions.enabled) {
+          const shouldRefetch = (() => {
+            const refetchOnMount = query.resolvedOptions.refetchOnMount;
+            if (typeof refetchOnMount === 'function') {
+              return refetchOnMount(query);
+            }
+            if (refetchOnMount === 'always') return true;
+            if (refetchOnMount === false) return false;
+            if (query.state.isStale() || query.state.isPending()) return true;
+            return false;
+          })();
+          if (shouldRefetch) {
+            void query.refetch();
+          }
+        }
+        if (query.state.fetchStatus() !== 'fetching') {
+          query.state.fetchStatus(!isBrowser || window.navigator.onLine ? 'idle' : 'paused');
+        }
+        if (query.instances === 1) {
+          const cleanups: (() => void)[] = [];
+
+          if (query.resolvedOptions.refetchInterval) {
+            const intervalDelay = query.resolvedOptions.refetchInterval;
+            let intervalId: ReturnType<typeof setInterval>;
+            const timeoutId = setTimeout(() => {
+              intervalId = setInterval(() => {
+                void query.refetch();
+              }, intervalDelay);
+            }, intervalDelay);
+            cleanups.push(() => {
+              clearTimeout(timeoutId);
+              clearInterval(intervalId);
+            });
+          }
+          if (query.resolvedOptions.networkMode === 'online' && isBrowser) {
+            const onlineHandler = async () => {
+              if (query.resolvedOptions.refetchOnReconnect) {
+                query.state.fetchStatus('fetching');
+                await query.refetch();
+              }
+            };
+            const offlineHandler = async () => {
+              await query.cancel({ revert: false, silent: true });
+              query.state.fetchStatus('paused');
+            };
+            window.addEventListener('online', onlineHandler);
+            window.addEventListener('offline', offlineHandler);
+            cleanups.push(() => {
+              window.removeEventListener('online', onlineHandler);
+              window.removeEventListener('offline', offlineHandler);
+            });
+          }
+          if (query.resolvedOptions.refetchOnWindowFocus && isBrowser) {
+            const focusHandler = () => {
+              if (
+                document.visibilityState === 'visible' &&
+                (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
+              ) {
+                void query.refetch();
+              }
+            };
+            document.addEventListener('visibilitychange', focusHandler);
+            cleanups.push(() => {
+              document.removeEventListener('visibilitychange', focusHandler);
+            });
+          }
+
+          query.inactiveCleanup = () => {
+            cleanups.forEach((cleanup) => cleanup());
+            query.inactiveCleanup = undefined;
+          };
+        }
+      });
+      return query.removeInstance;
+    },
+    removeInstance: () => {
+      query.instances--;
+      if (query.instances === 0) {
+        query.isActive = false;
+        query.inactiveCleanup?.();
+        query.scheduleDestroy();
+      }
+    },
+    cancel: async ({ revert = true, silent = false } = {}) => {
+      const wasFetching = query.isFetching || query.fetchPromise !== undefined;
+      const hadPreviousData = query.revertState?.data !== undefined;
+
+      if (wasFetching) {
+        query.controller.abort();
+      }
+      query.isCancelled = wasFetching;
+      query.retryDisposer();
+      query.retryDisposer = () => {};
+      query.isFetching = false;
+      query.fetchPromise = undefined;
+
+      if (revert && query.revertState) {
+        restoreQueryStateSnapshot(query.state, query.revertState);
+      }
+
+      if (query.state.fetchStatus() !== 'paused') {
+        query.state.fetchStatus('idle');
+      }
+
+      query.revertState = undefined;
+
+      if (wasFetching && revert && !silent && !hadPreviousData) {
+        throw new CancelledError({ revert, silent });
+      }
+    },
+    reset: () => {
+      query.state.data(query.resolvedOptions.initialData as TData);
+      query.state.dataUpdatedAt(query.resolvedOptions.initialDataUpdatedAt ?? 0);
+      query.state.error(null);
+      query.state.errorUpdatedAt(0);
+      query.state.status('pending');
+      query.state.fetchStatus('idle');
+      query.state.isInvalidated(false);
+      query.state.isStale(false);
+    },
+    scheduleDestroy: () => {
+      if (query.resolvedOptions.gcTime === Infinity) return;
+      query.destroyDisposer();
+      const id = setTimeout(() => {
+        cache.remove(query as Query);
+      }, query.resolvedOptions.gcTime);
+      query.destroyDisposer = () => clearTimeout(id);
+    },
+    destroy: () => {
+      void query.cancel({ revert: false, silent: true });
+      query.destroyDisposer();
+      query.inactiveCleanup?.();
+      query.staleDisposer();
+      query.retryDisposer();
+      query.stateDisposer();
+    },
+    isFetching: false,
+    refetch: async ({
+      throwOnError = query.resolvedOptions.throwOnError,
+      cancelRefetch = query.resolvedOptions.cancelRefetch,
+    }: QueryRefetchOptions = {}) => {
+      if (!query.resolvedOptions.enabled) return;
+      if (cancelRefetch) {
+        await query.cancel({ revert: false, silent: true });
+      }
+      return query.fetch({ retryAttempt: 0, throwOnError });
+    },
+    fetch: async ({
+      retryAttempt = 0,
+      throwOnError = query.resolvedOptions.throwOnError,
+      force = false,
+    } = {}) => {
+      if (!query.resolvedOptions.enabled) return;
+      if (!force && !query.isActive) return;
+      if (query.isFetching && !query.isCancelled) {
+        return query.fetchPromise!;
+      }
+      if (query.state.fetchStatus() === 'paused') return;
+
+      query.isFetching = true;
+      query.isCancelled = false;
+      query.controller = new AbortController();
+      const signal = query.controller.signal;
+      query.revertState = createQueryStateSnapshot(query.state);
+      let fetchPromise!: Promise<void>;
+      let didFetchSucceed = false;
+      fetchPromise = (async () => {
+        try {
+          query.state.fetchStatus('fetching');
+          const result = await untrack(() => query.resolvedOptions.queryFn!({ signal }));
+          if (query.isCancelled || signal.aborted) {
+            return;
+          }
+
+          let newData: TData;
+          if (typeof query.resolvedOptions.structuralSharing === 'function') {
+            newData = query.resolvedOptions.structuralSharing(query.state.data(), result) as TData;
+          } else if (query.resolvedOptions.structuralSharing === false) {
+            newData = result as TData;
+          } else if (isDevelopment) {
+            try {
+              newData = replaceEqualDeep(query.state.data(), result) as TData;
+            } catch (error) {
+              console.error(
+                `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${String(error)}`,
+              );
+
+              throw error;
+            }
+          } else {
+            newData = replaceEqualDeep(query.state.data(), result) as TData;
+          }
+
+          setQuerySuccessData(query, newData, Date.now(), false);
+          didFetchSucceed = true;
+        } catch (err) {
+          if (!signal.aborted) {
+            const error = (err instanceof Error ? err : new Error(String(err))) as TError;
+            query.state.error(error);
+            query.state.status('error');
+            query.state.errorUpdatedAt(Date.now());
+            query.state.errorUpdateCount((previous) => previous + 1);
+            query.state.isInvalidated(query.state.data() !== undefined);
+            query.staleDisposer();
+            query.staleDisposer = () => {};
+            query.state.isStale(true);
+            if (throwOnError) {
+              throw error;
+            }
+            query.scheduleRetry(retryAttempt + 1, error);
+          }
+        } finally {
+          if (query.fetchPromise === fetchPromise) {
+            query.fetchPromise = undefined;
+            query.revertState = undefined;
+
+            const shouldSkipFinalize =
+              !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
+            if (!shouldSkipFinalize) {
+              query.isFetching = false;
+              if (query.state.fetchStatus() !== 'paused') {
+                query.state.fetchStatus('idle');
+              }
+              if (didFetchSucceed) scheduleQueryStale(query);
+              events.dispatchEvent(new CustomEvent('fetch:done'));
+            }
+          }
+        }
+      })();
+
+      query.fetchPromise = fetchPromise;
+
+      return fetchPromise;
+    },
+    scheduleRetry: (attempt: number, error: TError) => {
+      const { retry, retryDelay } = query.resolvedOptions;
+      if (retry === false) return;
+      if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
+      const delay =
+        typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
+      if (
+        isBrowser &&
+        query.resolvedOptions.networkMode === 'online' &&
+        query.state.fetchStatus() === 'paused'
+      ) {
+        useEventListener(
+          window,
+          'online',
+          () => {
+            void query.fetch({ retryAttempt: attempt });
+          },
+          { once: true },
+        );
+        return;
+      }
+      if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
+        const id = setTimeout(() => {
+          query.retryDisposer = () => {};
+          void query.fetch({ retryAttempt: attempt });
+        }, delay ?? 0);
+        query.retryDisposer = () => clearTimeout(id);
+      }
+    },
+  };
+
+  useRoot((dispose) => {
+    query.stateDisposer = dispose;
+
+    const data = $(query.resolvedOptions.initialData as TData, { equals: false });
+    const dataUpdateCount = $(0);
+    const dataUpdatedAt = $(query.resolvedOptions.initialDataUpdatedAt ?? 0);
+    const error = $<TError | null>(null, { equals: false });
+    const errorUpdateCount = $(0);
+    const errorUpdatedAt = $(0);
+    const meta = $(null);
+    const isInvalidated = $(false);
+    const status = $<QueryStatus>(
+      query.resolvedOptions.initialData !== undefined ? 'success' : 'pending',
+    );
+    const fetchStatus = $<FetchStatus>('idle');
+    const isStale = $(false);
+
+    query.state = {
+      data,
+      dataUpdateCount,
+      dataUpdatedAt,
+      error,
+      errorUpdateCount,
+      errorUpdatedAt,
+      meta,
+      isInvalidated,
+      status,
+      fetchStatus,
+      isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
+      isRefetching: useMemo((): boolean => fetchStatus() === 'fetching' && status() !== 'pending'),
+      isFetched: useMemo((): boolean => dataUpdateCount() > 0 || errorUpdateCount() > 0),
+      isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
+      isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
+      isPending: useMemo((): boolean => status() === 'pending'),
+      isSuccess: useMemo((): boolean => status() === 'success'),
+      isError: useMemo((): boolean => status() === 'error'),
+      isLoading: useMemo((): boolean => status() === 'pending' && fetchStatus() === 'fetching'),
+      isLoadingError: useMemo((): boolean => status() === 'error' && dataUpdateCount() === 0),
+      isRefetchError: useMemo((): boolean => status() === 'error' && dataUpdateCount() > 0),
+      isPlaceholderData: useMemo(
+        (): boolean => query.resolvedOptions.placeholderData !== undefined && data() === undefined,
+      ),
+      isStale,
+      isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
+    } as QueryState<TData, TError>;
+  });
+
+  return query;
+};

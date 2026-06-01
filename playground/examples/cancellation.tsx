@@ -79,7 +79,7 @@ export const CancellationDemo = () => {
     );
   };
 
-  const request = useQuery<CancellationResult>({
+  const request = useQuery({
     queryKey: ['cancellation-demo'],
     initialData: initialResult,
     refetchOnMount: false,
@@ -210,7 +210,9 @@ export const CancellationDemo = () => {
         <For values={log} fallback={<p class="text-white/20">No requests yet.</p>}>
           {(entry) => (
             <p class="grid grid-cols-[4.5rem_5rem_1fr] gap-2">
-              <span class={() => `${statusClass(entry.status)} shrink-0`}>{() => entry.status}</span>
+              <span class={() => `${statusClass(entry.status)} shrink-0`}>
+                {() => entry.status}
+              </span>
               <span class="text-white/28">#{() => entry.requestId}</span>
               <span class="min-w-0 truncate text-white/45">
                 {() => `"${entry.term}" at ${entry.at}`}

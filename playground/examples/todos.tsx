@@ -7,9 +7,18 @@ type Todo = { id: number; title: string; completed: boolean };
 
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
-    const id = setTimeout(() => { cleanup(); resolve(); }, ms);
-    const onAbort = () => { cleanup(); reject(new DOMException('Aborted', 'AbortError')); };
-    const cleanup = () => { clearTimeout(id); signal?.removeEventListener('abort', onAbort); };
+    const id = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const cleanup = () => {
+      clearTimeout(id);
+      signal?.removeEventListener('abort', onAbort);
+    };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 
@@ -34,7 +43,9 @@ const todoApi = {
   },
   async toggle(id: number) {
     await wait(300);
-    todoStore.value = todoStore.value.map((t) => t.id === id ? { ...t, completed: !t.completed } : t);
+    todoStore.value = todoStore.value.map((t) =>
+      t.id === id ? { ...t, completed: !t.completed } : t,
+    );
     return todoStore.value.find((t) => t.id === id)!;
   },
 };
@@ -47,13 +58,18 @@ export const TodosDemo = () => {
   const addTodo = useMutation<Todo, Error, string>({
     mutationKey: ['todos', 'add'],
     mutationFn: (title) => todoApi.add(title),
-    onSuccess: async () => { await todos().refetch(); draft(''); },
+    onSuccess: async () => {
+      await todos().refetch();
+      draft('');
+    },
   });
 
   const toggleTodo = useMutation<Todo, Error, number>({
     mutationKey: ['todos', 'toggle'],
     mutationFn: (id) => todoApi.toggle(id),
-    onSuccess: async () => { await todos().refetch(); },
+    onSuccess: async () => {
+      await todos().refetch();
+    },
   });
 
   const pending = useMutationState({
@@ -69,7 +85,9 @@ export const TodosDemo = () => {
       <div class="flex items-start justify-between gap-2">
         <div>
           <h2 class="text-base font-semibold text-white">Mutations + invalidation</h2>
-          <p class="text-sm text-white/40 mt-0.5">Write through mutation, refresh via cache invalidation.</p>
+          <p class="text-sm text-white/40 mt-0.5">
+            Write through mutation, refresh via cache invalidation.
+          </p>
         </div>
         <Tag>{() => `${pending().length} pending`}</Tag>
       </div>
@@ -99,13 +117,18 @@ export const TodosDemo = () => {
       </If>
 
       <div class="flex flex-col gap-1">
-        <For values={() => todos().data() ?? []} fallback={<p class="text-sm text-white/30">Loading…</p>}>
+        <For
+          values={() => todos().data() ?? []}
+          fallback={<p class="text-sm text-white/30">Loading…</p>}
+        >
           {(todo) => (
             <button
               onClick={() => toggleTodo().mutate(todo.id)}
               class="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/3 hover:bg-white/6 border border-white/6 text-sm text-left transition-colors cursor-pointer"
             >
-              <span class="font-mono text-xs text-white/30">{() => (todo.completed ? '✓' : '○')}</span>
+              <span class="font-mono text-xs text-white/30">
+                {() => (todo.completed ? '✓' : '○')}
+              </span>
               <span class={() => (todo.completed ? 'line-through text-white/30' : 'text-white/70')}>
                 {() => todo.title}
               </span>
@@ -116,7 +139,9 @@ export const TodosDemo = () => {
 
       <If when={() => pending().length > 0}>
         <div class="rounded-lg bg-white/3 border border-white/6 p-3">
-          <p class="text-xs font-mono text-white/30 mb-2 uppercase tracking-widest">Active mutations</p>
+          <p class="text-xs font-mono text-white/30 mb-2 uppercase tracking-widest">
+            Active mutations
+          </p>
           <For values={pending}>
             {(entry) => (
               <p class="text-xs font-mono text-white/50">

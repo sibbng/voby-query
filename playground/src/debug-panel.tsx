@@ -52,7 +52,7 @@ const formatKeySegment = (segment: unknown) => {
   try {
     return JSON.stringify(segment);
   } catch {
-    return String(segment);
+    return Object.prototype.toString.call(segment);
   }
 };
 
@@ -91,7 +91,7 @@ const formatPreview = (value: unknown) => {
     const serialized = JSON.stringify(value, null, 2);
     return serialized.length > 720 ? `${serialized.slice(0, 717)}...` : serialized;
   } catch {
-    return String(value);
+    return Object.prototype.toString.call(value);
   }
 };
 

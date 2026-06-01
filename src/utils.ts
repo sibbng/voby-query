@@ -1,6 +1,5 @@
 import { $$ } from 'voby';
-import type { MutationKey } from './useMutation';
-import type { QueryKey, QueryOptions } from './useQuery';
+import type { MutationKey, QueryKey, QueryOptions } from './types.ts';
 
 export function queryOptions<Q extends QueryOptions>(options: Q): Q {
   return options;
@@ -38,7 +37,9 @@ export const partialMatchKey = (
 
   if (resolvedFilterKey.length > resolvedQueryKey.length) return false;
 
-  return resolvedFilterKey.every((value, index) => partialDeepMatch(value, resolvedQueryKey[index]));
+  return resolvedFilterKey.every((value, index) =>
+    partialDeepMatch(value, resolvedQueryKey[index]),
+  );
 };
 
 const partialDeepMatch = (a: unknown, b: unknown): boolean => {

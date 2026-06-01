@@ -5,16 +5,40 @@ import { Tag, Card, Btn } from '../src/ui';
 type Profile = { id: number; name: string; handle: string; bio: string };
 
 const PROFILES: Profile[] = [
-  { id: 1, name: 'Ada Lovelace', handle: '@ada', bio: 'Drives architecture and roadmap decisions.' },
-  { id: 2, name: 'Grace Hopper', handle: '@grace', bio: 'Keeps delivery predictable and observable.' },
-  { id: 3, name: 'Margaret Hamilton', handle: '@margaret', bio: 'Turns edge cases into boring incidents.' },
+  {
+    id: 1,
+    name: 'Ada Lovelace',
+    handle: '@ada',
+    bio: 'Drives architecture and roadmap decisions.',
+  },
+  {
+    id: 2,
+    name: 'Grace Hopper',
+    handle: '@grace',
+    bio: 'Keeps delivery predictable and observable.',
+  },
+  {
+    id: 3,
+    name: 'Margaret Hamilton',
+    handle: '@margaret',
+    bio: 'Turns edge cases into boring incidents.',
+  },
 ];
 
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
-    const id = setTimeout(() => { cleanup(); resolve(); }, ms);
-    const onAbort = () => { cleanup(); reject(new DOMException('Aborted', 'AbortError')); };
-    const cleanup = () => { clearTimeout(id); signal?.removeEventListener('abort', onAbort); };
+    const id = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const cleanup = () => {
+      clearTimeout(id);
+      signal?.removeEventListener('abort', onAbort);
+    };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 
@@ -34,7 +58,13 @@ export const ProfileDemo = () => {
   const profile = useQuery({
     queryKey: ['profile', id],
     enabled,
-    placeholderData: { id: 0, name: '—', handle: '—', bio: 'Enable the query to load.', fetchedAt: '—' },
+    placeholderData: {
+      id: 0,
+      name: '—',
+      handle: '—',
+      bio: 'Enable the query to load.',
+      fetchedAt: '—',
+    },
     queryFn: ({ signal }) => profileApi.get(id(), signal),
   });
 
@@ -43,7 +73,9 @@ export const ProfileDemo = () => {
       <div class="flex items-start justify-between gap-2">
         <div>
           <h2 class="text-base font-semibold text-white">Reactive query key</h2>
-          <p class="text-sm text-white/40 mt-0.5">Observable key — query re-runs when it changes.</p>
+          <p class="text-sm text-white/40 mt-0.5">
+            Observable key — query re-runs when it changes.
+          </p>
         </div>
         <Tag>{() => profile().fetchStatus()}</Tag>
       </div>

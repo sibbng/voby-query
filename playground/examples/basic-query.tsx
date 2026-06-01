@@ -32,9 +32,7 @@ export const BasicQueryDemo = () => {
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <Btn onClick={() => broken((v) => !v)}>
-          {() => (broken() ? '✓ Fix URL' : 'Break URL')}
-        </Btn>
+        <Btn onClick={() => broken((v) => !v)}>{() => (broken() ? '✓ Fix URL' : 'Break URL')}</Btn>
         <Btn onClick={() => posts().refetch()}>Refetch</Btn>
       </div>
 
@@ -56,7 +54,9 @@ export const BasicQueryDemo = () => {
       <If when={() => posts().isError()}>
         <div class="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-mono">
           <p class="text-red-400">{() => (posts().error() as Error)?.message}</p>
-          <p class="text-white/30 mt-1">Gave up after {() => posts().errorUpdateCount()} retries.</p>
+          <p class="text-white/30 mt-1">
+            Gave up after {() => posts().errorUpdateCount()} retries.
+          </p>
         </div>
       </If>
 

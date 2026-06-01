@@ -444,7 +444,8 @@ test('queryClient.removeQueries supports type and predicate filters', async () =
     queryKey: ['posts'],
     type: 'inactive',
     predicate: (query) =>
-      Array.isArray(query.resolvedOptions.queryKey) && query.resolvedOptions.queryKey[1] === 'inactive',
+      Array.isArray(query.resolvedOptions.queryKey) &&
+      query.resolvedOptions.queryKey[1] === 'inactive',
   });
 
   expect(queryClient.getQueryData(['posts', 'active'])).toBe('active post');
@@ -708,6 +709,34 @@ test('queryClient.setQueryData marks manual writes as fresh successful data', as
     isFetched: true,
     isInvalidated: false,
     isStale: false,
+    status: 'success',
+  });
+});
+
+test('queryClient.setQueryData ignores undefined updater results', async () => {
+  const queryClient = createQueryClient();
+
+  queryClient.setQueryData<string>(['missing-undefined'], () => undefined as never);
+  expect(queryClient.getQueryData(['missing-undefined'])).toBeUndefined();
+  expect(queryClient.getQuerySnapshots({ queryKey: ['missing-undefined'] })).toEqual([]);
+
+  await queryClient.fetchQuery({
+    queryKey: ['existing-undefined'],
+    queryFn: async () => 'server value',
+    staleTime: 1000,
+  });
+
+  queryClient.setQueryData<string>(['existing-undefined'], () => undefined as never);
+
+  const [snapshot] = queryClient.getQuerySnapshots<string>({
+    queryKey: ['existing-undefined'],
+  });
+
+  expect(queryClient.getQueryData(['existing-undefined'])).toBe('server value');
+  expect(snapshot).toMatchObject({
+    data: 'server value',
+    dataUpdateCount: 1,
+    isInvalidated: false,
     status: 'success',
   });
 });

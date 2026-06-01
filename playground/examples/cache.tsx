@@ -20,7 +20,9 @@ export const CacheDemo = () => {
       <div class="flex items-start justify-between gap-2">
         <div>
           <h2 class="text-base font-semibold text-white">Cache inspector</h2>
-          <p class="text-sm text-white/40 mt-0.5">Polls the client every second to report cache state.</p>
+          <p class="text-sm text-white/40 mt-0.5">
+            Polls the client every second to report cache state.
+          </p>
         </div>
         <Tag>{() => info().status()}</Tag>
       </div>

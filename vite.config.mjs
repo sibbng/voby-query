@@ -34,8 +34,8 @@ export default defineConfig({
   },
   lint: {
     options: {
-      typeAware: false,
-      typeCheck: false,
+      typeAware: true,
+      typeCheck: true,
     },
     ignorePatterns: ['dist/**', 'node_modules/**'],
     rules: {

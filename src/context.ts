@@ -1,5 +1,5 @@
 import { type Context, createContext } from 'voby';
-import type { QueryClient } from './useQuery';
+import type { QueryClient } from './types.ts';
 
 // #region Context
 export const QueryClientContext: Context<QueryClient> = createContext<QueryClient>();
