@@ -231,7 +231,10 @@ export const createMutation = <
         mutation.state.error(null);
         mutation.state.failureCount(0);
         mutation.state.failureReason(null);
-        mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+        mutationCache.notify({
+          type: 'updated',
+          mutation: mutation as Mutation<any, any, any, any>,
+        });
 
         await mutation.resolvedOptions.onSuccess?.(data, variables, context);
         mutateOptions?.onSuccess?.(data, variables, context);
@@ -247,7 +250,10 @@ export const createMutation = <
         if (mutation.state.failureCount() === 0) {
           mutation.state.failureCount(1);
         }
-        mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+        mutationCache.notify({
+          type: 'updated',
+          mutation: mutation as Mutation<any, any, any, any>,
+        });
 
         await mutation.resolvedOptions.onError?.(error as TError, variables, context);
         mutateOptions?.onError?.(error as TError, variables, context);

@@ -1,4 +1,9 @@
-import { createMutation, resolveMutationHash, resolveMutationOptions, type Mutation } from './mutation.ts';
+import {
+  createMutation,
+  resolveMutationHash,
+  resolveMutationOptions,
+  type Mutation,
+} from './mutation.ts';
 import { Subscribable } from './subscribable.ts';
 import type {
   MutationCache as MutationCacheType,
@@ -155,7 +160,10 @@ export class MutationCache<
         mutation.destroy();
       }
     }
-    this.notify({ type: 'removed', mutation: mutations[mutations.length - 1] as Mutation<any, any, any, any> });
+    this.notify({
+      type: 'removed',
+      mutation: mutations[mutations.length - 1] as Mutation<any, any, any, any>,
+    });
   }
 }
 

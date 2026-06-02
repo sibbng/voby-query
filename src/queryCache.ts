@@ -50,8 +50,9 @@ const matchesQueryFilters = <TQuery extends Query<any, any, any, any>>(
   return true;
 };
 
-export class QueryCache<TQuery extends Query<any, any, any, any> = Query<any, any, any, any>>
-  extends Subscribable<QueryCacheListener> {
+export class QueryCache<
+  TQuery extends Query<any, any, any, any> = Query<any, any, any, any>,
+> extends Subscribable<QueryCacheListener> {
   private readonly queries: Map<string, TQuery>;
 
   constructor(

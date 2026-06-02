@@ -13,9 +13,11 @@ export function useIsFetching({
   const cache = queryClient.cache;
   const tick = $(0);
 
-  useCleanup(cache.subscribe(() => {
-    tick(v => v + 1);
-  }));
+  useCleanup(
+    cache.subscribe(() => {
+      tick((v) => v + 1);
+    }),
+  );
 
   return useMemo((): number => {
     tick();

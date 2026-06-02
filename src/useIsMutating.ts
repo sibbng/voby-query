@@ -13,9 +13,11 @@ export function useIsMutating({
   const cache = queryClient.mutationCache;
   const tick = $(0);
 
-  useCleanup(cache.subscribe(() => {
-    tick(v => v + 1);
-  }));
+  useCleanup(
+    cache.subscribe(() => {
+      tick((v) => v + 1);
+    }),
+  );
 
   return useMemo((): number => {
     tick();
