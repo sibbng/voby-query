@@ -27,7 +27,10 @@ export function useSuspenseQuery<
       TQueryKey,
       TInitialData,
       R
-    >(queryClient, options as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>);
+    >(
+      queryClient,
+      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+    );
     useCleanup(nextQuery.addInstance());
     return nextQuery;
   });
@@ -61,10 +64,7 @@ export function useSuspenseQuery<
     const r = resource();
     const data = r.value;
 
-    const {
-      isPlaceholderData: _isPlaceholderData,
-      ...rest
-    } = stateObservable;
+    const { isPlaceholderData: _isPlaceholderData, ...rest } = stateObservable;
 
     return {
       ...rest,

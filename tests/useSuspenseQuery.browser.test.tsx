@@ -59,11 +59,15 @@ test('useSuspenseQuery - data is always defined when rendered', async () => {
       },
     });
 
-    return <p>{() => {
-      const d = query().data();
-      if (!d) return null;
-      return `id=${d.id} name=${d.name}`;
-    }}</p>;
+    return (
+      <p>
+        {() => {
+          const d = query().data();
+          if (!d) return null;
+          return `id=${d.id} name=${d.name}`;
+        }}
+      </p>
+    );
   }
 
   render(

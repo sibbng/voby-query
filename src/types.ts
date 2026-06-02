@@ -370,6 +370,27 @@ export type UseSuspenseQueryResult<TData = unknown, TError = Error> = Observable
   UseSuspenseQueryResultValue<TData, TError>
 >;
 
+export type UseSuspenseInfiniteQueryOptions<
+  TQueryFnData = unknown,
+  TError = Error,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+  R = void,
+  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
+> = Omit<
+  InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam, R, TInitialData>,
+  'enabled' | 'placeholderData' | 'throwOnError'
+>;
+
+type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
+  UseInfiniteQueryResultValue<TData, TError>,
+  'isPlaceholderData'
+>;
+
+export type UseSuspenseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseSuspenseInfiniteQueryResultValue<TData, TError>
+>;
+
 type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
 type UseInfiniteQueryResultMethods = UseQueryResultMethods & {

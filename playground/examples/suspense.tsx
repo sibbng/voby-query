@@ -33,12 +33,14 @@ const PostList = () => {
         </div>
       </div>
       {() =>
-        posts().data().map((post) => (
-          <div class="rounded-lg bg-white/3 border border-white/6 px-3 py-2">
-            <p class="text-sm text-white/80">{post.title}</p>
-            <p class="text-xs font-mono text-white/25 mt-0.5">id: {post.id}</p>
-          </div>
-        ))
+        posts()
+          .data()
+          .map((post) => (
+            <div class="rounded-lg bg-white/3 border border-white/6 px-3 py-2">
+              <p class="text-sm text-white/80">{post.title}</p>
+              <p class="text-xs font-mono text-white/25 mt-0.5">id: {post.id}</p>
+            </div>
+          ))
       }
     </div>
   );
@@ -79,10 +81,15 @@ export const SuspenseDemo = () => {
         </Btn>
         {() =>
           showPosts() && (
-            <Btn onClick={() => {
-              queryClient.cancelQueries({ queryKey: ['suspense-posts'] }, { silent: true, revert: false });
-              showPosts(false);
-            }}>
+            <Btn
+              onClick={() => {
+                void queryClient.cancelQueries(
+                  { queryKey: ['suspense-posts'] },
+                  { silent: true, revert: false },
+                );
+                showPosts(false);
+              }}
+            >
               Cancel
             </Btn>
           )
@@ -102,12 +109,21 @@ export const SuspenseDemo = () => {
 
       {() =>
         showFail() && (
-          <Suspense fallback={<div class="text-center py-10 text-white/40">Loading error demo...</div>}>
+          <Suspense
+            fallback={<div class="text-center py-10 text-white/40">Loading error demo...</div>}
+          >
             <ErrorBoundary
               fallback={(props: { error: Error; reset: () => void }) => (
                 <div class="text-center py-8 flex flex-col items-center gap-3">
                   <p class="text-sm text-red-400/80">{props.error.message}</p>
-                  <Btn onClick={() => { showFail(false); props.reset(); }}>Dismiss</Btn>
+                  <Btn
+                    onClick={() => {
+                      showFail(false);
+                      props.reset();
+                    }}
+                  >
+                    Dismiss
+                  </Btn>
                 </div>
               )}
             >

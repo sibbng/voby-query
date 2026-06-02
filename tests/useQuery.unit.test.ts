@@ -25,8 +25,6 @@ test('useQuery basic functionality', async () => {
   expect(cachedData).toBe('test data');
 });
 
-
-
 test('useQuery error handling', async () => {
   const queryClient = createQueryClient();
 

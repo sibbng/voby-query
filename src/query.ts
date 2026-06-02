@@ -194,9 +194,6 @@ export const setQuerySuccessData = (
   if (scheduleStale) scheduleQueryStale(query);
 };
 
-
-
-
 export const createQuery = <
   TQueryFnData = unknown,
   TError = unknown,
@@ -455,7 +452,11 @@ export const createQuery = <
             }
             query.scheduleRetry(retryAttempt + 1, error, fetchFn);
             cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
-            cache.config.onSettled?.(query.state.data(), error as unknown, query as Query<any, any, any, any>);
+            cache.config.onSettled?.(
+              query.state.data(),
+              error as unknown,
+              query as Query<any, any, any, any>,
+            );
             cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
           }
         } finally {

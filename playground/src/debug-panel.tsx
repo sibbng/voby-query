@@ -369,16 +369,13 @@ export const DebugPanel = ({ active }: { active: () => ActiveExample }) => {
 
       if (!prefixes.length) return;
 
-      await Promise.all(
-        prefixes.map((prefix) => {
-          const filters = prefix ? { queryKey: prefix } : undefined;
-          if (action === 'invalidate') return queryClient.invalidateQueries(filters);
-          if (action === 'refetch') return queryClient.refetchQueries(filters);
-          if (action === 'reset') return queryClient.resetQueries(filters);
-          queryClient.removeQueries(filters);
-          return undefined;
-        }),
-      );
+      for (const prefix of prefixes) {
+        const filters = prefix ? { queryKey: prefix } : undefined;
+        if (action === 'invalidate') await queryClient.invalidateQueries(filters);
+        else if (action === 'refetch') await queryClient.refetchQueries(filters);
+        else if (action === 'reset') await queryClient.resetQueries(filters);
+        else queryClient.removeQueries(filters);
+      }
     } finally {
       busyAction(null);
     }

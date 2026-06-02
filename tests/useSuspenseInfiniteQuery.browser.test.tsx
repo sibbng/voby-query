@@ -1,0 +1,407 @@
+import { waitFor } from '@testing-library/dom';
+import { ErrorBoundary, Suspense } from 'voby';
+import { expect, test } from 'vite-plus/test';
+import { QueryClientProvider } from '../src/context';
+import { createQueryClient } from '../src';
+import { useSuspenseInfiniteQuery } from '../src/useSuspenseInfiniteQuery';
+import { flush, render, sleep } from './utils';
+
+type Page = {
+  value: string;
+  next?: number;
+  previous?: number;
+};
+
+test('useSuspenseInfiniteQuery - suspends when no data, renders after fetch', async () => {
+  const queryClient = createQueryClient();
+  let fetchCount = 0;
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf'], number>({
+      queryKey: ['suspend-inf'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        fetchCount++;
+        await sleep(5);
+        return { value: `page ${pageParam}`, next: pageParam + 1 };
+      },
+      getNextPageParam: (lastPage) => lastPage.next,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  expect(document.body.textContent).toBe('Loading...');
+
+  await sleep(30);
+
+  expect(document.body.textContent).toBe('page 1');
+  expect(fetchCount).toBe(1);
+});
+
+test('useSuspenseInfiniteQuery - data is always defined when rendered', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-defined'], number>({
+      queryKey: ['suspend-inf-defined'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}`, next: pageParam + 1 };
+      },
+      getNextPageParam: (lastPage) => lastPage.next,
+    });
+
+    return <p>{() => `pages=${query().data()?.pages.length}`}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  expect(document.body.textContent).toBe('pages=1');
+});
+
+test('useSuspenseInfiniteQuery - uses cached data without suspending', async () => {
+  const queryClient = createQueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['suspend-inf-cached'],
+    queryFn: async () => ({
+      pages: [{ value: 'cached page 1' }],
+      pageParams: [1],
+    }),
+  });
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-cached'], number>({
+      queryKey: ['suspend-inf-cached'],
+      initialPageParam: 1,
+      queryFn: async () => {
+        throw new Error('should not be called');
+      },
+      getNextPageParam: () => undefined,
+      staleTime: 60_000,
+      refetchOnMount: false,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Should not appear</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(10);
+
+  expect(document.body.textContent).toBe('cached page 1');
+});
+
+test('useSuspenseInfiniteQuery - error thrown on fetch failure', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-error'], number>({
+      queryKey: ['suspend-inf-error'],
+      initialPageParam: 1,
+      queryFn: async () => {
+        await sleep(5);
+        throw new Error('fetch failed');
+      },
+      getNextPageParam: () => undefined,
+      retry: false,
+    });
+
+    return <p>{() => query().status()}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <ErrorBoundary fallback={(props: { error: Error }) => <p>Caught: {props.error.message}</p>}>
+          <Suspendable />
+        </ErrorBoundary>
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  expect(document.body.textContent).toBe('Loading...');
+
+  await sleep(30);
+
+  await waitFor(() => {
+    expect(document.body.textContent).toContain('Caught: fetch failed');
+  });
+});
+
+test('useSuspenseInfiniteQuery - status is success when rendered', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-status'], number>({
+      queryKey: ['suspend-inf-status'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}`, next: pageParam + 1 };
+      },
+      getNextPageParam: (lastPage) => lastPage.next,
+    });
+
+    return <p>{() => `status=${query().status()}`}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  expect(document.body.textContent).toBe('status=success');
+});
+
+test('useSuspenseInfiniteQuery - fetchNextPage appends next page', async () => {
+  const queryClient = createQueryClient();
+  let result: any;
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-next'], number>({
+      queryKey: ['suspend-inf-next'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return {
+          value: `page ${pageParam}`,
+          next: pageParam < 2 ? pageParam + 1 : undefined,
+        };
+      },
+      getNextPageParam: (lastPage) => lastPage.next,
+    });
+    result = query;
+
+    return (
+      <div>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join('|')
+        }
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await waitFor(() => expect(document.body.textContent).toBe('page 1'));
+
+  await result().fetchNextPage();
+  await flush();
+
+  await waitFor(() => expect(document.body.textContent).toBe('page 1|page 2'));
+
+  expect(result().data().pageParams).toEqual([1, 2]);
+  expect(result().hasNextPage()).toBe(false);
+});
+
+test('useSuspenseInfiniteQuery - fetchPreviousPage prepends a previous page', async () => {
+  const queryClient = createQueryClient();
+  let result: any;
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-prev'], number>({
+      queryKey: ['suspend-inf-prev'],
+      initialPageParam: 2,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return {
+          value: `page ${pageParam}`,
+          previous: pageParam > 1 ? pageParam - 1 : undefined,
+        };
+      },
+      getNextPageParam: () => undefined,
+      getPreviousPageParam: (firstPage) => firstPage.previous,
+    });
+    result = query;
+
+    return (
+      <div>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join('|')
+        }
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await waitFor(() => expect(document.body.textContent).toBe('page 2'));
+
+  await result().fetchPreviousPage();
+  await flush();
+
+  await waitFor(() => expect(document.body.textContent).toBe('page 1|page 2'));
+
+  expect(result().data().pageParams).toEqual([1, 2]);
+  expect(result().hasPreviousPage()).toBe(false);
+});
+
+test('useSuspenseInfiniteQuery - refetch reloads from first page param', async () => {
+  const queryClient = createQueryClient();
+  let result: any;
+  let generation = 0;
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-refetch'], number>({
+      queryKey: ['suspend-inf-refetch'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return {
+          value: `gen ${generation} page ${pageParam}`,
+          next: pageParam < 2 ? pageParam + 1 : undefined,
+        };
+      },
+      getNextPageParam: (lastPage) => lastPage.next,
+    });
+    result = query;
+
+    return (
+      <div>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join('|')
+        }
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await waitFor(() => expect(document.body.textContent).toBe('gen 0 page 1'));
+
+  await result().fetchNextPage();
+  await flush();
+  expect(document.body.textContent).toBe('gen 0 page 1|gen 0 page 2');
+
+  generation = 1;
+  await result().refetch();
+  await flush();
+
+  await waitFor(() => expect(document.body.textContent).toBe('gen 1 page 1|gen 1 page 2'));
+});
+
+test('useSuspenseInfiniteQuery - no isPlaceholderData property on result', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-no-placeholder'], number>({
+      queryKey: ['suspend-inf-no-placeholder'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}` };
+      },
+      getNextPageParam: () => undefined,
+    });
+
+    const result = query();
+    expect('isPlaceholderData' in result).toBe(false);
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  expect(document.body.textContent).toBe('page 1');
+});

@@ -15,6 +15,11 @@ import { SelectDemo, meta as selectMeta } from '../examples/select';
 import { StaleTimeDemo, meta as staleTimeMeta } from '../examples/stale-time';
 import { IsFetchingDemo, meta as isFetchingMeta } from '../examples/is-fetching';
 import { SuspenseDemo, meta as suspenseMeta } from '../examples/suspense';
+import { InfiniteQueryDemo, meta as infiniteQueryMeta } from '../examples/infinite-query';
+import {
+  SuspenseInfiniteQueryDemo,
+  meta as suspInfQueryMeta,
+} from '../examples/suspense-infinite-query';
 import { DebugPanel, type DebugScope } from './debug-panel';
 
 const SESSION_KEY = 'voby-query-playground-example';
@@ -126,6 +131,22 @@ const examples: Example[] = [
     debug: {
       queryPrefixes: [['suspense-posts']],
       note: 'Uses useSuspenseQuery inside a Voby <Suspense> boundary with a spinner fallback.',
+    },
+  },
+  {
+    ...infiniteQueryMeta,
+    component: InfiniteQueryDemo,
+    debug: {
+      queryPrefixes: [['inf-posts']],
+      note: 'Paginated posts loaded with useInfiniteQuery; each page is a separate request.',
+    },
+  },
+  {
+    ...suspInfQueryMeta,
+    component: SuspenseInfiniteQueryDemo,
+    debug: {
+      queryPrefixes: [['susp-inf-posts']],
+      note: 'Paginated posts with useSuspenseInfiniteQuery inside a Suspense boundary.',
     },
   },
 ];
