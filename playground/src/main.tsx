@@ -13,6 +13,7 @@ import { PrefetchDemo, meta as prefetchMeta } from '../examples/prefetch';
 import { CancellationDemo, meta as cancellationMeta } from '../examples/cancellation';
 import { SelectDemo, meta as selectMeta } from '../examples/select';
 import { StaleTimeDemo, meta as staleTimeMeta } from '../examples/stale-time';
+import { IsFetchingDemo, meta as isFetchingMeta } from '../examples/is-fetching';
 import { DebugPanel, type DebugScope } from './debug-panel';
 
 const SESSION_KEY = 'voby-query-playground-example';
@@ -108,6 +109,14 @@ const examples: Example[] = [
     debug: {
       includeAllQueries: true,
       note: 'This example samples the whole client, so the panel switches to the full query cache in example mode.',
+    },
+  },
+  {
+    ...isFetchingMeta,
+    component: IsFetchingDemo,
+    debug: {
+      queryPrefixes: [['fetch-slow']],
+      note: 'Tracks all simulated fetch queries used by this example.',
     },
   },
 ];
