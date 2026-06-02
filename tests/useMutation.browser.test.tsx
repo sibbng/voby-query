@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vite-plus/test';
 import { flush, render } from './utils';
 import { waitFor } from '@testing-library/dom';
 import { useMutation, useMutationState } from '../src/useMutation';
-import { createQueryClient } from '../src/useQuery';
+import { createQueryClient } from '../src';
 import { QueryClientProvider } from '../src/context';
 import { $, If } from 'voby';
 

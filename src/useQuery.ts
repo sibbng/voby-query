@@ -1,8 +1,7 @@
 import { useCleanup, useMemo } from 'voby';
-import { createQueryClient, useQueryClient } from './queryClient.ts';
+import { useQueryClient } from './queryClient.ts';
 import type { QueryKey, QueryOptions, UseQueryReturn } from './types.ts';
 
-export { createQueryClient, useQueryClient };
 export { CancelledError } from './query.ts';
 export type {
   CancelOptions,

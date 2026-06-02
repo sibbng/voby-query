@@ -1,6 +1,7 @@
 export { QueryClientContext, QueryClientProvider } from './context.ts';
 
-export { CancelledError, createQueryClient, useQuery, useQueryClient } from './useQuery.ts';
+export { createQueryClient, useQueryClient } from './queryClient.ts';
+export { CancelledError, useQuery } from './useQuery.ts';
 export type {
   MutationCache,
   QueryCache,
@@ -15,6 +16,16 @@ export type {
   UseQueryResult,
   QueryFilters,
 } from './useQuery.ts';
+
+export { useInfiniteQuery } from './useInfiniteQuery.ts';
+export type {
+  InfiniteData,
+  InfiniteQueryDirection,
+  InfiniteQueryFunctionContext,
+  InfiniteQueryOptions,
+  UseInfiniteQueryResult,
+  UseInfiniteQueryReturn,
+} from './useInfiniteQuery.ts';
 
 export { useMutation, useMutationState } from './useMutation.ts';
 export type {

@@ -39,6 +39,13 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   fetchStatus: FetchStatus;
   isStale: boolean;
 };
+type QueryFetchFn = (options: { signal: AbortSignal }) => Promise<unknown>;
+type QueryFetchOptions = {
+  retryAttempt?: number;
+  throwOnError?: boolean;
+  force?: boolean;
+  fetchFn?: QueryFetchFn;
+};
 export type Query<
   TQueryFnData = unknown,
   TError = unknown,
@@ -52,11 +59,7 @@ export type Query<
   state: QueryState<TData, TError>;
   cancel: (options?: CancelOptions) => Promise<void>;
   destroy: () => void;
-  fetch: (options?: {
-    retryAttempt?: number;
-    throwOnError?: boolean;
-    force?: boolean;
-  }) => Promise<void>;
+  fetch: (options?: QueryFetchOptions) => Promise<void>;
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
   resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
   instances: number;
@@ -72,7 +75,7 @@ export type Query<
   removeInstance: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
-  scheduleRetry: (retryAttempt: number, error: TError) => void;
+  scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => void;
   isCancelled: boolean;
   events: EventTarget;
   inactiveCleanup?: () => void;
@@ -425,6 +428,7 @@ export const createQuery = <
       retryAttempt = 0,
       throwOnError = query.resolvedOptions.throwOnError,
       force = false,
+      fetchFn,
     } = {}) => {
       if (!query.resolvedOptions.enabled) return;
       if (!force && !query.isActive) return;
@@ -443,14 +447,19 @@ export const createQuery = <
       fetchPromise = (async () => {
         try {
           query.state.fetchStatus('fetching');
-          const result = await untrack(() => query.resolvedOptions.queryFn!({ signal }));
+          const result = await untrack(() =>
+            fetchFn ? fetchFn({ signal }) : query.resolvedOptions.queryFn!({ signal }),
+          );
           if (query.isCancelled || signal.aborted) {
             return;
           }
 
           let newData: TData;
           if (typeof query.resolvedOptions.structuralSharing === 'function') {
-            newData = query.resolvedOptions.structuralSharing(query.state.data(), result) as TData;
+            newData = query.resolvedOptions.structuralSharing(
+              query.state.data(),
+              result as Awaited<TQueryFnData>,
+            ) as TData;
           } else if (query.resolvedOptions.structuralSharing === false) {
             newData = result as TData;
           } else if (isDevelopment) {
@@ -483,7 +492,7 @@ export const createQuery = <
             if (throwOnError) {
               throw error;
             }
-            query.scheduleRetry(retryAttempt + 1, error);
+            query.scheduleRetry(retryAttempt + 1, error, fetchFn);
           }
         } finally {
           if (query.fetchPromise === fetchPromise) {
@@ -508,7 +517,7 @@ export const createQuery = <
 
       return fetchPromise;
     },
-    scheduleRetry: (attempt: number, error: TError) => {
+    scheduleRetry: (attempt: number, error: TError, fetchFn?: QueryFetchFn) => {
       const { retry, retryDelay } = query.resolvedOptions;
       if (retry === false) return;
       if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
@@ -523,7 +532,7 @@ export const createQuery = <
           window,
           'online',
           () => {
-            void query.fetch({ retryAttempt: attempt });
+            void query.fetch({ retryAttempt: attempt, fetchFn });
           },
           { once: true },
         );
@@ -532,7 +541,7 @@ export const createQuery = <
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
         const id = setTimeout(() => {
           query.retryDisposer = () => {};
-          void query.fetch({ retryAttempt: attempt });
+          void query.fetch({ retryAttempt: attempt, fetchFn });
         }, delay ?? 0);
         query.retryDisposer = () => clearTimeout(id);
       }

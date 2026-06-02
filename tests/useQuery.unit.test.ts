@@ -1,5 +1,6 @@
 import { expect, expectTypeOf, test, vi } from 'vite-plus/test';
-import { CancelledError, createQueryClient } from '../src/useQuery';
+import { createQueryClient } from '../src';
+import { CancelledError } from '../src/useQuery';
 import { sleep } from './utils';
 
 const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>

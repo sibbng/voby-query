@@ -68,9 +68,7 @@ function TodoList(props: { query: UseQueryResult<Todo[], Error> }) {
         <div>{() => props.query().error()?.message ?? 'Failed to load todos'}</div>
       </If>
       <ul>
-        <For values={() => props.query().data() ?? []}>
-          {(todo) => <li>{todo.title}</li>}
-        </For>
+        <For values={() => props.query().data() ?? []}>{(todo) => <li>{todo.title}</li>}</For>
       </ul>
     </>
   );

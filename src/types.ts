@@ -15,6 +15,23 @@ export type QueryRefetchOptions = {
   cancelRefetch?: boolean;
 };
 
+export type InfiniteQueryDirection = 'forward' | 'backward';
+
+export type InfiniteData<TData = unknown, TPageParam = unknown> = {
+  pages: TData[];
+  pageParams: TPageParam[];
+};
+
+export type InfiniteQueryFunctionContext<
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+> = {
+  signal: AbortSignal;
+  queryKey: TQueryKey;
+  pageParam: TPageParam;
+  direction: InfiniteQueryDirection;
+};
+
 export type QueryKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 export type MutationKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 
@@ -184,6 +201,41 @@ export type QueryOptions<
   queryKeyHashFn?: (queryKey: QueryKey) => string;
 };
 
+export type InfiniteQueryOptions<
+  TQueryFnData = unknown,
+  TError = Error,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+  R = void,
+  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
+> = Omit<
+  QueryOptions<
+    InfiniteData<TQueryFnData, TPageParam>,
+    TError,
+    InfiniteData<TQueryFnData, TPageParam>,
+    TQueryKey,
+    TInitialData,
+    R
+  >,
+  'queryFn'
+> & {
+  queryFn: (options: InfiniteQueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>;
+  initialPageParam: TPageParam;
+  getNextPageParam: (
+    lastPage: TQueryFnData,
+    allPages: TQueryFnData[],
+    lastPageParam: TPageParam,
+    allPageParams: TPageParam[],
+  ) => TPageParam | null | undefined;
+  getPreviousPageParam?: (
+    firstPage: TQueryFnData,
+    allPages: TQueryFnData[],
+    firstPageParam: TPageParam,
+    allPageParams: TPageParam[],
+  ) => TPageParam | null | undefined;
+  maxPages?: number;
+};
+
 export type MutationOptions<
   TData = unknown,
   TError = unknown,
@@ -299,6 +351,32 @@ type DefinedUseQueryResult<TData = unknown, TError = Error> = ObservableReadonly
 export type UseQueryReturn<TData, TError, TInitialData> = TInitialData extends undefined
   ? UseQueryResult<TData, TError>
   : DefinedUseQueryResult<TData, TError>;
+
+type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
+
+type UseInfiniteQueryResultMethods = UseQueryResultMethods & {
+  fetchNextPage: (options?: InfiniteQueryFetchPageOptions) => Promise<void>;
+  fetchPreviousPage: (options?: InfiniteQueryFetchPageOptions) => Promise<void>;
+  hasNextPage: ObservableReadonly<boolean>;
+  hasPreviousPage: ObservableReadonly<boolean>;
+  isFetchingNextPage: ObservableReadonly<boolean>;
+  isFetchingPreviousPage: ObservableReadonly<boolean>;
+};
+
+type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
+  UseInfiniteQueryResultMethods;
+
+export type UseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseInfiniteQueryResultValue<TData | undefined, TError>
+>;
+
+type DefinedUseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseInfiniteQueryResultValue<TData, TError>
+>;
+
+export type UseInfiniteQueryReturn<TData, TError, TInitialData> = TInitialData extends undefined
+  ? UseInfiniteQueryResult<TData, TError>
+  : DefinedUseInfiniteQueryResult<TData, TError>;
 
 type UseMutationResultMethods<
   TData = unknown,

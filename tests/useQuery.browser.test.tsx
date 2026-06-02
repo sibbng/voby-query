@@ -1,7 +1,8 @@
 import { expect, test, vi } from 'vite-plus/test';
 import { flush, render, sleep } from './utils';
 import { waitFor } from '@testing-library/dom';
-import { createQueryClient, useQuery } from '../src/useQuery';
+import { createQueryClient } from '../src';
+import { useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
 import { If, $, useMemo } from 'voby';
 
