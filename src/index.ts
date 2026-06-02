@@ -39,3 +39,6 @@ export type { MutationKey } from './types.ts';
 
 export { useIsFetching } from './useIsFetching.ts';
 export { useIsMutating } from './useIsMutating.ts';
+export { Subscribable } from './subscribable.ts';
+export type { QueryCacheNotifyEvent, QueryCacheConfig } from './queryCache.ts';
+export type { MutationCacheNotifyEvent } from './mutationCache.ts';

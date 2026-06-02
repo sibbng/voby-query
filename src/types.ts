@@ -313,9 +313,6 @@ export type QueryClient = {
   isFetching: (filters?: QueryFilters) => number;
   isMutating: (filters?: MutationFilters) => number;
   getQueryCache: () => QueryCache;
-  getQuerySnapshots: <TData = unknown, TError = unknown>(
-    filters?: QueryFilters,
-  ) => QuerySnapshot<TData, TError>[];
   getMutationCache: () => MutationCache;
   clear: () => void;
   getDefaultOptions: () => {

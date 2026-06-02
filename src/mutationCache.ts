@@ -1,11 +1,5 @@
-import type { Observable } from 'voby';
-import { createCacheState } from './cache.ts';
-import {
-  createMutation,
-  resolveMutationHash,
-  resolveMutationOptions,
-  type Mutation,
-} from './mutation.ts';
+import { createMutation, resolveMutationHash, resolveMutationOptions, type Mutation } from './mutation.ts';
+import { Subscribable } from './subscribable.ts';
 import type {
   MutationCache as MutationCacheType,
   MutationFilters,
@@ -13,6 +7,13 @@ import type {
   QueryClient,
 } from './types.ts';
 import { partialMatchKey } from './utils.ts';
+
+export type MutationCacheNotifyEvent =
+  | { type: 'added'; mutation: Mutation<any, any, any, any> }
+  | { type: 'removed'; mutation: Mutation<any, any, any, any> }
+  | { type: 'updated'; mutation: Mutation<any, any, any, any> };
+
+type MutationCacheListener = (event: MutationCacheNotifyEvent) => void;
 
 const matchesMutationFilters = <TMutation extends Mutation<any, any, any, any>>(
   mutation: TMutation,
@@ -40,21 +41,20 @@ const matchesMutationFilters = <TMutation extends Mutation<any, any, any, any>>(
 
 export class MutationCache<
   TMutation extends Mutation<any, any, any, any> = Mutation<any, any, any, any>,
-> {
-  readonly version: Observable<number>;
-
+> extends Subscribable<MutationCacheListener> {
   private readonly mutations: Map<string, TMutation>;
-  private readonly bump: () => void;
   private nextId: number;
 
   constructor(cache?: Map<string, TMutation>) {
-    const { map, version, bump } = createCacheState(
-      cache as (Map<string, TMutation> & { version?: Observable<number> }) | undefined,
-    );
-    this.mutations = map;
-    this.version = version;
-    this.bump = bump;
+    super();
+    this.mutations = new Map(cache);
     this.nextId = 0;
+  }
+
+  notify(event: MutationCacheNotifyEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
   }
 
   get size() {
@@ -71,7 +71,7 @@ export class MutationCache<
 
   set(cacheKey: string, mutation: TMutation) {
     this.mutations.set(cacheKey, mutation);
-    this.bump();
+    this.notify({ type: 'added', mutation: mutation as Mutation<any, any, any, any> });
     return this;
   }
 
@@ -141,7 +141,7 @@ export class MutationCache<
 
     this.mutations.delete(mutation.cacheKey);
     mutation.destroy();
-    this.bump();
+    this.notify({ type: 'removed', mutation: mutation as Mutation<any, any, any, any> });
   }
 
   clear() {
@@ -149,15 +149,13 @@ export class MutationCache<
     if (mutations.length === 0) return;
 
     this.mutations.clear();
-
     for (const mutation of mutations) {
       mutation.destroyDisposer();
       if (mutation.instances === 0) {
         mutation.destroy();
       }
     }
-
-    this.bump();
+    this.notify({ type: 'removed', mutation: mutations[mutations.length - 1] as Mutation<any, any, any, any> });
   }
 }
 

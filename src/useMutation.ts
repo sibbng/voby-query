@@ -1,4 +1,4 @@
-import { type ObservableReadonly, useCleanup, useMemo } from 'voby';
+import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
 import type { Mutation } from './mutation.ts';
 import { useQueryClient } from './queryClient.ts';
 import type {
@@ -58,9 +58,14 @@ export function useMutationState<TResult = MutationState>({
 } = {}): ObservableReadonly<TResult[]> {
   const queryClient = useQueryClient();
   const cache = queryClient.mutationCache;
+  const tick = $(0);
+
+  useCleanup(cache.subscribe(() => {
+    tick(v => v + 1);
+  }));
 
   return useMemo(() => {
-    cache.version();
+    tick();
     return cache
       .findAll(filters)
       .map((mutation) => (select ? select(mutation) : (mutation as unknown as TResult)));

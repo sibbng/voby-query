@@ -1,4 +1,4 @@
-import { $, $$, For, If, useEffect, useMemo } from 'voby';
+import { $, $$, For, If, useCleanup, useEffect, useMemo } from 'voby';
 import { useMutationState, useQueryClient, type QuerySnapshot } from 'voby-query';
 
 export type DebugScope = {
@@ -26,6 +26,53 @@ type MutationSnapshot = {
   error: unknown;
   isPaused: boolean;
   instances: number;
+};
+
+const resolveStaleTime = (query: any): number | 'static' => {
+  const staleTime = query.resolvedOptions.staleTime ?? 0;
+  return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+};
+
+const createQuerySnapshot = (query: any): QuerySnapshot<any, any> => {
+  const { state } = query;
+  const data = state.data();
+  const error = state.error();
+  return {
+    queryHash: query.queryHash,
+    queryKey: $$(query.resolvedOptions.queryKey as never) as unknown[],
+    status: state.status(),
+    fetchStatus: state.fetchStatus(),
+    enabled: Boolean(query.resolvedOptions.enabled),
+    isActive: query.isActive,
+    isCancelled: query.isCancelled,
+    isFetching: state.isFetching(),
+    isRefetching: state.isRefetching(),
+    isRefetchError: state.isRefetchError(),
+    isFetched: state.isFetched(),
+    isFetchedAfterMount: state.isFetchedAfterMount(),
+    isPaused: state.isPaused(),
+    isPending: state.isPending(),
+    isSuccess: state.isSuccess(),
+    isError: state.isError(),
+    isLoading: state.isLoading(),
+    isLoadingError: state.isLoadingError(),
+    isPlaceholderData: state.isPlaceholderData(),
+    isStale: state.isStale(),
+    isIdle: state.isIdle(),
+    isInvalidated: state.isInvalidated(),
+    observers: query.instances,
+    hasData: data !== undefined,
+    data,
+    dataUpdateCount: state.dataUpdateCount(),
+    dataUpdatedAt: state.dataUpdatedAt(),
+    error,
+    errorUpdateCount: state.errorUpdateCount(),
+    errorUpdatedAt: state.errorUpdatedAt(),
+    gcTime: query.resolvedOptions.gcTime ?? Infinity,
+    staleTime: resolveStaleTime(query),
+    refetchInterval: query.resolvedOptions.refetchInterval,
+    networkMode: query.resolvedOptions.networkMode,
+  };
 };
 
 const serializeKey = (key: readonly unknown[]) => JSON.stringify(key);
@@ -149,6 +196,14 @@ export const DebugPanel = ({ active }: { active: () => ActiveExample }) => {
   const selectedQueryHash = $<string | undefined>(undefined);
   const selectedMutationHash = $<string | undefined>(undefined);
 
+  const queryTick = $(0);
+
+  useCleanup(
+    queryClient.getQueryCache().subscribe(() => {
+      queryTick((v) => v + 1);
+    }),
+  );
+
   const defaults = queryClient.getDefaultOptions().queries;
   const retryDelayPreview =
     typeof defaults.retryDelay === 'function'
@@ -156,7 +211,8 @@ export const DebugPanel = ({ active }: { active: () => ActiveExample }) => {
       : defaults.retryDelay;
 
   const allQueries = useMemo(() => {
-    const snapshots = queryClient.getQuerySnapshots().slice();
+    queryTick();
+    const snapshots = queryClient.getQueryCache().getAll().map(createQuerySnapshot);
     snapshots.sort((left, right) => {
       const scoreDelta = queryScore(right) - queryScore(left);
       if (scoreDelta !== 0) return scoreDelta;
@@ -313,24 +369,16 @@ export const DebugPanel = ({ active }: { active: () => ActiveExample }) => {
 
       if (!prefixes.length) return;
 
-      for (const prefix of prefixes) {
-        if (action === 'invalidate') {
-          await queryClient.invalidateQueries(prefix ? { queryKey: prefix } : undefined);
-          continue;
-        }
-
-        if (action === 'refetch') {
-          await queryClient.refetchQueries(prefix ? { queryKey: prefix } : undefined);
-          continue;
-        }
-
-        if (action === 'reset') {
-          await queryClient.resetQueries(prefix ? { queryKey: prefix } : undefined);
-          continue;
-        }
-
-        queryClient.removeQueries(prefix ? { queryKey: prefix } : undefined);
-      }
+      await Promise.all(
+        prefixes.map((prefix) => {
+          const filters = prefix ? { queryKey: prefix } : undefined;
+          if (action === 'invalidate') return queryClient.invalidateQueries(filters);
+          if (action === 'refetch') return queryClient.refetchQueries(filters);
+          if (action === 'reset') return queryClient.resetQueries(filters);
+          queryClient.removeQueries(filters);
+          return undefined;
+        }),
+      );
     } finally {
       busyAction(null);
     }

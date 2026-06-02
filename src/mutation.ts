@@ -172,6 +172,7 @@ export const createMutation = <
       mutation.state.submittedAt(undefined);
       mutation.state.variables(undefined);
       mutation.state.meta((mutation.resolvedOptions.meta ?? {}) as Record<string, unknown>);
+      mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
     },
     mutate: async (variables, mutateOptions) => {
       if (mutationHash && !mutationCache.has(mutationHash)) {
@@ -187,6 +188,7 @@ export const createMutation = <
       mutation.state.variables(variables);
       mutation.state.submittedAt(Date.now());
       mutation.state.meta((mutation.resolvedOptions.meta ?? {}) as Record<string, unknown>);
+      mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
 
       let context: TContext | undefined;
 
@@ -229,6 +231,7 @@ export const createMutation = <
         mutation.state.error(null);
         mutation.state.failureCount(0);
         mutation.state.failureReason(null);
+        mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
 
         await mutation.resolvedOptions.onSuccess?.(data, variables, context);
         mutateOptions?.onSuccess?.(data, variables, context);
@@ -244,6 +247,7 @@ export const createMutation = <
         if (mutation.state.failureCount() === 0) {
           mutation.state.failureCount(1);
         }
+        mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
 
         await mutation.resolvedOptions.onError?.(error as TError, variables, context);
         mutateOptions?.onError?.(error as TError, variables, context);

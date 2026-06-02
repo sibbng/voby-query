@@ -1,7 +1,7 @@
 import { useContext } from 'voby';
 import { QueryClientContext } from './context.ts';
 import { createMutationCache } from './mutationCache.ts';
-import { createQuerySnapshot, setQuerySuccessData, type Query } from './query.ts';
+import { setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
 import type { Mutation } from './mutation.ts';
 import type {
@@ -198,6 +198,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     }
 
     setQuerySuccessData(query, resolvedData);
+    cache.notify({ type: 'updated', query: query as QueryLike });
   };
 
   const invalidateQueries: QueryClient['invalidateQueries'] = async (
@@ -210,6 +211,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     for (const query of queriesToInvalidate) {
       query.state.isInvalidated(true);
       query.state.isStale(true);
+      cache.notify({ type: 'updated', query: query as QueryLike });
     }
 
     if (refetchType === 'none') return;
@@ -290,6 +292,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
 
     const resetPromises = queriesToReset.map(async (query) => {
       query.reset();
+      cache.notify({ type: 'updated', query: query as QueryLike });
       if (query.isActive) {
         try {
           await query.refetch({ throwOnError, cancelRefetch });
@@ -383,17 +386,6 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     return cache;
   };
 
-  const getQuerySnapshots: QueryClient['getQuerySnapshots'] = <TData = unknown, TError = unknown>(
-    filters?: QueryFilters,
-  ) => {
-    cache.version();
-    return cache
-      .findAll(filters)
-      .map((query) =>
-        createQuerySnapshot<TData, TError>(query as Query<any, TError, TData, any, any, any>),
-      );
-  };
-
   const getMutationCache = (): MutationCache => {
     return mutationCache;
   };
@@ -430,7 +422,6 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     jobQueue,
     startQueueJob,
     finishQueueJob,
-    getQuerySnapshots,
   };
 
   return queryClient;

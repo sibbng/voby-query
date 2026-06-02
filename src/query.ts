@@ -12,7 +12,7 @@ import type {
   QueryState,
   QueryStatus,
 } from './types.ts';
-import { replaceEqualDeep, resolveKey } from './utils.ts';
+import { replaceEqualDeep } from './utils.ts';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -194,50 +194,8 @@ export const setQuerySuccessData = (
   if (scheduleStale) scheduleQueryStale(query);
 };
 
-export const createQuerySnapshot = <TData = unknown, TError = Error>(
-  query: Query<any, TError, TData, any, any, any>,
-): QuerySnapshot<TData, TError> => {
-  const { state } = query;
-  const data = state.data();
-  const error = state.error();
 
-  return {
-    queryHash: query.queryHash,
-    queryKey: resolveKey(query.resolvedOptions.queryKey),
-    status: state.status(),
-    fetchStatus: state.fetchStatus(),
-    enabled: Boolean(query.resolvedOptions.enabled),
-    isActive: query.isActive,
-    isCancelled: query.isCancelled,
-    isFetching: state.isFetching(),
-    isRefetching: state.isRefetching(),
-    isRefetchError: state.isRefetchError(),
-    isFetched: state.isFetched(),
-    isFetchedAfterMount: state.isFetchedAfterMount(),
-    isPaused: state.isPaused(),
-    isPending: state.isPending(),
-    isSuccess: state.isSuccess(),
-    isError: state.isError(),
-    isLoading: state.isLoading(),
-    isLoadingError: state.isLoadingError(),
-    isPlaceholderData: state.isPlaceholderData(),
-    isStale: state.isStale(),
-    isIdle: state.isIdle(),
-    isInvalidated: state.isInvalidated(),
-    observers: query.instances,
-    hasData: data !== undefined,
-    data,
-    dataUpdateCount: state.dataUpdateCount(),
-    dataUpdatedAt: state.dataUpdatedAt(),
-    error,
-    errorUpdateCount: state.errorUpdateCount(),
-    errorUpdatedAt: state.errorUpdatedAt(),
-    gcTime: query.resolvedOptions.gcTime ?? Infinity,
-    staleTime: resolveStaleTime(query),
-    refetchInterval: query.resolvedOptions.refetchInterval,
-    networkMode: query.resolvedOptions.networkMode,
-  };
-};
+
 
 export const createQuery = <
   TQueryFnData = unknown,
@@ -478,6 +436,9 @@ export const createQuery = <
 
           setQuerySuccessData(query, newData, Date.now(), false);
           didFetchSucceed = true;
+          cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
+          cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
+          cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
         } catch (err) {
           if (!signal.aborted) {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
@@ -493,6 +454,9 @@ export const createQuery = <
               throw error;
             }
             query.scheduleRetry(retryAttempt + 1, error, fetchFn);
+            cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
+            cache.config.onSettled?.(query.state.data(), error as unknown, query as Query<any, any, any, any>);
+            cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
           }
         } finally {
           if (query.fetchPromise === fetchPromise) {

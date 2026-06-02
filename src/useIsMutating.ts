@@ -1,4 +1,4 @@
-import { type ObservableReadonly, useMemo } from 'voby';
+import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
 import { useQueryClient } from './queryClient.ts';
 import type { MutationFilters, QueryClient } from './types.ts';
 
@@ -11,9 +11,14 @@ export function useIsMutating({
 } = {}): ObservableReadonly<number> {
   const queryClient = useQueryClient(overrideClient);
   const cache = queryClient.mutationCache;
+  const tick = $(0);
+
+  useCleanup(cache.subscribe(() => {
+    tick(v => v + 1);
+  }));
 
   return useMemo((): number => {
-    cache.version();
+    tick();
     const allMutations = cache.getAll();
     for (const mutation of allMutations) {
       mutation.state.status();

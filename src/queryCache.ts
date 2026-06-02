@@ -1,6 +1,5 @@
-import type { Observable } from 'voby';
-import { createCacheState } from './cache.ts';
 import { createQuery, resolveQueryOptions, type Query } from './query.ts';
+import { Subscribable } from './subscribable.ts';
 import type {
   QueryCache as QueryCacheType,
   QueryClient,
@@ -9,6 +8,23 @@ import type {
   QueryOptions,
 } from './types.ts';
 import { partialMatchKey } from './utils.ts';
+
+export interface QueryCacheConfig {
+  onError?: (error: unknown, query: Query<any, any, any, any>) => void;
+  onSuccess?: (data: unknown, query: Query<any, any, any, any>) => void;
+  onSettled?: (
+    data: unknown | undefined,
+    error: unknown | null,
+    query: Query<any, any, any, any>,
+  ) => void;
+}
+
+export type QueryCacheNotifyEvent =
+  | { type: 'added'; query: Query<any, any, any, any> }
+  | { type: 'removed'; query: Query<any, any, any, any> }
+  | { type: 'updated'; query: Query<any, any, any, any> };
+
+type QueryCacheListener = (event: QueryCacheNotifyEvent) => void;
 
 const matchesQueryFilters = <TQuery extends Query<any, any, any, any>>(
   query: TQuery,
@@ -34,19 +50,22 @@ const matchesQueryFilters = <TQuery extends Query<any, any, any, any>>(
   return true;
 };
 
-export class QueryCache<TQuery extends Query<any, any, any, any> = Query<any, any, any, any>> {
-  readonly version: Observable<number>;
-
+export class QueryCache<TQuery extends Query<any, any, any, any> = Query<any, any, any, any>>
+  extends Subscribable<QueryCacheListener> {
   private readonly queries: Map<string, TQuery>;
-  private readonly bump: () => void;
 
-  constructor(cache?: Map<string, TQuery>) {
-    const { map, version, bump } = createCacheState(
-      cache as (Map<string, TQuery> & { version?: Observable<number> }) | undefined,
-    );
-    this.queries = map;
-    this.version = version;
-    this.bump = bump;
+  constructor(
+    public config: QueryCacheConfig = {},
+    cache?: Map<string, TQuery>,
+  ) {
+    super();
+    this.queries = new Map(cache);
+  }
+
+  notify(event: QueryCacheNotifyEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
   }
 
   get size() {
@@ -63,7 +82,7 @@ export class QueryCache<TQuery extends Query<any, any, any, any> = Query<any, an
 
   set(queryHash: string, query: TQuery) {
     this.queries.set(queryHash, query);
-    this.bump();
+    this.notify({ type: 'added', query: query as Query<any, any, any, any> });
     return this;
   }
 
@@ -138,23 +157,26 @@ export class QueryCache<TQuery extends Query<any, any, any, any> = Query<any, an
 
     this.queries.delete(query.queryHash);
     query.destroy();
-    this.bump();
+    this.notify({ type: 'removed', query: query as Query<any, any, any, any> });
   }
 
   clear() {
     const queries = this.getAll();
     if (queries.length === 0) return;
 
-    this.queries.clear();
     for (const query of queries) {
-      query.destroy();
+      this.remove(query);
     }
-    this.bump();
   }
 }
 
 export const createQueryCache = <TQuery extends Query<any, any, any, any>>(
-  cache?: QueryCache<TQuery> | Map<string, TQuery>,
+  config?: QueryCacheConfig | QueryCache<TQuery> | Map<string, TQuery>,
+  cache?: Map<string, TQuery>,
 ) => {
-  return cache instanceof QueryCache ? cache : new QueryCache(cache);
+  if (config instanceof QueryCache) return config;
+  if (typeof config === 'object' && !(config instanceof Map)) {
+    return new QueryCache<TQuery>(config, cache);
+  }
+  return new QueryCache<TQuery>({}, config as Map<string, TQuery> | undefined);
 };
