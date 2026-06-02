@@ -82,13 +82,13 @@ export const createMutation = <
   resolvedOptions: MutationOptions<TData, TError, TVariables, TContext>;
 }): Mutation<TData, TError, TVariables, TContext> => {
   const shouldRetry = (failureCount: number, error: TError): boolean => {
-    if (!resolvedOptions.retry) return false;
-    if (typeof resolvedOptions.retry === 'function') {
-      return resolvedOptions.retry(failureCount, error);
+    const { retry } = mutation.resolvedOptions;
+
+    if (!retry) return false;
+    if (typeof retry === 'function') {
+      return retry(failureCount, error);
     }
-    return typeof resolvedOptions.retry === 'boolean'
-      ? resolvedOptions.retry
-      : resolvedOptions.retry > failureCount;
+    return typeof retry === 'boolean' ? retry : retry > failureCount;
   };
 
   let state!: MutationState<TData, TError, TVariables, TContext>;

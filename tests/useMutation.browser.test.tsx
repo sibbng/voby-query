@@ -270,6 +270,70 @@ test('useMutation onSettled callback (on error)', async () => {
   expect(mutationResult().error()).toBe(testError);
 });
 
+test('useMutation refreshes retry options for an existing mutationKey', async () => {
+  const queryClient = createQueryClient();
+  const useRetry = $(false);
+  let attempts = 0;
+  let mutationResult: any;
+
+  function WithoutRetry() {
+    const mutation = useMutation<string, Error, string>({
+      mutationKey: ['refresh-retry-options'],
+      mutationFn: async () => {
+        attempts++;
+        throw new Error('no retry');
+      },
+      retry: false,
+      retryDelay: 0,
+    });
+    mutationResult = mutation;
+    return null;
+  }
+
+  function WithRetry() {
+    const mutation = useMutation<string, Error, string>({
+      mutationKey: ['refresh-retry-options'],
+      mutationFn: async () => {
+        attempts++;
+        throw new Error('retry once');
+      },
+      retry: (failureCount) => failureCount < 2,
+      retryDelay: 0,
+    });
+    mutationResult = mutation;
+    return null;
+  }
+
+  function TestComponent() {
+    return (
+      <If when={useRetry} fallback={<WithoutRetry />}>
+        <WithRetry />
+      </If>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await mutationResult()
+    .mutate('first')
+    .catch(() => {});
+  expect(attempts).toBe(1);
+
+  useRetry(true);
+  await flush();
+
+  await mutationResult()
+    .mutate('second')
+    .catch(() => {});
+
+  expect(attempts).toBe(3);
+});
+
 test('useMutation onMutate and context passing', async () => {
   const queryClient = createQueryClient();
   const onMutateMock = vi.fn(async (variables: string) => {
