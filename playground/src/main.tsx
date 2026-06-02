@@ -14,6 +14,7 @@ import { CancellationDemo, meta as cancellationMeta } from '../examples/cancella
 import { SelectDemo, meta as selectMeta } from '../examples/select';
 import { StaleTimeDemo, meta as staleTimeMeta } from '../examples/stale-time';
 import { IsFetchingDemo, meta as isFetchingMeta } from '../examples/is-fetching';
+import { SuspenseDemo, meta as suspenseMeta } from '../examples/suspense';
 import { DebugPanel, type DebugScope } from './debug-panel';
 
 const SESSION_KEY = 'voby-query-playground-example';
@@ -117,6 +118,14 @@ const examples: Example[] = [
     debug: {
       queryPrefixes: [['fetch-slow']],
       note: 'Tracks all simulated fetch queries used by this example.',
+    },
+  },
+  {
+    ...suspenseMeta,
+    component: SuspenseDemo,
+    debug: {
+      queryPrefixes: [['suspense-posts']],
+      note: 'Uses useSuspenseQuery inside a Voby <Suspense> boundary with a spinner fallback.',
     },
   },
 ];

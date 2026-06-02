@@ -349,6 +349,27 @@ export type UseQueryReturn<TData, TError, TInitialData> = TInitialData extends u
   ? UseQueryResult<TData, TError>
   : DefinedUseQueryResult<TData, TError>;
 
+export type UseSuspenseQueryOptions<
+  TQueryFnData = unknown,
+  TError = Error,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TInitialData extends TQueryFnData | undefined = undefined,
+  R = void,
+> = Omit<
+  QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+  'enabled' | 'placeholderData' | 'throwOnError'
+>;
+
+type UseSuspenseQueryResultValue<TData, TError = Error> = Omit<
+  UseQueryResultValue<TData, TError>,
+  'isPlaceholderData'
+>;
+
+export type UseSuspenseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseSuspenseQueryResultValue<TData, TError>
+>;
+
 type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
 type UseInfiniteQueryResultMethods = UseQueryResultMethods & {
