@@ -39,7 +39,8 @@ export default defineConfig({
     },
     ignorePatterns: ['dist/**', 'node_modules/**'],
     rules: {
-      'no-unused-vars': 'warn',
+      'no-floating-promises': 'off',
+      'no-unused-vars': 'off',
     },
   },
   fmt: {

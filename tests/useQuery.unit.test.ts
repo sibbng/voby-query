@@ -730,7 +730,7 @@ test('queryClient.setQueryData ignores undefined updater results', async () => {
 test('failed fetches remain stale and background errors invalidate existing data', async () => {
   const queryClient = createQueryClient();
 
-  await queryClient.fetchQuery({
+  await queryClient.prefetchQuery({
     queryKey: ['initial-error-stale'],
     queryFn: async () => {
       throw new Error('initial failure');

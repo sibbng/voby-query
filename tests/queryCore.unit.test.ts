@@ -302,7 +302,7 @@ test('reset from success returns to pending state', async () => {
 test('reset from error clears error and returns to pending', async () => {
   const queryClient = createQueryClient();
 
-  await queryClient.fetchQuery({
+  await queryClient.prefetchQuery({
     queryKey: ['reset-error'],
     queryFn: async () => {
       throw new Error('fail');
@@ -481,7 +481,7 @@ test('isFetched is true after first success', async () => {
 test('isLoadingError is true when initial fetch fails', async () => {
   const queryClient = createQueryClient();
 
-  await queryClient.fetchQuery({
+  await queryClient.prefetchQuery({
     queryKey: ['loading-error'],
     queryFn: async () => {
       throw new Error('fail');

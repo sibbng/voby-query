@@ -166,7 +166,11 @@ export type QueryOptions<
   R = void,
 > = {
   queryKey: TQueryKey;
-  queryFn?: (options: { signal: AbortSignal }) => Promise<TQueryFnData>;
+  queryFn?: (options: {
+    signal: AbortSignal;
+    queryKey: TQueryKey;
+    meta?: Record<string, unknown>;
+  }) => Promise<TQueryFnData>;
   queryClient?: QueryClient;
   initialData?: TInitialData;
   initialDataUpdatedAt?: number;
@@ -198,6 +202,7 @@ export type QueryOptions<
     | ((
         query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
       ) => boolean | 'always');
+  meta?: Record<string, unknown>;
   queryKeyHashFn?: (queryKey: QueryKey) => string;
 };
 

@@ -1,7 +1,7 @@
 import { useContext } from 'voby';
 import { QueryClientContext } from './context.ts';
 import { createMutationCache } from './mutationCache.ts';
-import { setQuerySuccessData, type Query } from './query.ts';
+import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
 import type { Mutation } from './mutation.ts';
 import type {
@@ -16,7 +16,7 @@ import type {
   QueryOptions,
   QueryRefetchOptions,
 } from './types.ts';
-import { hashFn, partialMatchKey } from './utils.ts';
+import { functionalUpdate, hashFn, noop, partialMatchKey } from './utils.ts';
 
 type QueryLike = Query<any, any, any, any>;
 
@@ -163,10 +163,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
   const setQueryData: QueryClient['setQueryData'] = (queryKey, data) => {
     const queryHash = queryKeyHashFn(queryKey);
     let query = cache.get(queryHash) as QueryLike | undefined;
-    const resolvedData =
-      typeof data === 'function'
-        ? (data as (previous: unknown) => unknown)(query?.state.data())
-        : data;
+    const resolvedData = functionalUpdate(data, query?.state.data());
 
     if (resolvedData === undefined) {
       return;
@@ -239,9 +236,13 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
       );
     }
 
-    const refetchPromises = queriesToRefetch.map((query) =>
-      query.fetch({ throwOnError, force: true }),
-    );
+    const refetchPromises = queriesToRefetch.map((query) => {
+      let promise = query.fetch({ throwOnError, force: true });
+      if (!throwOnError) {
+        promise = promise.catch(noop);
+      }
+      return promise;
+    });
 
     await Promise.all(refetchPromises);
   };
@@ -308,7 +309,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
 
     if (currentData !== undefined) {
       if (revalidateIfStale && query.state.isStale()) {
-        query.fetch({ force: true }).catch(() => {});
+        query.fetch({ force: true }).catch(noop);
       }
       return currentData as TData;
     }
@@ -326,13 +327,40 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
   >(
     options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
   ): Promise<TData> => {
-    const { queryKey, queryFn, ...restOptions } = options;
-    const query = cache.build(queryClient, {
-      queryKey,
-      queryFn,
-      ...restOptions,
-    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>);
-    await query.fetch({ force: true });
+    const query = cache.build(
+      queryClient,
+      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
+    ) as QueryLike;
+
+    // Return fresh cached data if available (TanStack: isStaleByTime check)
+    if (query.state.data() !== undefined) {
+      const staleTime = resolveStaleTime(query as Query<any, any, any, any, any, any>);
+      const isFresh =
+        staleTime === 'static' ||
+        staleTime === Infinity ||
+        Date.now() - query.state.dataUpdatedAt() < staleTime;
+      if (isFresh) {
+        return query.state.data() as TData;
+      }
+    }
+
+    // TanStack: fetchQuery doesn't retry by default
+    // https://github.com/tannerlinsley/react-query/issues/652
+    if (options.retry === undefined) {
+      const originalRetry = query.resolvedOptions.retry;
+      query.resolvedOptions.retry = false;
+      try {
+        await query.fetch({ force: true });
+      } finally {
+        query.resolvedOptions.retry = originalRetry;
+      }
+      // Propagate error when fetchQuery forced retry=false (TanStack behavior)
+      if (query.state.error()) {
+        throw query.state.error();
+      }
+    } else {
+      await query.fetch({ force: true });
+    }
     return query.state.data() as TData;
   };
 
@@ -345,11 +373,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
   >(
     options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
   ): Promise<void> => {
-    try {
-      await fetchQuery(options);
-    } catch {
-      // Silently catch any errors
-    }
+    await fetchQuery(options).catch(noop);
   };
 
   const isFetching = (filters?: QueryFilters): number => {

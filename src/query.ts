@@ -8,11 +8,10 @@ import type {
   QueryKey,
   QueryOptions,
   QueryRefetchOptions,
-  QuerySnapshot,
   QueryState,
   QueryStatus,
 } from './types.ts';
-import { replaceEqualDeep } from './utils.ts';
+import { ensureQueryFn, replaceData, shouldThrowError } from './utils.ts';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -39,7 +38,11 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   fetchStatus: FetchStatus;
   isStale: boolean;
 };
-type QueryFetchFn = (options: { signal: AbortSignal }) => Promise<unknown>;
+type QueryFetchFn = (options: {
+  signal: AbortSignal;
+  queryKey: QueryKey;
+  meta?: Record<string, unknown>;
+}) => Promise<unknown>;
 type QueryFetchOptions = {
   retryAttempt?: number;
   throwOnError?: boolean;
@@ -402,24 +405,22 @@ export const createQuery = <
       fetchPromise = (async () => {
         try {
           query.state.fetchStatus('fetching');
+          const meta = query.resolvedOptions.meta;
           const result = await untrack(() =>
-            fetchFn ? fetchFn({ signal }) : query.resolvedOptions.queryFn!({ signal }),
+            (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
+              signal,
+              queryKey: query.resolvedOptions.queryKey,
+              meta,
+            }),
           );
           if (query.isCancelled || signal.aborted) {
             return;
           }
 
           let newData: TData;
-          if (typeof query.resolvedOptions.structuralSharing === 'function') {
-            newData = query.resolvedOptions.structuralSharing(
-              query.state.data(),
-              result as Awaited<TQueryFnData>,
-            ) as TData;
-          } else if (query.resolvedOptions.structuralSharing === false) {
-            newData = result as TData;
-          } else if (isDevelopment) {
+          if (isDevelopment) {
             try {
-              newData = replaceEqualDeep(query.state.data(), result) as TData;
+              newData = replaceData(query.state.data(), result, query.resolvedOptions) as TData;
             } catch (error) {
               console.error(
                 `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${String(error)}`,
@@ -428,7 +429,7 @@ export const createQuery = <
               throw error;
             }
           } else {
-            newData = replaceEqualDeep(query.state.data(), result) as TData;
+            newData = replaceData(query.state.data(), result, query.resolvedOptions) as TData;
           }
 
           setQuerySuccessData(query, newData, Date.now(), false);
@@ -447,7 +448,7 @@ export const createQuery = <
             query.staleDisposer();
             query.staleDisposer = () => {};
             query.state.isStale(true);
-            if (throwOnError) {
+            if (shouldThrowError(throwOnError, [error])) {
               throw error;
             }
             query.scheduleRetry(retryAttempt + 1, error, fetchFn);

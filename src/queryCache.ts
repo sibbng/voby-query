@@ -7,16 +7,12 @@ import type {
   QueryKey,
   QueryOptions,
 } from './types.ts';
-import { partialMatchKey } from './utils.ts';
+import { hashQueryKeyByOptions, matchQuery as matchQueryFilter } from './utils.ts';
 
 export interface QueryCacheConfig {
   onError?: (error: unknown, query: Query<any, any, any, any>) => void;
   onSuccess?: (data: unknown, query: Query<any, any, any, any>) => void;
-  onSettled?: (
-    data: unknown | undefined,
-    error: unknown | null,
-    query: Query<any, any, any, any>,
-  ) => void;
+  onSettled?: (data: unknown, error: unknown, query: Query<any, any, any, any>) => void;
 }
 
 export type QueryCacheNotifyEvent =
@@ -25,30 +21,6 @@ export type QueryCacheNotifyEvent =
   | { type: 'updated'; query: Query<any, any, any, any> };
 
 type QueryCacheListener = (event: QueryCacheNotifyEvent) => void;
-
-const matchesQueryFilters = <TQuery extends Query<any, any, any, any>>(
-  query: TQuery,
-  filters?: QueryFilters,
-) => {
-  if (!filters) return true;
-
-  const { queryKey, exact = false, type = 'all', stale, fetchStatus, predicate } = filters;
-
-  if (queryKey) {
-    const matchesKey = exact
-      ? query.queryHash === query.resolvedOptions.queryKeyHashFn!(queryKey)
-      : partialMatchKey(queryKey, query.resolvedOptions.queryKey);
-    if (!matchesKey) return false;
-  }
-  if (type === 'active' && !query.isActive) return false;
-  if (type === 'inactive' && query.isActive) return false;
-  if (stale === true && !query.state.isStale()) return false;
-  if (stale === false && query.state.isStale()) return false;
-  if (fetchStatus && query.state.fetchStatus() !== fetchStatus) return false;
-  if (predicate && !predicate(query)) return false;
-
-  return true;
-};
 
 export class QueryCache<
   TQuery extends Query<any, any, any, any> = Query<any, any, any, any>,
@@ -116,7 +88,11 @@ export class QueryCache<
   }
 
   findAll(filters?: QueryFilters) {
-    return this.getAll().filter((query) => matchesQueryFilters(query, filters));
+    return this.getAll().filter((query) => matchQueryFilter(filters, query));
+  }
+
+  find(filters?: QueryFilters) {
+    return this.findAll(filters)[0];
   }
 
   build<
@@ -131,7 +107,7 @@ export class QueryCache<
     options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
   ) {
     const resolvedOptions = resolveQueryOptions(queryClient, options);
-    const queryHash = resolvedOptions.queryKeyHashFn!(resolvedOptions.queryKey);
+    const queryHash = hashQueryKeyByOptions(resolvedOptions.queryKey, resolvedOptions);
     const existingQuery = this.get(queryHash) as
       | Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>
       | undefined;

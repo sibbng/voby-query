@@ -11,7 +11,7 @@ import type {
   MutationOptions,
   QueryClient,
 } from './types.ts';
-import { partialMatchKey } from './utils.ts';
+import { matchMutation } from './utils.ts';
 
 export type MutationCacheNotifyEvent =
   | { type: 'added'; mutation: Mutation<any, any, any, any> }
@@ -19,30 +19,6 @@ export type MutationCacheNotifyEvent =
   | { type: 'updated'; mutation: Mutation<any, any, any, any> };
 
 type MutationCacheListener = (event: MutationCacheNotifyEvent) => void;
-
-const matchesMutationFilters = <TMutation extends Mutation<any, any, any, any>>(
-  mutation: TMutation,
-  filters?: MutationFilters,
-) => {
-  if (!filters) return true;
-
-  const { mutationKey, exact = false, status, predicate } = filters;
-
-  if (mutationKey) {
-    const currentMutationKey = mutation.resolvedOptions.mutationKey;
-    if (!currentMutationKey) return false;
-
-    const matchesKey = exact
-      ? resolveMutationHash(currentMutationKey) === resolveMutationHash(mutationKey)
-      : partialMatchKey(mutationKey, currentMutationKey);
-    if (!matchesKey) return false;
-  }
-
-  if (status && mutation.state.status() !== status) return false;
-  if (predicate && !predicate(mutation)) return false;
-
-  return true;
-};
 
 export class MutationCache<
   TMutation extends Mutation<any, any, any, any> = Mutation<any, any, any, any>,
@@ -109,7 +85,11 @@ export class MutationCache<
   }
 
   findAll(filters?: MutationFilters) {
-    return this.getAll().filter((mutation) => matchesMutationFilters(mutation, filters));
+    return this.getAll().filter((mutation) => matchMutation(filters, mutation));
+  }
+
+  find(filters?: MutationFilters) {
+    return this.findAll(filters)[0];
   }
 
   build<TData = unknown, TError = unknown, TVariables = TData, TContext = unknown>(

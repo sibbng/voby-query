@@ -1,3 +1,4 @@
+import { addToEnd, addToStart } from './utils.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
@@ -10,16 +11,6 @@ type InfiniteOptionsLike<
   TQueryKey extends QueryKey,
   TPageParam,
 > = InfiniteQueryOptions<TQueryFnData, any, TQueryKey, TPageParam, any, any>;
-
-const addToEnd = <T>(items: T[], item: T, maxItems?: number): T[] => {
-  const nextItems = [...items, item];
-  return maxItems && maxItems > 0 ? nextItems.slice(-maxItems) : nextItems;
-};
-
-const addToStart = <T>(items: T[], item: T, maxItems?: number): T[] => {
-  const nextItems = [item, ...items];
-  return maxItems && maxItems > 0 ? nextItems.slice(0, maxItems) : nextItems;
-};
 
 export const getNextPageParam = <TQueryFnData, TPageParam>(
   options: Pick<InfiniteOptionsLike<TQueryFnData, any, TPageParam>, 'getNextPageParam'>,

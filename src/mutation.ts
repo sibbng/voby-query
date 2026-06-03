@@ -1,5 +1,5 @@
 import { $, useMemo, useRoot } from 'voby';
-import { hashFn } from './utils.ts';
+import { hashFn, shouldThrowError } from './utils.ts';
 import type {
   MutateOptions,
   MutationKey,
@@ -261,11 +261,7 @@ export const createMutation = <
         await mutation.resolvedOptions.onSettled?.(undefined, error as TError, variables, context);
         mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
 
-        const shouldThrow =
-          typeof mutation.resolvedOptions.throwOnError === 'function'
-            ? mutation.resolvedOptions.throwOnError(error as TError)
-            : mutation.resolvedOptions.throwOnError;
-        if (shouldThrow) {
+        if (shouldThrowError(mutation.resolvedOptions.throwOnError, [error as TError])) {
           throw error;
         }
       }

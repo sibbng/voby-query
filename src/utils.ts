@@ -1,11 +1,20 @@
 import { $$ } from 'voby';
-import type { MutationKey, QueryKey, QueryOptions } from './types.ts';
-
-export function queryOptions<Q extends QueryOptions>(options: Q): Q {
-  return options;
-}
+import type { Mutation } from './mutation.ts';
+import type { Query } from './query.ts';
+import type { FetchStatus, MutationKey, QueryKey } from './types.ts';
 
 // #region Utils
+
+export function noop(): undefined {
+  return undefined;
+}
+
+export function functionalUpdate<TInput, TOutput>(
+  updater: TOutput | ((input: TInput) => TOutput),
+  input: TInput,
+): TOutput {
+  return typeof updater === 'function' ? (updater as (input: TInput) => TOutput)(input) : updater;
+}
 
 export const hashFn = (queryKey: QueryKey | MutationKey): string => {
   return JSON.stringify(resolveKey(queryKey), (_, val) => {
@@ -23,7 +32,17 @@ export const hashFn = (queryKey: QueryKey | MutationKey): string => {
   });
 };
 
-export const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
+export const hashKey = hashFn;
+
+export function hashQueryKeyByOptions<TQueryKey extends QueryKey = QueryKey>(
+  queryKey: TQueryKey,
+  options?: { queryKeyHashFn?: (key: TQueryKey) => string },
+): string {
+  const hashFnOption = options?.queryKeyHashFn || hashKey;
+  return hashFnOption(queryKey);
+}
+
+const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
   const resolved = $$(queryKey);
   return Array.isArray(resolved) ? resolved.map((item) => $$(item)) : [];
 };
@@ -59,6 +78,79 @@ const partialDeepMatch = (a: unknown, b: unknown): boolean => {
 
   return false;
 };
+
+interface QueryFilters<TQueryKey extends QueryKey = QueryKey> {
+  type?: 'all' | 'active' | 'inactive';
+  exact?: boolean;
+  predicate?: (query: Query) => boolean;
+  queryKey?: TQueryKey;
+  stale?: boolean;
+  fetchStatus?: FetchStatus;
+}
+
+export function matchQuery<TQuery extends Query>(
+  filters: QueryFilters | undefined,
+  query: TQuery,
+): boolean {
+  if (!filters) return true;
+  const { type = 'all', exact, fetchStatus, predicate, queryKey, stale } = filters;
+
+  if (queryKey) {
+    if (exact) {
+      if (query.queryHash !== hashQueryKeyByOptions(queryKey, query.resolvedOptions)) {
+        return false;
+      }
+    } else if (!partialMatchKey(queryKey, query.resolvedOptions.queryKey)) {
+      return false;
+    }
+  }
+
+  if (type !== 'all') {
+    const isActive = query.isActive;
+    if (type === 'active' && !isActive) return false;
+    if (type === 'inactive' && isActive) return false;
+  }
+
+  if (typeof stale === 'boolean' && query.state.isStale() !== stale) return false;
+
+  if (fetchStatus && fetchStatus !== query.state.fetchStatus()) return false;
+
+  if (predicate && !predicate(query)) return false;
+
+  return true;
+}
+
+interface MutationFilters<TMutation extends Mutation = Mutation> {
+  exact?: boolean;
+  predicate?: (mutation: TMutation) => boolean;
+  mutationKey?: MutationKey;
+  status?: string;
+}
+
+export function matchMutation<TMutation extends Mutation>(
+  filters: MutationFilters<TMutation> | undefined,
+  mutation: TMutation,
+): boolean {
+  if (!filters) return true;
+
+  const { exact, status, predicate, mutationKey } = filters;
+
+  if (mutationKey) {
+    if (!mutation.resolvedOptions.mutationKey) return false;
+
+    if (exact) {
+      if (hashFn(mutation.resolvedOptions.mutationKey) !== hashFn(mutationKey)) return false;
+    } else if (!partialMatchKey(mutationKey, mutation.resolvedOptions.mutationKey)) {
+      return false;
+    }
+  }
+
+  if (status && mutation.state.status() !== status) return false;
+
+  if (predicate && !predicate(mutation)) return false;
+
+  return true;
+}
 
 // Copied from: https://github.com/jonschlinkert/is-plain-object
 export function isPlainObject(o: any): o is object {
@@ -143,4 +235,61 @@ export function replaceEqualDeep(a: any, b: any): any {
   }
 
   return b;
+}
+
+export function replaceData<TData>(
+  prevData: TData | undefined,
+  data: TData,
+  options: { structuralSharing?: unknown },
+): TData {
+  if (typeof options.structuralSharing === 'function') {
+    return options.structuralSharing(prevData, data) as TData;
+  }
+  if (options.structuralSharing !== false) {
+    return replaceEqualDeep(prevData, data);
+  }
+  return data;
+}
+
+export function addToEnd<T>(items: Array<T>, item: T, max = 0): Array<T> {
+  const newItems = [...items, item];
+  return max && newItems.length > max ? newItems.slice(1) : newItems;
+}
+
+export function addToStart<T>(items: Array<T>, item: T, max = 0): Array<T> {
+  const newItems = [item, ...items];
+  return max && newItems.length > max ? newItems.slice(0, -1) : newItems;
+}
+
+export const skipToken = Symbol('skipToken');
+
+export function shouldThrowError<T extends (...args: Array<any>) => boolean>(
+  throwOnError: boolean | T | undefined,
+  params: Parameters<T>,
+): boolean {
+  if (typeof throwOnError === 'function') {
+    return throwOnError(...params);
+  }
+  return !!throwOnError;
+}
+
+export function ensureQueryFn(
+  options: { queryFn?: unknown; queryHash?: string },
+  fetchOptions?: { initialPromise?: Promise<unknown> },
+): (...args: Array<unknown>) => Promise<unknown> {
+  if (options.queryFn === skipToken) {
+    console.error(
+      `Attempted to invoke queryFn when set to skipToken. This is likely a configuration error. Query hash: '${options.queryHash}'`,
+    );
+  }
+
+  if (!options.queryFn && fetchOptions?.initialPromise) {
+    return () => fetchOptions.initialPromise!;
+  }
+
+  if (!options.queryFn || options.queryFn === skipToken) {
+    return () => Promise.reject(new Error(`Missing queryFn: '${options.queryHash}'`));
+  }
+
+  return options.queryFn as (...args: Array<unknown>) => Promise<unknown>;
 }
