@@ -122,7 +122,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
   const cache = createQueryCache(options?.queryCache) as QueryCache;
   const mutationCache = createMutationCache(options?.mutationCache) as MutationCache;
   const jobQueue = options?.jobQueue ?? new Map<string, number[]>();
-  const queueBus = new EventTarget();
+  const queueResolvers = new Map<string, () => void>();
 
   const startQueueJob = async (queueKey: string) => {
     const queue = jobQueue.get(queueKey) ?? [];
@@ -132,14 +132,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
 
     if (queue[0] === queueId) return;
 
-    await new Promise((resolve) => {
-      const event = () => {
-        if (queue[0] === queueId) {
-          resolve(undefined);
-          queueBus.removeEventListener('queue:updated', event);
-        }
-      };
-      queueBus.addEventListener('queue:updated', event);
+    await new Promise<void>((resolve) => {
+      queueResolvers.set(`${queueKey}:${queueId}`, resolve);
     });
   };
 
@@ -151,7 +145,10 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     if (queue.length === 0) {
       jobQueue.delete(queueKey);
     } else {
-      queueBus.dispatchEvent(new CustomEvent('queue:updated'));
+      const nextId = queue[0];
+      const resolve = queueResolvers.get(`${queueKey}:${nextId}`);
+      queueResolvers.delete(`${queueKey}:${nextId}`);
+      resolve?.();
     }
   };
 

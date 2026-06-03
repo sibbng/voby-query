@@ -80,7 +80,6 @@ export type Query<
   reset: () => void;
   scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => void;
   isCancelled: boolean;
-  events: EventTarget;
   inactiveCleanup?: () => void;
 };
 
@@ -213,12 +212,10 @@ export const createQuery = <
   queryHash: string;
   resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
 }): Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
-  const events = new EventTarget();
 
   const query: Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
     queryHash,
     isActive: false,
-    events,
     resolvedOptions,
     instances: 0,
     state: undefined as any,
@@ -473,7 +470,6 @@ export const createQuery = <
                 query.state.fetchStatus('idle');
               }
               if (didFetchSucceed) scheduleQueryStale(query);
-              events.dispatchEvent(new CustomEvent('fetch:done'));
             }
           }
         }
