@@ -377,7 +377,7 @@ export const createQuery = <
       if (cancelRefetch) {
         await query.cancel({ revert: false, silent: true });
       }
-      return query.fetch({ retryAttempt: 0, throwOnError });
+      return query.fetch({ retryAttempt: 0, throwOnError, force: true });
     },
     fetch: async ({
       retryAttempt = 0,
@@ -497,7 +497,7 @@ export const createQuery = <
           window,
           'online',
           () => {
-            void query.fetch({ retryAttempt: attempt, fetchFn });
+            void query.fetch({ retryAttempt: attempt, fetchFn, force: true });
           },
           { once: true },
         );
@@ -506,7 +506,7 @@ export const createQuery = <
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
         const id = setTimeout(() => {
           query.retryDisposer = () => {};
-          void query.fetch({ retryAttempt: attempt, fetchFn });
+          void query.fetch({ retryAttempt: attempt, fetchFn, force: true });
         }, delay ?? 0);
         query.retryDisposer = () => clearTimeout(id);
       }
@@ -559,6 +559,10 @@ export const createQuery = <
       isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
     } as QueryState<TData, TError>;
   });
+
+  if (query.resolvedOptions.initialData !== undefined) {
+    scheduleQueryStale(query);
+  }
 
   return query;
 };

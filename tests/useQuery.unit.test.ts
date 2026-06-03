@@ -95,13 +95,13 @@ test('queryClient.prefetchQuery basic functionality', async () => {
   expect(queryFnMock).toHaveBeenCalledTimes(1);
   expect(queryClient.getQueryData(['prefetch-test-1'])).toBe('prefetched data');
 
-  // Calling fetchQuery immediately should use the cached data and not call queryFn again
+  // Calling fetchQuery always calls queryFn
   const dataFromFetch = await queryClient.fetchQuery({
     queryKey: ['prefetch-test-1'],
     queryFn: queryFnMock, // Pass the same mock
   });
   expect(dataFromFetch).toBe('prefetched data');
-  expect(queryFnMock).toHaveBeenCalledTimes(1); // Should not be called again
+  expect(queryFnMock).toHaveBeenCalledTimes(2); // Called again by fetchQuery
 
   // Scenario 2: Prefetch with staleTime: 0 (or default)
   const queryFnMock2 = vi.fn(async () => {
@@ -262,6 +262,52 @@ test('queryClient.fetchQuery deduplicates concurrent requests for the same key',
     'deduped data',
   ]);
   expect(queryFnMock).toHaveBeenCalledTimes(1);
+});
+
+test('concurrent fetch calls preserve the abort controller for cancellation', async () => {
+  const queryClient = createQueryClient();
+  let callCount = 0;
+  let rejectFetch: (error: Error) => void = () => {};
+
+  const query = queryClient.cache.build(queryClient, {
+    queryKey: ['concurrent-abort-controller'],
+    queryFn: async ({ signal }: { signal: AbortSignal }) => {
+      callCount++;
+      return new Promise<string>((_resolve, reject) => {
+        rejectFetch = reject;
+        signal.addEventListener(
+          'abort',
+          () => {
+            reject(new Error('Aborted'));
+          },
+          { once: true },
+        );
+      });
+    },
+  });
+
+  // Start two fetches concurrently
+  const p1 = query.fetch({ force: true });
+  const fetchPromise1 = query.fetchPromise;
+  const ctrl1 = query.controller;
+
+  const p2 = query.fetch({ force: true });
+  const fetchPromise2 = query.fetchPromise;
+  const ctrl2 = query.controller;
+
+  // Must deduplicate into a single request
+  expect(callCount).toBe(1);
+  expect(fetchPromise2).toBe(fetchPromise1);
+  expect(ctrl2).toBe(ctrl1);
+
+  // Cancel must abort the original controller
+  await query.cancel({ revert: false, silent: true });
+  expect(ctrl1.signal.aborted).toBe(true);
+
+  // The fetch promises resolve (not reject) because the catch block
+  // silently swallows abort errors — matching TanStack Query behavior.
+  await expect(p1).resolves.toBeUndefined();
+  await expect(p2).resolves.toBeUndefined();
 });
 
 test('queryClient.ensureQueryData deduplicates concurrent requests for the same key', async () => {
@@ -812,10 +858,6 @@ test('retry: number — retries exactly N times', async () => {
     retryDelay: 0,
   });
 
-  // Patch isActive so retries can fire (fetch checks isActive for non-forced calls)
-  const query = findQuery(queryClient, 'retry-count');
-  if (query) query.isActive = true;
-
   await fetchPromise;
   await sleep(50);
 
@@ -835,9 +877,6 @@ test('retry: function — called with failureCount (0-based) and error', async (
     retry: retryFn,
     retryDelay: 0,
   });
-
-  const query = findQuery(queryClient, 'retry-fn-args');
-  if (query) query.isActive = true;
 
   await fetchPromise;
   await sleep(10); // let at least one retry fire
@@ -861,9 +900,6 @@ test('retry: function — stops retrying when it returns false', async () => {
     retryDelay: 0,
   });
 
-  const query = findQuery(queryClient, 'retry-fn-stop');
-  if (query) query.isActive = true;
-
   await fetchPromise;
   await sleep(50);
 
@@ -882,9 +918,6 @@ test('retryDelay: function — called with attempt number and error', async () =
     retry: 1,
     retryDelay: retryDelayFn,
   });
-
-  const query = findQuery(queryClient, 'retry-delay-fn');
-  if (query) query.isActive = true;
 
   await fetchPromise;
   await sleep(10);

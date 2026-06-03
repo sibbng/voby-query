@@ -303,9 +303,27 @@ export type QueryClient = {
     },
     options?: QueryRefetchOptions,
   ) => Promise<void>;
-  ensureQueryData: <T>(options: QueryOptions<T>) => Promise<T>;
-  fetchQuery: <T>(options: QueryOptions<T>) => Promise<T>;
-  prefetchQuery: <T>(options: QueryOptions<T>) => Promise<void>;
+  ensureQueryData: <
+    TQueryFnData,
+    TData = TQueryFnData,
+    TInitialData extends TQueryFnData | undefined = undefined,
+  >(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  ) => Promise<TData>;
+  fetchQuery: <
+    TQueryFnData,
+    TData = TQueryFnData,
+    TInitialData extends TQueryFnData | undefined = undefined,
+  >(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  ) => Promise<TData>;
+  prefetchQuery: <
+    TQueryFnData,
+    TData = TQueryFnData,
+    TInitialData extends TQueryFnData | undefined = undefined,
+  >(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  ) => Promise<void>;
   refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
   cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
   removeQueries: (filters?: QueryFilters) => void;

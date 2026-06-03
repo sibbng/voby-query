@@ -30,25 +30,6 @@ export type CreateQueryClientOptions = {
   };
 };
 
-type FetchQueryOptions<
-  TQueryFnData = unknown,
-  TError = unknown,
-  TData = TQueryFnData,
-  TQueryKey extends QueryKey = QueryKey,
-> = Omit<
-  QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  | 'enabled'
-  | 'refetchInterval'
-  | 'refetchIntervalInBackground'
-  | 'refetchOnWindowFocus'
-  | 'refetchOnReconnect'
-  | 'refetchOnMount'
-  | 'throwOnError'
-  | 'select'
-  | 'suspense'
-  | 'placeholderData'
->;
-
 export const createQueryClient = (options?: CreateQueryClientOptions): QueryClient => {
   const queryDefaults = {
     queryKeyHashFn: hashFn,
@@ -312,8 +293,9 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
+    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey> & {
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData> & {
       revalidateIfStale?: boolean;
     },
   ): Promise<TData> => {
@@ -321,7 +303,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     const query = cache.build(queryClient, {
       queryKey,
       ...restOptions,
-    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey>);
+    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>);
     const currentData = query.state.data();
 
     if (currentData !== undefined) {
@@ -340,21 +322,16 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
+    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
   ): Promise<TData> => {
     const { queryKey, queryFn, ...restOptions } = options;
     const query = cache.build(queryClient, {
       queryKey,
       queryFn,
       ...restOptions,
-    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey>);
-    const currentData = query.state.data();
-
-    if (currentData !== undefined && !query.state.isStale()) {
-      return currentData as TData;
-    }
-
+    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>);
     await query.fetch({ force: true });
     return query.state.data() as TData;
   };
@@ -364,8 +341,9 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
+    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
   ): Promise<void> => {
     try {
       await fetchQuery(options);
