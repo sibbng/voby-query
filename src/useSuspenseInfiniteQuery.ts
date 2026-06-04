@@ -6,6 +6,7 @@ import {
   refetchInfiniteData,
 } from './infiniteQuery.ts';
 import { useQueryClient } from './queryClient.ts';
+import { ensureSuspenseTimers } from './utils.ts';
 import type { Query } from './query.ts';
 import type {
   InfiniteData,
@@ -46,8 +47,10 @@ export function useSuspenseInfiniteQuery<
       TQueryKey
     >;
 
+    const suspenseOptions = ensureSuspenseTimers(options);
+
     const infiniteQueryOptions = {
-      ...options,
+      ...suspenseOptions,
       queryFn: ({ signal }) =>
         refetchInfiniteData({
           options,

@@ -288,3 +288,135 @@ test('useSuspenseQuery - no isPlaceholderData property on result', async () => {
 
   expect(document.body.textContent).toBe('data');
 });
+
+test('useSuspenseQuery - staleTime and gcTime are clamped to minimum 1000ms', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseQuery({
+      queryKey: ['suspend-clamp'],
+      queryFn: async () => {
+        await sleep(5);
+        return 'clamped';
+      },
+      staleTime: 0,
+      gcTime: 0,
+    });
+
+    return <p>{() => query().data()}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(20);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-clamp'] })!;
+  expect(internalQuery.resolvedOptions.staleTime).toBeGreaterThanOrEqual(1000);
+  expect(internalQuery.resolvedOptions.gcTime).toBeGreaterThanOrEqual(1000);
+});
+
+test('useSuspenseQuery - staleTime 0 should not mark query stale immediately (clamped to 1000)', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseQuery({
+      queryKey: ['suspend-not-stale'],
+      queryFn: async () => {
+        await sleep(5);
+        return 'fresh';
+      },
+      staleTime: 0,
+    });
+
+    return <p>{() => query().data()}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(20);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-not-stale'] })!;
+  expect(internalQuery.state.isStale()).toBe(false);
+});
+
+test('useSuspenseQuery - preserves default gcTime when not provided', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseQuery({
+      queryKey: ['suspend-default-gc'],
+      queryFn: async () => {
+        await sleep(5);
+        return 'data';
+      },
+    });
+
+    return <p>{() => query().data()}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(20);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-default-gc'] })!;
+  expect(internalQuery.resolvedOptions.gcTime).toBe(5 * 60 * 1000);
+});
+
+test('useSuspenseQuery - wraps function staleTime to clamp return value', async () => {
+  const queryClient = createQueryClient();
+  const staleTimeFn = vi.fn(() => 0);
+
+  function Suspendable() {
+    const query = useSuspenseQuery({
+      queryKey: ['suspend-fn-stale'],
+      queryFn: async () => {
+        await sleep(5);
+        return 'data';
+      },
+      staleTime: staleTimeFn,
+    });
+
+    return <p>{() => query().data()}</p>;
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(20);
+
+  expect(staleTimeFn).toHaveBeenCalled();
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-fn-stale'] })!;
+  const resolvedStaleTime = internalQuery.resolvedOptions.staleTime;
+  expect(typeof resolvedStaleTime).toBe('function');
+
+  const result = (resolvedStaleTime as (q: any) => any)(internalQuery);
+  expect(result).toBeGreaterThanOrEqual(1000);
+});

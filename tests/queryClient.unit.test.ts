@@ -25,6 +25,36 @@ describe('queryClient', () => {
     });
   });
 
+  describe('setDefaultOptions', () => {
+    it('should accept queries options without queryKey', () => {
+      const queryClient = createQueryClient();
+      queryClient.setDefaultOptions({
+        queries: {
+          staleTime: 5000,
+          gcTime: 30000,
+          retry: 1,
+        },
+      });
+      const defaults = queryClient.getDefaultOptions();
+      expect(defaults.queries.staleTime).toBe(5000);
+      expect(defaults.queries.gcTime).toBe(30000);
+    });
+
+    it('should accept mutations options', () => {
+      const queryClient = createQueryClient();
+      const mutationFn = () => Promise.resolve('data');
+      queryClient.setDefaultOptions({
+        mutations: {
+          mutationFn,
+          retry: 2,
+        },
+      });
+      const defaults = queryClient.getDefaultOptions();
+      expect(defaults.mutations.mutationFn).toBe(mutationFn);
+      expect(defaults.mutations.retry).toBe(2);
+    });
+  });
+
   describe('setQueryDefaults', () => {
     it('should not trigger a fetch', () => {
       const key = queryKey();

@@ -273,6 +273,28 @@ export function shouldThrowError<T extends (...args: Array<any>) => boolean>(
   return !!throwOnError;
 }
 
+export function ensureSuspenseTimers<
+  T extends {
+    staleTime?: number | 'static' | ((...args: any[]) => number | 'static');
+    gcTime?: number;
+  },
+>(options: T): T {
+  const clamp = (value: number | 'static' | undefined) =>
+    value === 'static' ? value : Math.max(value ?? 1000, 1000);
+
+  const originalStaleTime = options.staleTime;
+  return {
+    ...options,
+    staleTime: (typeof originalStaleTime === 'function'
+      ? (((...args: Parameters<typeof originalStaleTime>) => {
+          const result = originalStaleTime(...args);
+          return typeof result === 'number' ? Math.max(result, 1000) : result;
+        }) as typeof originalStaleTime)
+      : clamp(originalStaleTime)) as T['staleTime'],
+    ...(options.gcTime !== undefined && { gcTime: Math.max(options.gcTime, 1000) }),
+  };
+}
+
 export function ensureQueryFn(
   options: { queryFn?: unknown; queryHash?: string },
   fetchOptions?: { initialPromise?: Promise<unknown> },

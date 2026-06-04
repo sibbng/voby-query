@@ -6,6 +6,7 @@ import type {
   UseSuspenseQueryOptions,
   UseSuspenseQueryResult,
 } from './types.ts';
+import { ensureSuspenseTimers } from './utils.ts';
 
 export function useSuspenseQuery<
   TQueryFnData = unknown,
@@ -17,9 +18,16 @@ export function useSuspenseQuery<
 ): UseSuspenseQueryResult<Awaited<TData>, TError> {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
+    const suspenseOptions = ensureSuspenseTimers(options) as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey
+    >;
+
     const nextQuery = queryClient.cache.build<TQueryFnData, TError, TData, TQueryKey>(
       queryClient,
-      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+      suspenseOptions,
     );
     useCleanup(nextQuery.addInstance());
     return nextQuery;

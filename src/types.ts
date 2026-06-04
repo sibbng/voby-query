@@ -335,7 +335,7 @@ export type QueryClient = {
     mutations: MutationOptions;
   };
   setDefaultOptions: (options: {
-    queries?: Partial<QueryOptions>;
+    queries?: Partial<Omit<QueryOptions, 'queryKey'>>;
     mutations?: Partial<MutationOptions>;
   }) => void;
   getQueryDefaults: (queryKey: QueryKey) => Partial<QueryOptions>;

@@ -1,6 +1,6 @@
 import { waitFor } from '@testing-library/dom';
 import { ErrorBoundary, Suspense } from 'voby';
-import { expect, test } from 'vite-plus/test';
+import { expect, test, vi } from 'vite-plus/test';
 import { QueryClientProvider } from '../src/context';
 import { createQueryClient } from '../src';
 import { useSuspenseInfiniteQuery } from '../src/useSuspenseInfiniteQuery';
@@ -404,4 +404,180 @@ test('useSuspenseInfiniteQuery - no isPlaceholderData property on result', async
   await sleep(30);
 
   expect(document.body.textContent).toBe('page 1');
+});
+
+test('useSuspenseInfiniteQuery - staleTime and gcTime are clamped to minimum 1000ms', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-clamp'], number>({
+      queryKey: ['suspend-inf-clamp'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}` };
+      },
+      getNextPageParam: () => undefined,
+      staleTime: 0,
+      gcTime: 0,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-inf-clamp'] })!;
+  expect(internalQuery.resolvedOptions.staleTime).toBeGreaterThanOrEqual(1000);
+  expect(internalQuery.resolvedOptions.gcTime).toBeGreaterThanOrEqual(1000);
+});
+
+test('useSuspenseInfiniteQuery - staleTime 0 should not mark query stale immediately (clamped to 1000)', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-not-stale'], number>({
+      queryKey: ['suspend-inf-not-stale'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}` };
+      },
+      getNextPageParam: () => undefined,
+      staleTime: 0,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-inf-not-stale'] })!;
+  expect(internalQuery.state.isStale()).toBe(false);
+});
+
+test('useSuspenseInfiniteQuery - preserves default gcTime when not provided', async () => {
+  const queryClient = createQueryClient();
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-default-gc'], number>({
+      queryKey: ['suspend-inf-default-gc'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}` };
+      },
+      getNextPageParam: () => undefined,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-inf-default-gc'] })!;
+  expect(internalQuery.resolvedOptions.gcTime).toBe(5 * 60 * 1000);
+});
+
+test('useSuspenseInfiniteQuery - wraps function staleTime to clamp return value', async () => {
+  const queryClient = createQueryClient();
+  const staleTimeFn = vi.fn(() => 0);
+
+  function Suspendable() {
+    const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-fn-stale'], number>({
+      queryKey: ['suspend-inf-fn-stale'],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        await sleep(5);
+        return { value: `page ${pageParam}` };
+      },
+      getNextPageParam: () => undefined,
+      staleTime: staleTimeFn,
+    });
+
+    return (
+      <p>
+        {() =>
+          query()
+            .data()
+            ?.pages.map((p) => p.value)
+            .join(', ')
+        }
+      </p>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Suspense fallback={<p>Loading...</p>}>
+        <Suspendable />
+      </Suspense>
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  await sleep(30);
+
+  expect(staleTimeFn).toHaveBeenCalled();
+
+  const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-inf-fn-stale'] })!;
+  const resolvedStaleTime = internalQuery.resolvedOptions.staleTime;
+  expect(typeof resolvedStaleTime).toBe('function');
+
+  const result = (resolvedStaleTime as (q: any) => any)(internalQuery);
+  expect(result).toBeGreaterThanOrEqual(1000);
 });
