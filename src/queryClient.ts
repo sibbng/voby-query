@@ -15,6 +15,7 @@ import type {
   QueryKey,
   QueryOptions,
   QueryRefetchOptions,
+  QueryState,
 } from './types.ts';
 import { functionalUpdate, hashFn, noop, partialMatchKey } from './utils.ts';
 
@@ -316,6 +317,25 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     return query.state.data() as TData;
   };
 
+  const getQueryState = <TData = unknown, TError = Error>(
+    queryKey: QueryKey,
+  ): QueryState<TData, TError> | undefined => {
+    const queryHash = queryKeyHashFn(queryKey);
+    const query = cache.get(queryHash);
+    return query?.state as QueryState<TData, TError> | undefined;
+  };
+
+  const prefetchInfiniteQuery = async <
+    TQueryFnData = unknown,
+    TError = unknown,
+    TData = TQueryFnData,
+    TQueryKey extends QueryKey = QueryKey,
+  >(
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  ): Promise<void> => {
+    await fetchQuery(options).catch(noop);
+  };
+
   const fetchQuery = async <
     TQueryFnData = unknown,
     TError = unknown,
@@ -404,6 +424,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     isMutating,
     fetchQuery,
     prefetchQuery,
+    prefetchInfiniteQuery,
+    getQueryState,
     removeQueries,
     cancelQueries,
     refetchQueries,

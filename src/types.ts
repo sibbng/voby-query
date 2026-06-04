@@ -296,6 +296,9 @@ export type QueryClient = {
     queryKey: QueryKey,
     data: T | ((previous: T | undefined) => T | undefined),
   ) => void;
+  getQueryState: <TData = unknown, TError = Error>(
+    queryKey: QueryKey,
+  ) => QueryState<TData, TError> | undefined;
   invalidateQueries: (
     filters?: QueryFilters & {
       refetchType?: 'active' | 'inactive' | 'all' | 'none';
@@ -310,6 +313,13 @@ export type QueryClient = {
   ) => Promise<TData>;
   prefetchQuery: <TQueryFnData, TData = TQueryFnData>(
     options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
+  ) => Promise<void>;
+  prefetchInfiniteQuery: <
+    TQueryFnData,
+    TData = TQueryFnData,
+    TQueryKey extends QueryKey = QueryKey,
+  >(
+    options: QueryOptions<TQueryFnData, unknown, TData, TQueryKey>,
   ) => Promise<void>;
   refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
   cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
@@ -383,6 +393,30 @@ type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
 export type UseSuspenseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
   UseSuspenseInfiniteQueryResultValue<TData, TError>
 >;
+
+export type UsePrefetchQueryOptions<
+  TQueryFnData = unknown,
+  TError = Error,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = Omit<QueryOptions<TQueryFnData, TError, TData, TQueryKey>, 'queryFn'> & {
+  queryKey: TQueryKey;
+  queryFn?: (ctx: {
+    signal: AbortSignal;
+    queryKey: TQueryKey;
+    meta?: Record<string, unknown>;
+  }) => Promise<TQueryFnData>;
+};
+
+export type UsePrefetchInfiniteQueryOptions<
+  TQueryFnData = unknown,
+  TError = Error,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+> = Omit<InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>, 'queryFn'> & {
+  queryKey: TQueryKey;
+  queryFn?: (ctx: InfiniteQueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>;
+};
 
 type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
