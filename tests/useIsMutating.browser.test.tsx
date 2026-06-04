@@ -58,7 +58,7 @@ test('tracks pending mutations reactively', async () => {
   await flush();
   expect(document.body.textContent).toContain('0');
 
-  const promise = mutationApi().mutate('test');
+  const promise = mutationApi().mutateAsync('test');
 
   await waitFor(() => expect(document.body.textContent).toContain('1'));
 
@@ -114,7 +114,7 @@ test('filters by mutationKey', async () => {
   expect(document.body.textContent).toContain('A: 0');
   expect(document.body.textContent).toContain('B: 0');
 
-  const pA = mutationApi().mutate('a');
+  const pA = mutationApi().mutateAsync('a');
   await waitFor(() => expect(document.body.textContent).toContain('A: 1'));
   expect(document.body.textContent).toContain('B: 0');
 

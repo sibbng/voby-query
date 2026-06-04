@@ -1,6 +1,7 @@
 import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
 import type { Mutation } from './mutation.ts';
 import { useQueryClient } from './queryClient.ts';
+import { noop } from './utils.ts';
 import type {
   MutationFilters,
   MutationOptions,
@@ -39,7 +40,9 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
     isPaused: useMemo(() => mutation().state.isPaused()),
     failureCount: useMemo(() => mutation().state.failureCount()),
     failureReason: useMemo(() => mutation().state.failureReason()),
-    mutate: mutation().mutate,
+    mutate: (variables, options) => {
+      mutation().mutate(variables, options).catch(noop);
+    },
     mutateAsync: mutation().mutateAsync,
     reset: mutation().reset,
     status: useMemo(() => mutation().state.status()),

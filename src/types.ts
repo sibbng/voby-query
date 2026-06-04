@@ -68,7 +68,7 @@ export type QueryState<D = undefined, TError = Error> = {
 
 export type QueryStateReadonly<D, TError = Error> = {
   [K in keyof Omit<QueryState<D, TError>, 'meta'>]: ObservableReadonly<
-    Awaited<ReturnType<QueryState<D, TError>[K]>>
+    ReturnType<QueryState<D, TError>[K]>
   >;
 } & { meta: QueryState<D, TError>['meta'] };
 
@@ -100,7 +100,7 @@ export type MutationStateReadonly<
   TContext = unknown,
 > = {
   [K in keyof Omit<MutationState<TData, TError, TVariables, TContext>, 'meta'>]: ObservableReadonly<
-    Awaited<ReturnType<MutationState<TData, TError, TVariables, TContext>[K]>>
+    ReturnType<MutationState<TData, TError, TVariables, TContext>[K]>
   >;
 } & { meta: MutationState<TData, TError, TVariables, TContext>['meta'] };
 
@@ -445,7 +445,7 @@ type UseMutationResultMethods<
   mutate: (
     variables: TVariables,
     options?: MutateOptions<TData, TError, TVariables, TContext>,
-  ) => Promise<TData | undefined>;
+  ) => void;
   mutateAsync: (
     variables: TVariables,
     options?: MutateOptions<TData, TError, TVariables, TContext>,

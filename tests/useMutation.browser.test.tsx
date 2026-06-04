@@ -36,7 +36,7 @@ test('useMutation basic functionality', async () => {
   );
 
   expect(document.body.textContent).toBe('Idle');
-  const promise = mutationResult().mutate('test');
+  const promise = mutationResult().mutateAsync('test');
   await waitFor(() => expect(document.body.textContent).toBe('Pending'));
   await promise;
   await flush();
@@ -75,7 +75,7 @@ test('useMutation error handling', async () => {
 
   expect(document.body.textContent).toBe('Idle');
   const promise = mutationResult()
-    .mutate('fail')
+    .mutateAsync('fail')
     .catch(() => {});
   await waitFor(() => expect(document.body.textContent).toBe('Pending'));
   await promise;
@@ -113,7 +113,7 @@ test('useMutation reset', async () => {
   );
 
   expect(document.body.textContent).toBe('Idle');
-  await mutationResult().mutate('reset');
+  await mutationResult().mutateAsync('reset');
   await flush();
   expect(document.body.textContent).toBe('Processed: reset');
   mutationResult().reset();
@@ -145,7 +145,7 @@ test('useMutation onSuccess callback', async () => {
     document.body,
   );
 
-  await mutationResult().mutate('test-vars');
+  await mutationResult().mutateAsync('test-vars');
   await flush(); // Wait for mutation and subsequent rerender/callback
 
   expect(onSuccessMock).toHaveBeenCalledWith(
@@ -183,7 +183,7 @@ test('useMutation onError callback', async () => {
 
   // Use .catch to prevent unhandled promise rejection in test
   await mutationResult()
-    .mutate('error-vars')
+    .mutateAsync('error-vars')
     .catch(() => {});
   await flush();
 
@@ -219,7 +219,7 @@ test('useMutation onSettled callback (on success)', async () => {
     document.body,
   );
 
-  await mutationResult().mutate('settled-success-vars');
+  await mutationResult().mutateAsync('settled-success-vars');
   await flush();
 
   expect(onSettledMock).toHaveBeenCalledWith(
@@ -257,7 +257,7 @@ test('useMutation onSettled callback (on error)', async () => {
   );
 
   await mutationResult()
-    .mutate('settled-error-vars')
+    .mutateAsync('settled-error-vars')
     .catch(() => {});
   await flush();
 
@@ -320,7 +320,7 @@ test('useMutation refreshes retry options for an existing mutationKey', async ()
   );
 
   await mutationResult()
-    .mutate('first')
+    .mutateAsync('first')
     .catch(() => {});
   expect(attempts).toBe(1);
 
@@ -328,7 +328,7 @@ test('useMutation refreshes retry options for an existing mutationKey', async ()
   await flush();
 
   await mutationResult()
-    .mutate('second')
+    .mutateAsync('second')
     .catch(() => {});
 
   expect(attempts).toBe(3);
@@ -386,7 +386,7 @@ test('useMutation onMutate and context passing', async () => {
     </QueryClientProvider>,
     document.body,
   );
-  await mutationSuccessResult().mutate('vars-for-success');
+  await mutationSuccessResult().mutateAsync('vars-for-success');
   await flush();
 
   expect(onMutateMock).toHaveBeenCalledWith('vars-for-success');
@@ -416,7 +416,7 @@ test('useMutation onMutate and context passing', async () => {
     document.body,
   );
   await mutationErrorResult()
-    .mutate('vars-for-error')
+    .mutateAsync('vars-for-error')
     .catch(() => {});
   await flush();
 
@@ -471,10 +471,10 @@ test('useMutation concurrent mutate calls behavior', async () => {
   expect(mutationResult().status()).toBe('idle');
 
   // Call mutate twice in quick succession
-  const promise1 = mutationResult().mutate('call1');
+  const promise1 = mutationResult().mutateAsync('call1');
   expect(mutationResult().status()).toBe('pending'); // Immediately pending for call1
 
-  const promise2 = mutationResult().mutate('call2');
+  const promise2 = mutationResult().mutateAsync('call2');
   expect(mutationResult().status()).toBe('pending');
 
   await promise1; // Wait for the first mutation to complete
@@ -496,7 +496,7 @@ test('useMutation concurrent mutate calls behavior', async () => {
   // If the second call was ignored, promise2 might resolve with the result of promise1,
   // or undefined, or throw, depending on implementation.
   // Given the current setup, it's likely promise2 will resolve with the outcome of call1
-  // because mutate() returns the same promise instance if already pending.
+  // because mutateAsync() returns the same promise instance if already pending.
 
   let promise2Result: string | undefined;
   let promise2Error: Error | undefined;
@@ -512,9 +512,9 @@ test('useMutation concurrent mutate calls behavior', async () => {
   // Verify no second execution
   expect(mutationFnExecutionLog.length).toBe(4); // Still only call1 executed
 
-  // Let's try another mutate after the first one is fully settled.
+  // Let's try another mutateAsync after the first one is fully settled.
   mutationFnExecutionLog.length = 0; // Clear log
-  const promise3 = mutationResult().mutate('call3');
+  const promise3 = mutationResult().mutateAsync('call3');
   expect(mutationResult().status()).toBe('pending');
   await promise3;
   await flush();
@@ -569,7 +569,7 @@ test('useMutationState filters by partial observable mutation keys', async () =>
 
   render(<App />, document.body);
 
-  await mutationResult().mutate('created todo');
+  await mutationResult().mutateAsync('created todo');
   showList(true);
   await waitFor(() => expect(document.body.textContent).toContain('created todo'));
 
@@ -622,8 +622,8 @@ test('useMutationState and isMutating support predicate filters', async () => {
     document.body,
   );
 
-  await createTodoMutation().mutate({ id: 1 });
-  await updateTodoMutation().mutate({ id: 2 });
+  await createTodoMutation().mutateAsync({ id: 1 });
+  await updateTodoMutation().mutateAsync({ id: 2 });
   await flush();
 
   expect(document.querySelector('[data-testid="predicate-match"]')?.textContent).toBe('2');
@@ -667,7 +667,7 @@ test('useMutationState reactively shows pending count during in-flight mutation'
   expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
 
   // Start a slow mutation — pending count should jump to 1
-  const promise = mutationResult().mutate('hello');
+  const promise = mutationResult().mutateAsync('hello');
   await waitFor(() =>
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1'),
   );
@@ -785,7 +785,7 @@ test('Optimistic Updates with error rollback', async () => {
   expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2');
 
   // Trigger positive optimistic update
-  let p1 = mutationResult().mutate('Todo 3');
+  let p1 = mutationResult().mutateAsync('Todo 3');
   await flush();
 
   // Should immediately show Todo 3 optimistically before mutationFn resolves!
@@ -800,7 +800,7 @@ test('Optimistic Updates with error rollback', async () => {
 
   // Error rollback path
   let p2 = mutationResult()
-    .mutate('fail-todo')
+    .mutateAsync('fail-todo')
     .catch(() => {});
   await flush();
 
@@ -852,7 +852,7 @@ test('useMutationState shows pending count for mutation started after queryClien
   expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
 
   // Start a new mutation after clear — useMutation re-registers, useMutationState reacts
-  const promise = mutationResult().mutate('post-clear');
+  const promise = mutationResult().mutateAsync('post-clear');
   await waitFor(() =>
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1'),
   );
