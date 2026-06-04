@@ -349,6 +349,24 @@ type UseQueryResultMethods = {
   cancel: (options?: CancelOptions) => Promise<void>;
 };
 
+export type UseQueriesOptions<T extends Array<any>, TCombinedResult = QueriesResults<T>> = {
+  queries: readonly [...QueriesOptions<T>];
+  combine?: (result: QueriesResults<T>) => TCombinedResult;
+  subscribed?: boolean;
+  queryClient?: QueryClient;
+};
+
+export type QueriesOptions<T extends Array<any>> = {
+  [K in keyof T]: QueryOptions;
+};
+
+export type QueriesResultItem<TData = unknown, TError = Error> = QueryState<TData, TError> &
+  UseQueryResultMethods;
+
+export type QueriesResults<T extends Array<any>> = {
+  [K in keyof T]: QueriesResultItem;
+};
+
 type UseQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
   UseQueryResultMethods;
 

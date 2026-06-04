@@ -20,6 +20,7 @@ import {
   SuspenseInfiniteQueryDemo,
   meta as suspInfQueryMeta,
 } from '../examples/suspense-infinite-query';
+import { UseQueriesDemo, meta as useQueriesMeta } from '../examples/useQueries';
 import { DebugPanel, type DebugScope } from './debug-panel';
 
 const SESSION_KEY = 'voby-query-playground-example';
@@ -147,6 +148,14 @@ const examples: Example[] = [
     debug: {
       queryPrefixes: [['susp-inf-posts']],
       note: 'Paginated posts with useSuspenseInfiniteQuery inside a Suspense boundary.',
+    },
+  },
+  {
+    ...useQueriesMeta,
+    component: UseQueriesDemo,
+    debug: {
+      queryPrefixes: [['dashboard-user'], ['dashboard-posts'], ['dashboard-stats']],
+      note: 'Three queries (user, posts, stats) managed as a single unit with combine().',
     },
   },
 ];

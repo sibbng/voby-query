@@ -48,6 +48,15 @@ export { usePrefetchQuery } from './usePrefetchQuery.ts';
 export type { UsePrefetchQueryOptions } from './types.ts';
 export { usePrefetchInfiniteQuery } from './usePrefetchInfiniteQuery.ts';
 export type { UsePrefetchInfiniteQueryOptions } from './types.ts';
+export { useQueries } from './useQueries.ts';
+export type {
+  UseQueriesOptions,
+  QueriesOptions,
+  QueriesResults,
+  QueriesResultItem,
+} from './useQueries.ts';
+export { useSuspenseQueries } from './useSuspenseQueries.ts';
+export type { SuspenseQueriesOptions, SuspenseQueriesResults } from './useSuspenseQueries.ts';
 export { Subscribable } from './subscribable.ts';
 export type { QueryCacheNotifyEvent, QueryCacheConfig } from './queryCache.ts';
 export type { MutationCacheNotifyEvent } from './mutationCache.ts';

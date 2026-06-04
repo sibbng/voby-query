@@ -65,7 +65,7 @@ export const OptimisticDemo = () => {
         <For values={items}>
           {(item) => (
             <button
-              onClick={() => void toggle().mutate(item.id)}
+              onClick={() => toggle().mutate(item.id)}
               disabled={() => toggle().isPending()}
               class={() =>
                 `flex items-center gap-3 px-3 py-2 rounded-lg border text-sm text-left transition-colors ${

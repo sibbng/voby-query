@@ -844,25 +844,34 @@ test('gcTime: Infinity — scheduleDestroy does not destroy the cache entry', as
 
 // #region retry tests
 
-test('retry: number — retries exactly N times', async () => {
-  const queryClient = createQueryClient();
-  let callCount = 0;
-
-  const fetchPromise = queryClient.fetchQuery({
-    queryKey: ['retry-count'],
-    queryFn: async () => {
-      callCount++;
-      throw new Error('fail');
+test(
+  'retry: number — retries exactly N times',
+  {
+    retry: {
+      count: 3,
+      delay: 100,
     },
-    retry: 3,
-    retryDelay: 0,
-  });
+  },
+  async () => {
+    const queryClient = createQueryClient();
+    let callCount = 0;
 
-  await fetchPromise;
-  await sleep(50);
+    const fetchPromise = queryClient.fetchQuery({
+      queryKey: ['retry-count'],
+      queryFn: async () => {
+        callCount++;
+        throw new Error('fail');
+      },
+      retry: 3,
+      retryDelay: 0,
+    });
 
-  expect(callCount).toBe(4); // 1 initial + 3 retries
-});
+    await fetchPromise;
+    await sleep(50);
+
+    expect(callCount).toBe(4); // 1 initial + 3 retries
+  },
+);
 
 test('retry: function — called with failureCount (0-based) and error', async () => {
   const queryClient = createQueryClient();

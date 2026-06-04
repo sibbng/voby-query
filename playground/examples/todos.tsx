@@ -97,7 +97,7 @@ export const TodosDemo = () => {
         onSubmit={(e) => {
           e.preventDefault();
           const t = draft().trim();
-          if (t) void addTodo().mutate(t);
+          if (t) addTodo().mutate(t);
         }}
       >
         <input

@@ -189,8 +189,8 @@ const MutateDemo = () => {
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <Btn onClick={() => void fast().mutate()}>Fast (100ms)</Btn>
-          <Btn onClick={() => void slow().mutate()}>Slow (3s)</Btn>
+          <Btn onClick={() => fast().mutate()}>Fast (100ms)</Btn>
+          <Btn onClick={() => slow().mutate()}>Slow (3s)</Btn>
         </div>
       </Card>
 
