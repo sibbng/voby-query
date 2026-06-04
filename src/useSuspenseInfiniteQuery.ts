@@ -29,15 +29,12 @@ export function useSuspenseInfiniteQuery<
   TError = Error,
   TQueryKey extends QueryKey = QueryKey,
   TPageParam = unknown,
-  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
-  R = void,
-  D = R extends void ? InfiniteData<TQueryFnData, TPageParam> : R,
 >(
   options: Omit<
-    InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam, R, TInitialData>,
+    InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
     'enabled' | 'placeholderData' | 'throwOnError'
   >,
-): UseSuspenseInfiniteQueryResult<Awaited<D>, TError> {
+): UseSuspenseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const queryClient = useQueryClient(options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
 
@@ -46,12 +43,10 @@ export function useSuspenseInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >;
 
-    const queryOptions = {
+    const infiniteQueryOptions = {
       ...options,
       queryFn: ({ signal }) =>
         refetchInfiniteData({
@@ -63,28 +58,24 @@ export function useSuspenseInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >;
 
     nextQuery = queryClient.cache.build<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
-    >(queryClient, queryOptions);
+      TQueryKey
+    >(queryClient, infiniteQueryOptions);
     useCleanup(nextQuery.addInstance());
     return nextQuery;
   });
 
-  const resource = useResource<Awaited<D>>(() => {
+  const resource = useResource<Awaited<InfiniteData<TQueryFnData, TPageParam>>>(() => {
     const currentQuery = query();
 
     if (currentQuery.state.data() !== undefined) {
-      return currentQuery.state.data() as Awaited<D>;
+      return currentQuery.state.data() as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
     }
 
     if (currentQuery.state.error() !== null) {
@@ -92,10 +83,14 @@ export function useSuspenseInfiniteQuery<
     }
 
     if (currentQuery.fetchPromise) {
-      return currentQuery.fetchPromise!.then(() => currentQuery.state.data()! as Awaited<D>);
+      return currentQuery.fetchPromise!.then(
+        () => currentQuery.state.data()! as Awaited<InfiniteData<TQueryFnData, TPageParam>>,
+      );
     }
 
-    return currentQuery.fetch().then(() => currentQuery.state.data()! as Awaited<D>);
+    return currentQuery
+      .fetch()
+      .then(() => currentQuery.state.data()! as Awaited<InfiniteData<TQueryFnData, TPageParam>>);
   });
 
   return useMemo(() => {
@@ -150,10 +145,12 @@ export function useSuspenseInfiniteQuery<
         const currentData = state.data();
 
         if (resolvedOptions.select && currentData !== undefined) {
-          return resolvedOptions.select(currentData as any) as Awaited<D>;
+          return resolvedOptions.select(currentData as any) as Awaited<
+            InfiniteData<TQueryFnData, TPageParam>
+          >;
         }
 
-        return currentData as Awaited<D>;
+        return currentData as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
       }),
       hasNextPage: useMemo(() => hasNextPage(options, state.data())),
       hasPreviousPage: useMemo(() => hasPreviousPage(options, state.data())),
@@ -168,5 +165,8 @@ export function useSuspenseInfiniteQuery<
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
     };
-  }) as unknown as UseSuspenseInfiniteQueryResult<Awaited<D>, TError>;
+  }) as unknown as UseSuspenseInfiniteQueryResult<
+    Awaited<InfiniteData<TQueryFnData, TPageParam>>,
+    TError
+  >;
 }

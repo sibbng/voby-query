@@ -13,7 +13,7 @@ import type {
   InfiniteQueryOptions,
   QueryKey,
   QueryOptions,
-  UseInfiniteQueryReturn,
+  UseInfiniteQueryResult,
 } from './types.ts';
 
 export type {
@@ -22,7 +22,6 @@ export type {
   InfiniteQueryFunctionContext,
   InfiniteQueryOptions,
   UseInfiniteQueryResult,
-  UseInfiniteQueryReturn,
 } from './types.ts';
 
 export function useInfiniteQuery<
@@ -30,12 +29,9 @@ export function useInfiniteQuery<
   TError = Error,
   TQueryKey extends QueryKey = QueryKey,
   TPageParam = unknown,
-  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
-  R = void,
-  D = R extends void ? InfiniteData<TQueryFnData, TPageParam> : R,
 >(
-  options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam, R, TInitialData>,
-): UseInfiniteQueryReturn<Awaited<D>, TError, TInitialData> {
+  options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const queryClient = useQueryClient(options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const query = useMemo(() => {
@@ -43,11 +39,9 @@ export function useInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >;
-    const queryOptions = {
+    const infiniteQueryOptions = {
       ...options,
       queryFn: ({ signal }) =>
         refetchInfiniteData({
@@ -59,19 +53,15 @@ export function useInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >;
 
     nextQuery = queryClient.cache.build<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey,
-      TInitialData,
-      R
-    >(queryClient, queryOptions);
+      TQueryKey
+    >(queryClient, infiniteQueryOptions);
     useCleanup(nextQuery.addInstance());
     return nextQuery;
   });
@@ -123,13 +113,15 @@ export function useInfiniteQuery<
         const data = state.data();
 
         if (state.isPending() && resolvedOptions.placeholderData !== undefined) {
-          return resolvedOptions.placeholderData as Awaited<D>;
+          return resolvedOptions.placeholderData as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
         }
         if (resolvedOptions.select && data !== undefined) {
-          return resolvedOptions.select(data as any) as Awaited<D>;
+          return resolvedOptions.select(data as any) as Awaited<
+            InfiniteData<TQueryFnData, TPageParam>
+          >;
         }
 
-        return data as Awaited<D>;
+        return data as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
       }),
       hasNextPage: useMemo(() => hasNextPage(infiniteOptions, state.data())),
       hasPreviousPage: useMemo(() => hasPreviousPage(infiniteOptions, state.data())),
@@ -144,5 +136,5 @@ export function useInfiniteQuery<
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
     };
-  }) as UseInfiniteQueryReturn<Awaited<D>, TError, TInitialData>;
+  }) as UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError>;
 }

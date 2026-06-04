@@ -147,7 +147,7 @@ export type QueryFilters = {
   type?: 'all' | 'active' | 'inactive';
   stale?: boolean;
   fetchStatus?: FetchStatus;
-  predicate?: (query: import('./query.ts').Query<any, any, any, any, any, any>) => boolean;
+  predicate?: (query: import('./query.ts').Query<any, any, any, any>) => boolean;
 };
 
 export type MutationFilters = {
@@ -162,8 +162,6 @@ export type QueryOptions<
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
 > = {
   queryKey: TQueryKey;
   queryFn?: (options: {
@@ -172,7 +170,7 @@ export type QueryOptions<
     meta?: Record<string, unknown>;
   }) => Promise<TQueryFnData>;
   queryClient?: QueryClient;
-  initialData?: TInitialData;
+  initialData?: TData;
   initialDataUpdatedAt?: number;
   placeholderData?: TData;
   enabled?: FunctionMaybe<boolean>;
@@ -180,7 +178,7 @@ export type QueryOptions<
     | number
     | 'static'
     | ((
-        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
       ) => number | 'static');
   refetchInterval?: number;
   gcTime?: number;
@@ -188,7 +186,7 @@ export type QueryOptions<
   structuralSharing?:
     | boolean
     | ((oldData: TData | undefined, newData: Awaited<TQueryFnData>) => TData);
-  select?: (data: TInitialData extends TQueryFnData ? TInitialData : TQueryFnData) => R;
+  select?: (data: TQueryFnData) => TData;
   networkMode?: 'online' | 'always' | 'offlineFirst';
   refetchOnReconnect?: boolean;
   retry?: boolean | number | ((failureCount: number, error: TError) => boolean);
@@ -200,7 +198,7 @@ export type QueryOptions<
     | boolean
     | 'always'
     | ((
-        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
       ) => boolean | 'always');
   meta?: Record<string, unknown>;
   queryKeyHashFn?: (queryKey: QueryKey) => string;
@@ -211,16 +209,12 @@ export type InfiniteQueryOptions<
   TError = Error,
   TQueryKey extends QueryKey = QueryKey,
   TPageParam = unknown,
-  R = void,
-  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
 > = Omit<
   QueryOptions<
     InfiniteData<TQueryFnData, TPageParam>,
     TError,
     InfiniteData<TQueryFnData, TPageParam>,
-    TQueryKey,
-    TInitialData,
-    R
+    TQueryKey
   >,
   'queryFn'
 > & {
@@ -308,26 +302,14 @@ export type QueryClient = {
     },
     options?: QueryRefetchOptions,
   ) => Promise<void>;
-  ensureQueryData: <
-    TQueryFnData,
-    TData = TQueryFnData,
-    TInitialData extends TQueryFnData | undefined = undefined,
-  >(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  ensureQueryData: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<TData>;
-  fetchQuery: <
-    TQueryFnData,
-    TData = TQueryFnData,
-    TInitialData extends TQueryFnData | undefined = undefined,
-  >(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  fetchQuery: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<TData>;
-  prefetchQuery: <
-    TQueryFnData,
-    TData = TQueryFnData,
-    TInitialData extends TQueryFnData | undefined = undefined,
-  >(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey, TInitialData>,
+  prefetchQuery: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<void>;
   refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
   cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
@@ -364,23 +346,13 @@ export type UseQueryResult<TData = unknown, TError = Error> = ObservableReadonly
   UseQueryResultValue<TData | undefined, TError>
 >;
 
-type DefinedUseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
-  UseQueryResultValue<TData, TError>
->;
-
-export type UseQueryReturn<TData, TError, TInitialData> = TInitialData extends undefined
-  ? UseQueryResult<TData, TError>
-  : DefinedUseQueryResult<TData, TError>;
-
 export type UseSuspenseQueryOptions<
   TQueryFnData = unknown,
   TError = Error,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
 > = Omit<
-  QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+  QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
   'enabled' | 'placeholderData' | 'throwOnError'
 >;
 
@@ -398,10 +370,8 @@ export type UseSuspenseInfiniteQueryOptions<
   TError = Error,
   TQueryKey extends QueryKey = QueryKey,
   TPageParam = unknown,
-  R = void,
-  TInitialData extends InfiniteData<TQueryFnData, TPageParam> | undefined = undefined,
 > = Omit<
-  InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam, R, TInitialData>,
+  InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
   'enabled' | 'placeholderData' | 'throwOnError'
 >;
 
@@ -431,14 +401,6 @@ type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TDa
 export type UseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
   UseInfiniteQueryResultValue<TData | undefined, TError>
 >;
-
-type DefinedUseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
-  UseInfiniteQueryResultValue<TData, TError>
->;
-
-export type UseInfiniteQueryReturn<TData, TError, TInitialData> = TInitialData extends undefined
-  ? UseInfiniteQueryResult<TData, TError>
-  : DefinedUseInfiniteQueryResult<TData, TError>;
 
 type UseMutationResultMethods<
   TData = unknown,

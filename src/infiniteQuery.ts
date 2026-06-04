@@ -10,7 +10,7 @@ type InfiniteOptionsLike<
   TQueryFnData,
   TQueryKey extends QueryKey,
   TPageParam,
-> = InfiniteQueryOptions<TQueryFnData, any, TQueryKey, TPageParam, any, any>;
+> = InfiniteQueryOptions<TQueryFnData, any, TQueryKey, TPageParam>;
 
 export const getNextPageParam = <TQueryFnData, TPageParam>(
   options: Pick<InfiniteOptionsLike<TQueryFnData, any, TPageParam>, 'getNextPageParam'>,

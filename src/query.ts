@@ -54,8 +54,6 @@ export type Query<
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
 > = {
   queryHash: string;
   isActive: boolean;
@@ -64,7 +62,7 @@ export type Query<
   destroy: () => void;
   fetch: (options?: QueryFetchOptions) => Promise<void>;
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
-  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
+  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
   instances: number;
   controller: AbortController;
   isFetching: boolean;
@@ -119,29 +117,23 @@ export const resolveQueryOptions = <
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
 >(
   queryClient: QueryClient,
-  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
-): QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
-  const resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
+  options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+): QueryOptions<TQueryFnData, TError, TData, TQueryKey> => {
+  const resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey> = {
     queryClient,
     ...(queryClient.getDefaultOptions().queries as QueryOptions<
       TQueryFnData,
       TError,
       TData,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >),
     ...(queryClient.getQueryDefaults(options.queryKey) as QueryOptions<
       TQueryFnData,
       TError,
       TData,
-      TQueryKey,
-      TInitialData,
-      R
+      TQueryKey
     >),
     ...options,
   };
@@ -151,12 +143,12 @@ export const resolveQueryOptions = <
   return resolvedOptions;
 };
 
-export const resolveStaleTime = (query: Query<any, any, any, any, any, any>): number | 'static' => {
+export const resolveStaleTime = (query: Query<any, any, any, any>): number | 'static' => {
   const staleTime = query.resolvedOptions.staleTime ?? 0;
   return typeof staleTime === 'function' ? staleTime(query) : staleTime;
 };
 
-const scheduleQueryStale = (query: Query<any, any, any, any, any, any>) => {
+const scheduleQueryStale = (query: Query<any, any, any, any>) => {
   query.staleDisposer();
   query.staleDisposer = () => {};
 
@@ -182,7 +174,7 @@ const scheduleQueryStale = (query: Query<any, any, any, any, any, any>) => {
 };
 
 export const setQuerySuccessData = (
-  query: Query<any, any, any, any, any, any>,
+  query: Query<any, any, any, any>,
   data: unknown,
   dataUpdatedAt = Date.now(),
   scheduleStale = true,
@@ -201,8 +193,6 @@ export const createQuery = <
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
 >({
   cache,
   queryHash,
@@ -210,10 +200,9 @@ export const createQuery = <
 }: {
   cache: QueryCache;
   queryHash: string;
-  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>;
-}): Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> => {
-
-  const query: Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R> = {
+  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
+}): Query<TQueryFnData, TError, TData, TQueryKey> => {
+  const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
     isActive: false,
     resolvedOptions,
@@ -356,7 +345,7 @@ export const createQuery = <
       if (query.resolvedOptions.gcTime === Infinity) return;
       query.destroyDisposer();
       const id = setTimeout(() => {
-        cache.remove(query as Query);
+        cache.remove(query as unknown as Query);
       }, query.resolvedOptions.gcTime);
       query.destroyDisposer = () => clearTimeout(id);
     },

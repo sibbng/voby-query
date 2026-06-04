@@ -24,7 +24,6 @@ export type {
   InfiniteQueryFunctionContext,
   InfiniteQueryOptions,
   UseInfiniteQueryResult,
-  UseInfiniteQueryReturn,
 } from './useInfiniteQuery.ts';
 
 export { useMutation, useMutationState } from './useMutation.ts';
@@ -39,6 +38,8 @@ export type { MutationKey } from './types.ts';
 
 export { useIsFetching } from './useIsFetching.ts';
 export { useIsMutating } from './useIsMutating.ts';
+export { queryOptions } from './queryOptions.ts';
+export { mutationOptions } from './mutationOptions.ts';
 export { useSuspenseQuery } from './useSuspenseQuery.ts';
 export { useSuspenseInfiniteQuery } from './useSuspenseInfiniteQuery.ts';
 export type { UseSuspenseQueryOptions, UseSuspenseQueryResult } from './types.ts';

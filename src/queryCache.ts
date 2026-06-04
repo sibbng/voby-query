@@ -100,16 +100,11 @@ export class QueryCache<
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
-    TInitialData extends TQueryFnData | undefined = undefined,
-    R = void,
-  >(
-    queryClient: QueryClient,
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
-  ) {
+  >(queryClient: QueryClient, options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>) {
     const resolvedOptions = resolveQueryOptions(queryClient, options);
     const queryHash = hashQueryKeyByOptions(resolvedOptions.queryKey, resolvedOptions);
     const existingQuery = this.get(queryHash) as
-      | Query<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>
+      | Query<TQueryFnData, TError, TData, TQueryKey>
       | undefined;
 
     if (existingQuery) {

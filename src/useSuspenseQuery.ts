@@ -12,34 +12,24 @@ export function useSuspenseQuery<
   TError = Error,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-  TInitialData extends TQueryFnData | undefined = undefined,
-  R = void,
-  D = R extends void ? (TInitialData extends TQueryFnData ? TInitialData : TQueryFnData) : R,
 >(
-  options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
-): UseSuspenseQueryResult<Awaited<D>, TError> {
+  options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+): UseSuspenseQueryResult<Awaited<TData>, TError> {
   const queryClient = useQueryClient(options.queryClient);
   const query = useMemo(() => {
-    const nextQuery = queryClient.cache.build<
-      TQueryFnData,
-      TError,
-      TData,
-      TQueryKey,
-      TInitialData,
-      R
-    >(
+    const nextQuery = queryClient.cache.build<TQueryFnData, TError, TData, TQueryKey>(
       queryClient,
-      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData, R>,
+      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
     );
     useCleanup(nextQuery.addInstance());
     return nextQuery;
   });
 
-  const resource = useResource<Awaited<D>>(() => {
+  const resource = useResource<Awaited<TData>>(() => {
     const currentQuery = query();
 
     if (currentQuery.state.data() !== undefined) {
-      return currentQuery.state.data() as Awaited<D>;
+      return currentQuery.state.data() as Awaited<TData>;
     }
 
     if (currentQuery.state.error() !== null) {
@@ -47,10 +37,10 @@ export function useSuspenseQuery<
     }
 
     if (currentQuery.fetchPromise) {
-      return currentQuery.fetchPromise!.then(() => currentQuery.state.data()! as Awaited<D>);
+      return currentQuery.fetchPromise!.then(() => currentQuery.state.data()! as Awaited<TData>);
     }
 
-    return currentQuery.fetch().then(() => currentQuery.state.data()! as Awaited<D>);
+    return currentQuery.fetch().then(() => currentQuery.state.data()! as Awaited<TData>);
   });
 
   return useMemo(() => {
@@ -72,13 +62,13 @@ export function useSuspenseQuery<
         const currentData = stateObservable.data();
 
         if (resolvedOptions.select && currentData !== undefined) {
-          return resolvedOptions.select(currentData as any) as Awaited<D>;
+          return resolvedOptions.select(currentData as any) as Awaited<TData>;
         }
 
-        return currentData as Awaited<D>;
+        return currentData as Awaited<TData>;
       }),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
     };
-  }) as unknown as UseSuspenseQueryResult<Awaited<D>, TError>;
+  }) as unknown as UseSuspenseQueryResult<Awaited<TData>, TError>;
 }

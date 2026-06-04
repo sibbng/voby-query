@@ -291,17 +291,18 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
-    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData> & {
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey> & {
       revalidateIfStale?: boolean;
     },
   ): Promise<TData> => {
     const { queryKey, revalidateIfStale = false, ...restOptions } = options;
-    const query = cache.build(queryClient, {
-      queryKey,
-      ...restOptions,
-    } as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>);
+    const query = cache.build(queryClient, { queryKey, ...restOptions } as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey
+    >);
     const currentData = query.state.data();
 
     if (currentData !== undefined) {
@@ -320,18 +321,17 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
-    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
   ): Promise<TData> => {
     const query = cache.build(
       queryClient,
-      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
+      options as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
     ) as QueryLike;
 
     // Return fresh cached data if available (TanStack: isStaleByTime check)
     if (query.state.data() !== undefined) {
-      const staleTime = resolveStaleTime(query as Query<any, any, any, any, any, any>);
+      const staleTime = resolveStaleTime(query as Query<any, any, any, any>);
       const isFresh =
         staleTime === 'static' ||
         staleTime === Infinity ||
@@ -366,9 +366,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TError = unknown,
     TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
-    TInitialData extends TQueryFnData | undefined = undefined,
   >(
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey, TInitialData>,
+    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
   ): Promise<void> => {
     await fetchQuery(options).catch(noop);
   };
