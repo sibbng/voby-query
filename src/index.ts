@@ -34,11 +34,15 @@ export type {
   MutationState,
   UseMutationResult,
 } from './useMutation.ts';
-export type { MutationKey } from './types.ts';
+export { dataTagSymbol, dataTagErrorSymbol, unsetMarker } from './types.ts';
+export type { MutationKey, DataTag, AnyDataTag, UnsetMarker, InferDataFromTag, InferErrorFromTag } from './types.ts';
 
 export { useIsFetching } from './useIsFetching.ts';
 export { useIsMutating } from './useIsMutating.ts';
 export { queryOptions } from './queryOptions.ts';
+export type { DefinedInitialDataOptions, UndefinedInitialDataOptions } from './queryOptions.ts';
+export { infiniteQueryOptions } from './infiniteQueryOptions.ts';
+export type { DefinedInitialDataInfiniteOptions, UndefinedInitialDataInfiniteOptions } from './infiniteQueryOptions.ts';
 export { mutationOptions } from './mutationOptions.ts';
 export { useSuspenseQuery } from './useSuspenseQuery.ts';
 export { useSuspenseInfiniteQuery } from './useSuspenseInfiniteQuery.ts';

@@ -35,6 +35,39 @@ export type InfiniteQueryFunctionContext<
 export type QueryKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 export type MutationKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 
+export const dataTagSymbol = Symbol('dataTagSymbol')
+export type dataTagSymbol = typeof dataTagSymbol
+export const dataTagErrorSymbol = Symbol('dataTagErrorSymbol')
+export type dataTagErrorSymbol = typeof dataTagErrorSymbol
+export const unsetMarker = Symbol('unsetMarker')
+export type UnsetMarker = typeof unsetMarker
+export type AnyDataTag = {
+  [dataTagSymbol]: any
+  [dataTagErrorSymbol]: any
+}
+export type DataTag<
+  TType,
+  TValue,
+  TError = UnsetMarker,
+> = TType extends AnyDataTag
+  ? TType
+  : TType & {
+      [dataTagSymbol]: TValue
+      [dataTagErrorSymbol]: TError
+    }
+
+export type InferDataFromTag<TQueryFnData, TTaggedQueryKey extends QueryKey> =
+  TTaggedQueryKey extends DataTag<unknown, infer TaggedValue, unknown>
+    ? TaggedValue
+    : TQueryFnData
+
+export type InferErrorFromTag<TError, TTaggedQueryKey extends QueryKey> =
+  TTaggedQueryKey extends DataTag<unknown, unknown, infer TaggedError>
+    ? TaggedError extends UnsetMarker
+      ? TError
+      : TaggedError
+    : TError
+
 export type QueryStatus = 'pending' | 'error' | 'success';
 export type FetchStatus = 'fetching' | 'paused' | 'idle';
 export type MutationStatus = 'idle' | 'pending' | 'success' | 'error';
@@ -291,14 +324,30 @@ export type QueryClient = {
   jobQueue: Map<string, number[]>;
   startQueueJob: (queueKey: string) => void;
   finishQueueJob: (queueKey: string) => void;
-  getQueryData: <T>(queryKey: QueryKey) => T | undefined;
-  setQueryData: <T>(
-    queryKey: QueryKey,
-    data: T | ((previous: T | undefined) => T | undefined),
+  getQueryData: <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => TInferredQueryFnData | undefined;
+  setQueryData: <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+    data: TInferredQueryFnData | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
   ) => void;
-  getQueryState: <TData = unknown, TError = Error>(
-    queryKey: QueryKey,
-  ) => QueryState<TData, TError> | undefined;
+  getQueryState: <
+    TQueryFnData = unknown,
+    TError = Error,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+    TInferredError = InferErrorFromTag<TError, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => QueryState<TInferredQueryFnData, TInferredError> | undefined;
   invalidateQueries: (
     filters?: QueryFilters & {
       refetchType?: 'active' | 'inactive' | 'all' | 'none';

@@ -5,6 +5,8 @@ import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
 import type { Mutation } from './mutation.ts';
 import type {
+  InferDataFromTag,
+  InferErrorFromTag,
   MutationCache,
   MutationFilters,
   MutationKey,
@@ -153,15 +155,28 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     }
   };
 
-  const getQueryData: QueryClient['getQueryData'] = <T>(queryKey: QueryKey) => {
+  const getQueryData: QueryClient['getQueryData'] = <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => {
     const queryHash = queryKeyHashFn(queryKey);
-    return cache.get(queryHash)?.state.data() as T | undefined;
+    return cache.get(queryHash)?.state.data() as TQueryFnData | undefined;
   };
 
-  const setQueryData: QueryClient['setQueryData'] = (queryKey, data) => {
+  const setQueryData: QueryClient['setQueryData'] = <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+  >(
+    queryKey: TTaggedQueryKey,
+    data:
+      | TQueryFnData
+      | ((previous: TQueryFnData | undefined) => TQueryFnData | undefined),
+  ) => {
     const queryHash = queryKeyHashFn(queryKey);
     let query = cache.get(queryHash) as QueryLike | undefined;
-    const resolvedData = functionalUpdate(data, query?.state.data());
+    const resolvedData = functionalUpdate(data as any, query?.state.data());
 
     if (resolvedData === undefined) {
       return;
@@ -317,12 +332,16 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     return query.state.data() as TData;
   };
 
-  const getQueryState = <TData = unknown, TError = Error>(
-    queryKey: QueryKey,
-  ): QueryState<TData, TError> | undefined => {
+  const getQueryState: QueryClient['getQueryState'] = <
+    TQueryFnData = unknown,
+    TError = Error,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => {
     const queryHash = queryKeyHashFn(queryKey);
     const query = cache.get(queryHash);
-    return query?.state as QueryState<TData, TError> | undefined;
+    return query?.state as QueryState<TQueryFnData, TError> | undefined;
   };
 
   const prefetchInfiniteQuery = async <
