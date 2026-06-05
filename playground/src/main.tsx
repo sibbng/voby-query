@@ -21,6 +21,7 @@ import {
   meta as suspInfQueryMeta,
 } from '../examples/suspense-infinite-query';
 import { UseQueriesDemo, meta as useQueriesMeta } from '../examples/useQueries';
+import { NetworkAwareDemo, meta as networkAwareMeta } from '../examples/network-aware';
 import { DebugPanel, type DebugScope } from './debug-panel';
 
 const SESSION_KEY = 'voby-query-playground-example';
@@ -156,6 +157,14 @@ const examples: Example[] = [
     debug: {
       queryPrefixes: [['dashboard-user'], ['dashboard-posts'], ['dashboard-stats']],
       note: 'Three queries (user, posts, stats) managed as a single unit with combine().',
+    },
+  },
+  {
+    ...networkAwareMeta,
+    component: NetworkAwareDemo,
+    debug: {
+      queryPrefixes: [['network-slow'], ['network-focus']],
+      note: 'Tracks the slow query (networkMode) and the focus-refetching query side by side.',
     },
   },
 ];
