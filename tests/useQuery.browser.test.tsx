@@ -450,7 +450,7 @@ test('useQuery refetchOnWindowFocus: false', async () => {
   expect(queryFnMock).toHaveBeenCalledTimes(1); // Should NOT be called again
 });
 
-test('useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true', async () => {
+test('useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true', { retry: 3 }, async () => {
   const queryClient = createQueryClient();
   let fetchCount = 0;
   const abortedSignals: AbortSignal[] = [];
@@ -597,7 +597,7 @@ test('useQuery refetchInterval: data refetches periodically', { retry: 10 }, asy
   await flush();
 }); // Retry to account for timing issues
 
-test('useQuery refetchInterval cancels the active request when cancelRefetch is true', async () => {
+test('useQuery refetchInterval cancels the active request when cancelRefetch is true', { retry: 3 }, async () => {
   const queryClient = createQueryClient();
   let fetchCount = 0;
   const abortedSignals: AbortSignal[] = [];

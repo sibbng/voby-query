@@ -13,6 +13,7 @@ import type {
 } from './types.ts';
 import { ensureQueryFn, replaceData, shouldThrowError } from './utils.ts';
 import { onlineManager } from './onlineManager.ts';
+import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import { focusManager } from './focusManager.ts';
 
 const isBrowser = typeof window !== 'undefined';
@@ -169,10 +170,10 @@ const scheduleQueryStale = (query: Query<any, any, any, any>) => {
     return;
   }
 
-  const id = setTimeout(() => {
+  const id = timeoutManager.setTimeout(() => {
     query.state.isStale(true);
   }, staleTime);
-  query.staleDisposer = () => clearTimeout(id);
+  query.staleDisposer = () => timeoutManager.clearTimeout(id);
 };
 
 export const setQuerySuccessData = (
@@ -246,15 +247,15 @@ export const createQuery = <
 
           if (query.resolvedOptions.refetchInterval) {
             const intervalDelay = query.resolvedOptions.refetchInterval;
-            let intervalId: ReturnType<typeof setInterval>;
-            const timeoutId = setTimeout(() => {
-              intervalId = setInterval(() => {
+            let intervalId: ManagedTimerId;
+            const timeoutId = timeoutManager.setTimeout(() => {
+              intervalId = timeoutManager.setInterval(() => {
                 void query.refetch();
               }, intervalDelay);
             }, intervalDelay);
             cleanups.push(() => {
-              clearTimeout(timeoutId);
-              clearInterval(intervalId);
+              timeoutManager.clearTimeout(timeoutId);
+              timeoutManager.clearInterval(intervalId);
             });
           }
           if (query.resolvedOptions.networkMode === 'online') {
@@ -339,10 +340,10 @@ export const createQuery = <
     scheduleDestroy: () => {
       if (query.resolvedOptions.gcTime === Infinity) return;
       query.destroyDisposer();
-      const id = setTimeout(() => {
+      const id = timeoutManager.setTimeout(() => {
         cache.remove(query as unknown as Query);
-      }, query.resolvedOptions.gcTime);
-      query.destroyDisposer = () => clearTimeout(id);
+      }, query.resolvedOptions.gcTime!);
+      query.destroyDisposer = () => timeoutManager.clearTimeout(id);
     },
     destroy: () => {
       void query.cancel({ revert: false, silent: true });
@@ -485,11 +486,11 @@ export const createQuery = <
         return;
       }
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
-        const id = setTimeout(() => {
+        const id = timeoutManager.setTimeout(() => {
           query.retryDisposer = () => {};
           void query.fetch({ retryAttempt: attempt, fetchFn, force: true });
         }, delay ?? 0);
-        query.retryDisposer = () => clearTimeout(id);
+        query.retryDisposer = () => timeoutManager.clearTimeout(id);
       }
     },
   };

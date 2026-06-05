@@ -1,5 +1,6 @@
 import { $, useMemo, useRoot } from 'voby';
 import { hashFn, shouldThrowError } from './utils.ts';
+import { timeoutManager } from './timeoutManager.ts';
 import type {
   MutateOptions,
   MutationKey,
@@ -154,13 +155,13 @@ export const createMutation = <
     scheduleDestroy: () => {
       if (mutation.resolvedOptions.gcTime === Infinity) return;
       mutation.destroyDisposer();
-      const id = setTimeout(
+      const id = timeoutManager.setTimeout(
         () => {
           mutationCache.remove(mutation);
         },
         mutation.resolvedOptions.gcTime ?? 5 * 60 * 1000,
       );
-      mutation.destroyDisposer = () => clearTimeout(id);
+      mutation.destroyDisposer = () => timeoutManager.clearTimeout(id);
     },
     reset: () => {
       mutation.state.status('idle');
@@ -222,7 +223,7 @@ export const createMutation = <
                 ? retryDelay(failureCount, error as TError)
                 : retryDelay * 2 ** (failureCount - 1);
 
-            await new Promise((resolve) => setTimeout(resolve, resolvedRetryDelay));
+            await new Promise((resolve) => timeoutManager.setTimeout(resolve, resolvedRetryDelay));
           }
         }
 
