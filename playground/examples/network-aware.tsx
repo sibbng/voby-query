@@ -1,4 +1,4 @@
-import { $, For } from 'voby';
+import { $, For, If } from 'voby';
 import { useQuery, onlineManager, focusManager } from 'voby-query';
 import { Card, Tag, Btn } from '../src/ui';
 
@@ -15,18 +15,14 @@ const NetworkStatusBar = () => {
       <div
         class={() =>
           `rounded-lg border px-4 py-3 flex items-center justify-between ${
-            online()
-              ? 'bg-emerald-400/8 border-emerald-400/20'
-              : 'bg-red-400/8 border-red-400/20'
+            online() ? 'bg-emerald-400/8 border-emerald-400/20' : 'bg-red-400/8 border-red-400/20'
           }`
         }
       >
         <span class="font-mono text-xs text-white/45">onlineManager</span>
         <span
           class={() =>
-            `font-mono text-xs font-semibold ${
-              online() ? 'text-emerald-400' : 'text-red-400'
-            }`
+            `font-mono text-xs font-semibold ${online() ? 'text-emerald-400' : 'text-red-400'}`
           }
         >
           {() => (online() ? 'ONLINE' : 'OFFLINE')}
@@ -35,18 +31,14 @@ const NetworkStatusBar = () => {
       <div
         class={() =>
           `rounded-lg border px-4 py-3 flex items-center justify-between ${
-            focused()
-              ? 'bg-sky-400/8 border-sky-400/20'
-              : 'bg-amber-400/8 border-amber-400/20'
+            focused() ? 'bg-sky-400/8 border-sky-400/20' : 'bg-amber-400/8 border-amber-400/20'
           }`
         }
       >
         <span class="font-mono text-xs text-white/45">focusManager</span>
         <span
           class={() =>
-            `font-mono text-xs font-semibold ${
-              focused() ? 'text-sky-400' : 'text-amber-400'
-            }`
+            `font-mono text-xs font-semibold ${focused() ? 'text-sky-400' : 'text-amber-400'}`
           }
         >
           {() => (focused() ? 'FOCUSED' : 'BLURRED')}
@@ -92,11 +84,15 @@ export const NetworkAwareDemo = () => {
       await new Promise<void>((resolve, reject) => {
         if (signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
         const timer = setTimeout(resolve, 2000);
-        signal.addEventListener('abort', () => {
-          clearTimeout(timer);
-          push('slowQuery: aborted');
-          reject(new DOMException('Aborted', 'AbortError'));
-        }, { once: true });
+        signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            push('slowQuery: aborted');
+            reject(new DOMException('Aborted', 'AbortError'));
+          },
+          { once: true },
+        );
       });
       const res = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=3', { signal });
       push('slowQuery: completed');
@@ -131,9 +127,18 @@ export const NetworkAwareDemo = () => {
         <div>
           <p class="text-xs text-white/25 font-mono mb-2 uppercase tracking-widest">Notes</p>
           <ul class="space-y-1 text-xs text-white/40 font-mono">
-            <li>• <code class="text-white/60">setOnline(false)</code> pauses queries with <code class="text-white/60">networkMode:'online'</code></li>
-            <li>• <code class="text-white/60">setOnline(true)</code> resumes them and triggers refetchOnReconnect</li>
-            <li>• <code class="text-white/60">setFocused(true)</code> triggers queries with <code class="text-white/60">refetchOnWindowFocus</code></li>
+            <li>
+              • <code class="text-white/60">setOnline(false)</code> pauses queries with{' '}
+              <code class="text-white/60">networkMode:'online'</code>
+            </li>
+            <li>
+              • <code class="text-white/60">setOnline(true)</code> resumes them and triggers
+              refetchOnReconnect
+            </li>
+            <li>
+              • <code class="text-white/60">setFocused(true)</code> triggers queries with{' '}
+              <code class="text-white/60">refetchOnWindowFocus</code>
+            </li>
             <li>• Opening devtools and switching tabs fires real visibilitychange events</li>
           </ul>
         </div>
