@@ -94,6 +94,8 @@ export function useSuspenseInfiniteQuery<
       throw state.error()!;
     }
 
+    // Access `.value` to trigger suspend() in Voby's useResource
+    // eslint-disable-next-line no-unused-expressions
     resource().value;
 
     const fetchPage = async (

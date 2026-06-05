@@ -49,6 +49,8 @@ export function useSuspenseQuery<
       throw stateObservable.error()!;
     }
 
+    // Access `.value` to trigger suspend() in Voby's useResource
+    // eslint-disable-next-line no-unused-expressions
     resource().value;
     const { isPlaceholderData: _isPlaceholderData, ...rest } = stateObservable;
 
