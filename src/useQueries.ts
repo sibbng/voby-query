@@ -16,6 +16,8 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
   const shouldSubscribe = options.subscribed !== false;
   useCleanup(shouldSubscribe ? client.cache.subscribe(() => tick((v) => v + 1)) : noop);
 
+  const lastDataMap = new Map<string, unknown>();
+
   const queries = useMemo(
     () => {
       return options.queries.map((opts) => {
@@ -33,8 +35,23 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
         const opts = q.resolvedOptions;
         return useMemo(() => {
           const rawData = q.state.data();
-          if (q.state.isPending() && opts.placeholderData !== undefined) {
-            return opts.placeholderData;
+          if (q.state.isPending()) {
+            if (typeof opts.placeholderData === 'function') {
+              const placeholderValue = (opts.placeholderData as (prev: unknown) => unknown)(
+                lastDataMap.get(q.queryHash),
+              );
+              if (placeholderValue !== undefined) {
+                if (opts.select) {
+                  return opts.select(placeholderValue);
+                }
+                return placeholderValue;
+              }
+            } else if (opts.placeholderData !== undefined) {
+              return opts.placeholderData;
+            }
+          }
+          if (q.state.isSuccess() && rawData !== undefined) {
+            lastDataMap.set(q.queryHash, rawData);
           }
           if (opts.select && rawData !== undefined) {
             return opts.select(rawData);

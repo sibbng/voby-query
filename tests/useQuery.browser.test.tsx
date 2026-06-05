@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vite-plus/test';
 import { flush, render, sleep } from './utils';
 import { waitFor } from '@testing-library/dom';
-import { createQueryClient } from '../src';
+import { createQueryClient, keepPreviousData } from '../src';
 import { useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
-import { If, $, useMemo } from 'voby';
+import { For, If, $, useMemo } from 'voby';
 
 test('useQuery with provider', async () => {
   const queryClient = createQueryClient();
@@ -1155,4 +1155,152 @@ test('refetch with cancelRefetch cancels the active request and starts a new one
   expect(fetchCount).toBe(2);
   expect(queryClient.getQueryData(['cancel-refetch'])).toBe('Fresh result');
   expect(queryClient.isFetching({ queryKey: ['cancel-refetch'] })).toBe(0);
+});
+
+test('should keep the previous data when placeholderData is set and select fn transform is used', async () => {
+  const queryClient = createQueryClient();
+  const key = 'keep-previous-select-test';
+  const idx = $(0);
+
+  function TestComponent() {
+    const query = useQuery<{ count: number }, Error, number>({
+      queryKey: [key, idx],
+      queryFn: async () => {
+        await sleep(10);
+        return { count: idx() };
+      },
+      select: (data) => data.count,
+      placeholderData: keepPreviousData,
+    });
+
+    return (
+      <>
+        <p>Data: {() => String(query().data() ?? 'none')}</p>
+        <p>isPlaceholderData: {() => query().isPlaceholderData().toString()}</p>
+      </>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <TestComponent />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  // Initial: no data yet (loading)
+  expect(document.body.textContent).toContain('Data: none');
+
+  // Wait for first fetch to complete
+  await waitFor(() => expect(document.body.textContent).toContain('Data: 0'));
+  expect(document.body.textContent).toContain('isPlaceholderData: false');
+
+  // Change query key — new fetch starts
+  idx(1);
+  await flush();
+
+  // Should keep previous data (0) via placeholderData while new fetch loads
+  expect(document.body.textContent).toContain('Data: 0');
+  expect(document.body.textContent).toContain('isPlaceholderData: true');
+
+  // Wait for new data
+  await waitFor(() => expect(document.body.textContent).toContain('Data: 1'));
+  expect(document.body.textContent).toContain('isPlaceholderData: false');
+});
+
+test('should show the correct data when switching keys with initialData, placeholderData & staleTime', async () => {
+  const queryClient = createQueryClient();
+  const key = 'initialdata-placeholder-staletime';
+
+  const ALL_TODOS = [
+    { name: 'todo A', priority: 'high' },
+    { name: 'todo B', priority: 'medium' },
+  ];
+
+  const initialTodos = ALL_TODOS;
+  const filter = $('');
+
+  function Page() {
+    const query = useQuery({
+      queryKey: [key, filter],
+      queryFn: async () => {
+        return ALL_TODOS.filter((todo) =>
+          filter() ? todo.priority === filter() : true,
+        );
+      },
+      initialData() {
+        return filter() === '' ? initialTodos : undefined;
+      },
+      placeholderData: keepPreviousData,
+      staleTime: 5000,
+    });
+
+    return (
+      <div>
+        <p>Current Todos, filter: {() => filter() || 'all'}</p>
+        <button onClick={() => filter('')}>All</button>
+        <button onClick={() => filter('high')}>High</button>
+        <ul>
+          <For values={() => query().data() ?? []}>
+            {(todo) => <li>{() => `${todo.name} - ${todo.priority}`}</li>}
+          </For>
+        </ul>
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Page />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  expect(document.body.textContent).toContain('Current Todos, filter: all');
+  expect(document.body.textContent).toContain('todo A - high');
+  expect(document.body.textContent).toContain('todo B - medium');
+
+  const buttons = document.querySelectorAll('button');
+  buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+  expect(document.body.textContent).toContain('Current Todos, filter: high');
+
+  buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+  expect(document.body.textContent).toContain('todo B - medium');
+});
+
+test('should initialize state properly, when initialData is falsy', async () => {
+  const queryClient = createQueryClient();
+  const key = ['initial-data-falsy'];
+
+  function Page() {
+    const query = useQuery({
+      queryKey: key,
+      queryFn: async () => 1,
+      initialData: 0,
+    });
+
+    return (
+      <div>
+        <p>Data: {() => String(query().data() ?? 'none')}</p>
+        <p>Fetching: {() => query().isFetching().toString()}</p>
+      </div>
+    );
+  }
+
+  render(
+    <QueryClientProvider value={queryClient}>
+      <Page />
+    </QueryClientProvider>,
+    document.body,
+  );
+
+  expect(document.body.textContent).toContain('Data: 0');
+  expect(document.body.textContent).toContain('Fetching: true');
+
+  await sleep(0);
+
+  expect(document.body.textContent).toContain('Data: 1');
+  expect(document.body.textContent).toContain('Fetching: false');
 });

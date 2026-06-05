@@ -293,6 +293,10 @@ export function ensureSuspenseTimers<
   };
 }
 
+export function keepPreviousData<T>(previousData: T | undefined): T | undefined {
+  return previousData;
+}
+
 export function ensureQueryFn(
   options: { queryFn?: unknown; queryHash?: string },
   fetchOptions?: { initialPromise?: Promise<unknown> },

@@ -203,9 +203,9 @@ export type QueryOptions<
     meta?: Record<string, unknown>;
   }) => Promise<TQueryFnData>;
   queryClient?: QueryClient;
-  initialData?: TData;
+  initialData?: TData | (() => TData | undefined);
   initialDataUpdatedAt?: number;
-  placeholderData?: TData;
+  placeholderData?: TData | ((previousData: TQueryFnData | undefined) => TQueryFnData | undefined);
   enabled?: FunctionMaybe<boolean>;
   staleTime?:
     | number

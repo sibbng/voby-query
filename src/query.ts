@@ -143,6 +143,9 @@ export const resolveQueryOptions = <
   };
 
   resolvedOptions.enabled = $$(resolvedOptions.enabled);
+  if (typeof resolvedOptions.initialData === 'function') {
+    resolvedOptions.initialData = (resolvedOptions.initialData as () => TData | undefined)();
+  }
 
   return resolvedOptions;
 };

@@ -1,4 +1,4 @@
-import { useMemo } from 'voby';
+import { $, useMemo } from 'voby';
 import { useBaseQuery } from './useBaseQuery.ts';
 import type { QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 
@@ -26,6 +26,8 @@ export function useQuery<
 >(
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
 ): UseQueryResult<Awaited<TData>, TError> {
+  const lastData = $<TQueryFnData | undefined>();
+
   const query = useBaseQuery(options.queryClient, (client) =>
     client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options),
   );
@@ -39,9 +41,28 @@ export function useQuery<
       data: useMemo(() => {
         const data = state.data();
 
-        if (state.isPending() && resolvedOptions.placeholderData !== undefined) {
-          return resolvedOptions.placeholderData as Awaited<TData>;
+        if (state.isPending()) {
+          if (typeof resolvedOptions.placeholderData === 'function') {
+            const placeholderValue = (
+              resolvedOptions.placeholderData as (
+                prev: TQueryFnData | undefined,
+              ) => TQueryFnData | undefined
+            )(lastData());
+            if (placeholderValue !== undefined) {
+              if (resolvedOptions.select) {
+                return resolvedOptions.select(placeholderValue as any) as Awaited<TData>;
+              }
+              return placeholderValue as Awaited<TData>;
+            }
+          } else if (resolvedOptions.placeholderData !== undefined) {
+            return resolvedOptions.placeholderData as Awaited<TData>;
+          }
         }
+
+        if (state.isSuccess() && data !== undefined) {
+          lastData(data as TQueryFnData);
+        }
+
         if (resolvedOptions.select && data !== undefined) {
           return resolvedOptions.select(data as any) as Awaited<TData>;
         }

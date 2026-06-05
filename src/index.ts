@@ -71,6 +71,7 @@ export type {
 } from './useQueries.ts';
 export { useSuspenseQueries } from './useSuspenseQueries.ts';
 export type { SuspenseQueriesOptions, SuspenseQueriesResults } from './useSuspenseQueries.ts';
+export { keepPreviousData } from './utils.ts';
 export { Subscribable } from './subscribable.ts';
 export { onlineManager } from './onlineManager.ts';
 export { focusManager } from './focusManager.ts';

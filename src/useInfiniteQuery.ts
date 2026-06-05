@@ -32,6 +32,7 @@ export function useInfiniteQuery<
   options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
 ): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
+  const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
 
   const query = useBaseQuery(options.queryClient, (client) => {
     let nextQuery!: Query<
@@ -105,9 +106,31 @@ export function useInfiniteQuery<
       data: useMemo(() => {
         const data = state.data();
 
-        if (state.isPending() && resolvedOptions.placeholderData !== undefined) {
-          return resolvedOptions.placeholderData as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
+        if (state.isPending()) {
+          if (typeof resolvedOptions.placeholderData === 'function') {
+            const placeholderFn = resolvedOptions.placeholderData as (
+              prev: Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined,
+            ) => Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined;
+            const placeholderValue = placeholderFn(lastData());
+            if (placeholderValue !== undefined) {
+              if (resolvedOptions.select) {
+                return resolvedOptions.select(placeholderValue as any) as Awaited<
+                  InfiniteData<TQueryFnData, TPageParam>
+                >;
+              }
+              return placeholderValue as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
+            }
+          } else if (resolvedOptions.placeholderData !== undefined) {
+            return resolvedOptions.placeholderData as Awaited<
+              InfiniteData<TQueryFnData, TPageParam>
+            >;
+          }
         }
+
+        if (state.isSuccess() && data !== undefined) {
+          lastData(data);
+        }
+
         if (resolvedOptions.select && data !== undefined) {
           return resolvedOptions.select(data as any) as Awaited<
             InfiniteData<TQueryFnData, TPageParam>
