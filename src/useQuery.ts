@@ -1,5 +1,5 @@
-import { useCleanup, useMemo } from 'voby';
-import { useQueryClient } from './queryClient.ts';
+import { useMemo } from 'voby';
+import { useBaseQuery } from './useBaseQuery.ts';
 import type { QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 
 export { CancelledError } from './query.ts';
@@ -26,15 +26,9 @@ export function useQuery<
 >(
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
 ): UseQueryResult<Awaited<TData>, TError> {
-  const queryClient = useQueryClient(options.queryClient);
-  const query = useMemo(() => {
-    const nextQuery = queryClient.cache.build<TQueryFnData, TError, TData, TQueryKey>(
-      queryClient,
-      options,
-    );
-    useCleanup(nextQuery.addInstance());
-    return nextQuery;
-  });
+  const query = useBaseQuery(options.queryClient, (client) =>
+    client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options),
+  );
 
   return useMemo(() => {
     const currentQuery = query();

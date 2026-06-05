@@ -1,5 +1,5 @@
-import { useCleanup, useMemo, useResource } from 'voby';
-import { useQueryClient } from './queryClient.ts';
+import { useMemo, useResource } from 'voby';
+import { useBaseQuery } from './useBaseQuery.ts';
 import type {
   QueryKey,
   QueryOptions,
@@ -16,22 +16,12 @@ export function useSuspenseQuery<
 >(
   options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
 ): UseSuspenseQueryResult<Awaited<TData>, TError> {
-  const queryClient = useQueryClient(options.queryClient);
-  const query = useMemo(() => {
-    const suspenseOptions = ensureSuspenseTimers(options) as QueryOptions<
-      TQueryFnData,
-      TError,
-      TData,
-      TQueryKey
-    >;
-
-    const nextQuery = queryClient.cache.build<TQueryFnData, TError, TData, TQueryKey>(
-      queryClient,
-      suspenseOptions,
-    );
-    useCleanup(nextQuery.addInstance());
-    return nextQuery;
-  });
+  const query = useBaseQuery(options.queryClient, (client) =>
+    client.cache.build<TQueryFnData, TError, TData, TQueryKey>(
+      client,
+      ensureSuspenseTimers(options) as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+    ),
+  );
 
   const resource = useResource<Awaited<TData>>(() => {
     const currentQuery = query();
@@ -59,9 +49,7 @@ export function useSuspenseQuery<
       throw stateObservable.error()!;
     }
 
-    const r = resource();
-    const data = r.value;
-
+    resource().value;
     const { isPlaceholderData: _isPlaceholderData, ...rest } = stateObservable;
 
     return {

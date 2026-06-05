@@ -32,13 +32,11 @@ export const hashFn = (queryKey: QueryKey | MutationKey): string => {
   });
 };
 
-export const hashKey = hashFn;
-
 export function hashQueryKeyByOptions<TQueryKey extends QueryKey = QueryKey>(
   queryKey: TQueryKey,
   options?: { queryKeyHashFn?: (key: TQueryKey) => string },
 ): string {
-  const hashFnOption = options?.queryKeyHashFn || hashKey;
+  const hashFnOption = options?.queryKeyHashFn || hashFn;
   return hashFnOption(queryKey);
 }
 

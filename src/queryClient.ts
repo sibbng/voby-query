@@ -429,15 +429,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
 
     const query = cache.build(queryClient, wrappedOptions) as QueryLike;
 
-    if (query.state.data() !== undefined) {
-      const staleTime = resolveStaleTime(query as Query<any, any, any, any>);
-      const isFresh =
-        staleTime === 'static' ||
-        staleTime === Infinity ||
-        Date.now() - query.state.dataUpdatedAt() < staleTime;
-      if (isFresh) {
-        return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
-      }
+    if (!query.isStaleByTime(resolveStaleTime(query))) {
+      return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
     }
 
     if (options.retry === undefined) {
@@ -481,16 +474,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
       options as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
     ) as QueryLike;
 
-    // Return fresh cached data if available (TanStack: isStaleByTime check)
-    if (query.state.data() !== undefined) {
-      const staleTime = resolveStaleTime(query as Query<any, any, any, any>);
-      const isFresh =
-        staleTime === 'static' ||
-        staleTime === Infinity ||
-        Date.now() - query.state.dataUpdatedAt() < staleTime;
-      if (isFresh) {
-        return query.state.data() as TData;
-      }
+    if (!query.isStaleByTime(resolveStaleTime(query))) {
+      return query.state.data() as TData;
     }
 
     // TanStack: fetchQuery doesn't retry by default

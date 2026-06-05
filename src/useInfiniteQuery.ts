@@ -1,18 +1,17 @@
-import { $, useCleanup, useMemo } from 'voby';
+import { $, useMemo } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
   hasPreviousPage,
   refetchInfiniteData,
 } from './infiniteQuery.ts';
-import { useQueryClient } from './queryClient.ts';
+import { useBaseQuery } from './useBaseQuery.ts';
 import type { Query } from './query.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
   InfiniteQueryOptions,
   QueryKey,
-  QueryOptions,
   UseInfiniteQueryResult,
 } from './types.ts';
 
@@ -32,37 +31,31 @@ export function useInfiniteQuery<
 >(
   options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
 ): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
-  const queryClient = useQueryClient(options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
-  const query = useMemo(() => {
+
+  const query = useBaseQuery(options.queryClient, (client) => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
       TQueryKey
     >;
-    const infiniteQueryOptions = {
+    const wrappedOptions = {
       ...options,
-      queryFn: ({ signal }) =>
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
         refetchInfiniteData({
           options,
           signal,
           data: nextQuery?.state.data(),
         }),
-    } as QueryOptions<
-      InfiniteData<TQueryFnData, TPageParam>,
-      TError,
-      InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey
-    >;
+    } as const;
 
-    nextQuery = queryClient.cache.build<
+    nextQuery = client.cache.build<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
       TQueryKey
-    >(queryClient, infiniteQueryOptions);
-    useCleanup(nextQuery.addInstance());
+    >(client, wrappedOptions as any);
     return nextQuery;
   });
 
@@ -92,7 +85,7 @@ export function useInfiniteQuery<
         await currentQuery.fetch({
           force: true,
           throwOnError,
-          fetchFn: ({ signal }) =>
+          fetchFn: ({ signal }: { signal: AbortSignal }) =>
             fetchInfiniteDataPage({
               options: infiniteOptions,
               signal,

@@ -75,6 +75,7 @@ export type Query<
   stateDisposer: () => void;
   staleDisposer: () => void;
   retryDisposer: () => void;
+  isStaleByTime: (staleTime: number | 'static') => boolean;
   addInstance: () => () => void;
   removeInstance: () => void;
   scheduleDestroy: () => void;
@@ -219,6 +220,11 @@ export const createQuery = <
     retryDisposer: () => {},
     fetchPromise: undefined,
     revertState: undefined,
+    isStaleByTime: (staleTime) => {
+      if (query.state.data() === undefined) return true;
+      if (staleTime === 'static' || staleTime === Infinity) return false;
+      return Date.now() - query.state.dataUpdatedAt() >= staleTime;
+    },
     addInstance: () => {
       query.destroyDisposer();
       query.isActive = true;

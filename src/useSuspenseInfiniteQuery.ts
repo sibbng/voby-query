@@ -1,19 +1,18 @@
-import { $, useCleanup, useMemo, useResource } from 'voby';
+import { $, useMemo, useResource } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
   hasPreviousPage,
   refetchInfiniteData,
 } from './infiniteQuery.ts';
-import { useQueryClient } from './queryClient.ts';
-import { ensureSuspenseTimers } from './utils.ts';
+import { useBaseQuery } from './useBaseQuery.ts';
 import type { Query } from './query.ts';
+import { ensureSuspenseTimers } from './utils.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
   InfiniteQueryOptions,
   QueryKey,
-  QueryOptions,
   UseSuspenseInfiniteQueryResult,
 } from './types.ts';
 
@@ -36,10 +35,9 @@ export function useSuspenseInfiniteQuery<
     'enabled' | 'placeholderData' | 'throwOnError'
   >,
 ): UseSuspenseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
-  const queryClient = useQueryClient(options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
 
-  const query = useMemo(() => {
+  const query = useBaseQuery(options.queryClient, (client) => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
@@ -47,30 +45,22 @@ export function useSuspenseInfiniteQuery<
       TQueryKey
     >;
 
-    const suspenseOptions = ensureSuspenseTimers(options);
-
-    const infiniteQueryOptions = {
-      ...suspenseOptions,
-      queryFn: ({ signal }) =>
+    const wrappedOptions = {
+      ...ensureSuspenseTimers(options),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
         refetchInfiniteData({
           options,
           signal,
           data: nextQuery?.state.data(),
         }),
-    } as QueryOptions<
-      InfiniteData<TQueryFnData, TPageParam>,
-      TError,
-      InfiniteData<TQueryFnData, TPageParam>,
-      TQueryKey
-    >;
+    } as const;
 
-    nextQuery = queryClient.cache.build<
+    nextQuery = client.cache.build<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
       InfiniteData<TQueryFnData, TPageParam>,
       TQueryKey
-    >(queryClient, infiniteQueryOptions);
-    useCleanup(nextQuery.addInstance());
+    >(client, wrappedOptions as any);
     return nextQuery;
   });
 
@@ -104,8 +94,7 @@ export function useSuspenseInfiniteQuery<
       throw state.error()!;
     }
 
-    const r = resource();
-    const data = r.value;
+    resource().value;
 
     const fetchPage = async (
       direction: InfiniteQueryDirection,
@@ -125,7 +114,7 @@ export function useSuspenseInfiniteQuery<
       try {
         await currentQuery.fetch({
           force: true,
-          fetchFn: ({ signal }) =>
+          fetchFn: ({ signal }: { signal: AbortSignal }) =>
             fetchInfiniteDataPage({
               options,
               signal,
