@@ -1224,9 +1224,7 @@ test('should show the correct data when switching keys with initialData, placeho
     const query = useQuery({
       queryKey: [key, filter],
       queryFn: async () => {
-        return ALL_TODOS.filter((todo) =>
-          filter() ? todo.priority === filter() : true,
-        );
+        return ALL_TODOS.filter((todo) => (filter() ? todo.priority === filter() : true));
       },
       initialData() {
         return filter() === '' ? initialTodos : undefined;
