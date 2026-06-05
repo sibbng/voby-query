@@ -15,6 +15,12 @@ export type QueryRefetchOptions = {
   cancelRefetch?: boolean;
 };
 
+export type SetDataOptions = {
+  updatedAt?: number;
+};
+
+export type Updater<TInput, TOutput> = TOutput | ((input: TInput) => TOutput);
+
 export type InfiniteQueryDirection = 'forward' | 'backward';
 
 export type InfiniteData<TData = unknown, TPageParam = unknown> = {
@@ -35,38 +41,32 @@ export type InfiniteQueryFunctionContext<
 export type QueryKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 export type MutationKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 
-export const dataTagSymbol = Symbol('dataTagSymbol')
-export type dataTagSymbol = typeof dataTagSymbol
-export const dataTagErrorSymbol = Symbol('dataTagErrorSymbol')
-export type dataTagErrorSymbol = typeof dataTagErrorSymbol
-export const unsetMarker = Symbol('unsetMarker')
-export type UnsetMarker = typeof unsetMarker
+export const dataTagSymbol = Symbol('dataTagSymbol');
+export type dataTagSymbol = typeof dataTagSymbol;
+export const dataTagErrorSymbol = Symbol('dataTagErrorSymbol');
+export type dataTagErrorSymbol = typeof dataTagErrorSymbol;
+export const unsetMarker = Symbol('unsetMarker');
+export type UnsetMarker = typeof unsetMarker;
 export type AnyDataTag = {
-  [dataTagSymbol]: any
-  [dataTagErrorSymbol]: any
-}
-export type DataTag<
-  TType,
-  TValue,
-  TError = UnsetMarker,
-> = TType extends AnyDataTag
+  [dataTagSymbol]: any;
+  [dataTagErrorSymbol]: any;
+};
+export type DataTag<TType, TValue, TError = UnsetMarker> = TType extends AnyDataTag
   ? TType
   : TType & {
-      [dataTagSymbol]: TValue
-      [dataTagErrorSymbol]: TError
-    }
+      [dataTagSymbol]: TValue;
+      [dataTagErrorSymbol]: TError;
+    };
 
 export type InferDataFromTag<TQueryFnData, TTaggedQueryKey extends QueryKey> =
-  TTaggedQueryKey extends DataTag<unknown, infer TaggedValue, unknown>
-    ? TaggedValue
-    : TQueryFnData
+  TTaggedQueryKey extends DataTag<unknown, infer TaggedValue, unknown> ? TaggedValue : TQueryFnData;
 
 export type InferErrorFromTag<TError, TTaggedQueryKey extends QueryKey> =
   TTaggedQueryKey extends DataTag<unknown, unknown, infer TaggedError>
     ? TaggedError extends UnsetMarker
       ? TError
       : TaggedError
-    : TError
+    : TError;
 
 export type QueryStatus = 'pending' | 'error' | 'success';
 export type FetchStatus = 'fetching' | 'paused' | 'idle';
@@ -337,7 +337,9 @@ export type QueryClient = {
     TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
   >(
     queryKey: TTaggedQueryKey,
-    data: TInferredQueryFnData | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
+    data:
+      | TInferredQueryFnData
+      | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
   ) => void;
   getQueryState: <
     TQueryFnData = unknown,
@@ -370,6 +372,14 @@ export type QueryClient = {
   >(
     options: QueryOptions<TQueryFnData, unknown, TData, TQueryKey>,
   ) => Promise<void>;
+  getQueriesData: <TQueryFnData = unknown>(
+    filters: QueryFilters,
+  ) => Array<[QueryKey, TQueryFnData | undefined]>;
+  setQueriesData: <TQueryFnData>(
+    filters: QueryFilters,
+    updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
+    options?: SetDataOptions,
+  ) => void;
   refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
   cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
   removeQueries: (filters?: QueryFilters) => void;

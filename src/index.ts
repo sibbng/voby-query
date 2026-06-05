@@ -35,14 +35,24 @@ export type {
   UseMutationResult,
 } from './useMutation.ts';
 export { dataTagSymbol, dataTagErrorSymbol, unsetMarker } from './types.ts';
-export type { MutationKey, DataTag, AnyDataTag, UnsetMarker, InferDataFromTag, InferErrorFromTag } from './types.ts';
+export type {
+  MutationKey,
+  DataTag,
+  AnyDataTag,
+  UnsetMarker,
+  InferDataFromTag,
+  InferErrorFromTag,
+} from './types.ts';
 
 export { useIsFetching } from './useIsFetching.ts';
 export { useIsMutating } from './useIsMutating.ts';
 export { queryOptions } from './queryOptions.ts';
 export type { DefinedInitialDataOptions, UndefinedInitialDataOptions } from './queryOptions.ts';
 export { infiniteQueryOptions } from './infiniteQueryOptions.ts';
-export type { DefinedInitialDataInfiniteOptions, UndefinedInitialDataInfiniteOptions } from './infiniteQueryOptions.ts';
+export type {
+  DefinedInitialDataInfiniteOptions,
+  UndefinedInitialDataInfiniteOptions,
+} from './infiniteQueryOptions.ts';
 export { mutationOptions } from './mutationOptions.ts';
 export { useSuspenseQuery } from './useSuspenseQuery.ts';
 export { useSuspenseInfiniteQuery } from './useSuspenseInfiniteQuery.ts';
@@ -62,5 +72,8 @@ export type {
 export { useSuspenseQueries } from './useSuspenseQueries.ts';
 export type { SuspenseQueriesOptions, SuspenseQueriesResults } from './useSuspenseQueries.ts';
 export { Subscribable } from './subscribable.ts';
+export { onlineManager } from './onlineManager.ts';
+export { focusManager } from './focusManager.ts';
 export type { QueryCacheNotifyEvent, QueryCacheConfig } from './queryCache.ts';
 export type { MutationCacheNotifyEvent } from './mutationCache.ts';
+export type { Updater, SetDataOptions } from './types.ts';

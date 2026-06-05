@@ -191,11 +191,11 @@ export const CancellationDemo = () => {
         </div>
         <div>
           <p class="text-white/30 text-xs mb-0.5">request</p>
-          <p class="font-mono">{() => request().data().requestId}</p>
+          <p class="font-mono">{() => request().data()?.requestId}</p>
         </div>
         <div>
           <p class="text-white/30 text-xs mb-0.5">term</p>
-          <p class="font-mono truncate">{() => request().data().term}</p>
+          <p class="font-mono truncate">{() => request().data()?.term}</p>
         </div>
       </div>
 
@@ -230,7 +230,7 @@ export const CancellationDemo = () => {
 
       <div class="flex flex-col gap-1.5">
         <For
-          values={() => request().data().posts}
+          values={() => request().data()?.posts ?? []}
           fallback={<p class="text-xs text-white/30 font-mono">No completed result.</p>}
         >
           {(post) => (

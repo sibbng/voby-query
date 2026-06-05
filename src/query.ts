@@ -12,6 +12,8 @@ import type {
   QueryStatus,
 } from './types.ts';
 import { ensureQueryFn, replaceData, shouldThrowError } from './utils.ts';
+import { onlineManager } from './onlineManager.ts';
+import { focusManager } from './focusManager.ts';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -237,7 +239,7 @@ export const createQuery = <
           }
         }
         if (query.state.fetchStatus() !== 'fetching') {
-          query.state.fetchStatus(!isBrowser || window.navigator.onLine ? 'idle' : 'paused');
+          query.state.fetchStatus(onlineManager.isOnline() ? 'idle' : 'paused');
         }
         if (query.instances === 1) {
           const cleanups: (() => void)[] = [];
@@ -255,37 +257,30 @@ export const createQuery = <
               clearInterval(intervalId);
             });
           }
-          if (query.resolvedOptions.networkMode === 'online' && isBrowser) {
-            const onlineHandler = async () => {
-              if (query.resolvedOptions.refetchOnReconnect) {
-                query.state.fetchStatus('fetching');
-                await query.refetch();
+          if (query.resolvedOptions.networkMode === 'online') {
+            const unsubOnline = onlineManager.subscribe(() => {
+              if (onlineManager.isOnline()) {
+                if (query.resolvedOptions.refetchOnReconnect) {
+                  query.state.fetchStatus('fetching');
+                  void query.refetch();
+                }
+              } else {
+                void query.cancel({ revert: false, silent: true });
+                query.state.fetchStatus('paused');
               }
-            };
-            const offlineHandler = async () => {
-              await query.cancel({ revert: false, silent: true });
-              query.state.fetchStatus('paused');
-            };
-            window.addEventListener('online', onlineHandler);
-            window.addEventListener('offline', offlineHandler);
-            cleanups.push(() => {
-              window.removeEventListener('online', onlineHandler);
-              window.removeEventListener('offline', offlineHandler);
             });
+            cleanups.push(unsubOnline);
           }
-          if (query.resolvedOptions.refetchOnWindowFocus && isBrowser) {
-            const focusHandler = () => {
+          if (query.resolvedOptions.refetchOnWindowFocus) {
+            const unsubFocus = focusManager.subscribe(() => {
               if (
-                document.visibilityState === 'visible' &&
+                focusManager.isFocused() &&
                 (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
               ) {
                 void query.refetch();
               }
-            };
-            document.addEventListener('visibilitychange', focusHandler);
-            cleanups.push(() => {
-              document.removeEventListener('visibilitychange', focusHandler);
             });
+            cleanups.push(unsubFocus);
           }
 
           query.inactiveCleanup = () => {

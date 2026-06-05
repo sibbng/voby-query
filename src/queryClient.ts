@@ -18,6 +18,8 @@ import type {
   QueryOptions,
   QueryRefetchOptions,
   QueryState,
+  SetDataOptions,
+  Updater,
 } from './types.ts';
 import { functionalUpdate, hashFn, noop, partialMatchKey } from './utils.ts';
 
@@ -170,9 +172,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     TTaggedQueryKey extends QueryKey = QueryKey,
   >(
     queryKey: TTaggedQueryKey,
-    data:
-      | TQueryFnData
-      | ((previous: TQueryFnData | undefined) => TQueryFnData | undefined),
+    data: TQueryFnData | ((previous: TQueryFnData | undefined) => TQueryFnData | undefined),
   ) => {
     const queryHash = queryKeyHashFn(queryKey);
     let query = cache.get(queryHash) as QueryLike | undefined;
@@ -190,6 +190,31 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
 
     setQuerySuccessData(query, resolvedData);
     cache.notify({ type: 'updated', query: query as QueryLike });
+  };
+
+  const getQueriesData: QueryClient['getQueriesData'] = <TQueryFnData = unknown>(
+    filters: QueryFilters,
+  ) => {
+    return cache.findAll(filters).map((query) => {
+      return [query.resolvedOptions.queryKey, query.state.data() as TQueryFnData | undefined] as [
+        QueryKey,
+        TQueryFnData | undefined,
+      ];
+    });
+  };
+
+  const setQueriesData: QueryClient['setQueriesData'] = <TQueryFnData>(
+    filters: QueryFilters,
+    updater: Updater<TQueryFnData, TQueryFnData | undefined>,
+    options?: SetDataOptions,
+  ) => {
+    cache.findAll(filters).forEach((query) => {
+      const resolvedData = functionalUpdate(updater, query.state.data());
+      if (resolvedData === undefined) return;
+      const updatedAt = options?.updatedAt ?? Date.now();
+      setQuerySuccessData(query, resolvedData, updatedAt);
+      cache.notify({ type: 'updated', query: query as QueryLike });
+    });
   };
 
   const invalidateQueries: QueryClient['invalidateQueries'] = async (
@@ -451,6 +476,8 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     ensureQueryData,
     getQueryData,
     setQueryData,
+    getQueriesData,
+    setQueriesData,
     invalidateQueries,
     cache,
     mutationCache,
