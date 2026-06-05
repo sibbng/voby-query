@@ -1,5 +1,6 @@
 import { useContext } from 'voby';
 import { QueryClientContext } from './context.ts';
+import { fetchInitialInfiniteData } from './infiniteQuery.ts';
 import { createMutationCache } from './mutationCache.ts';
 import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
@@ -7,6 +8,8 @@ import type { Mutation } from './mutation.ts';
 import type {
   InferDataFromTag,
   InferErrorFromTag,
+  InfiniteData,
+  InfiniteQueryOptions,
   MutationCache,
   MutationFilters,
   MutationKey,
@@ -357,6 +360,42 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     return query.state.data() as TData;
   };
 
+  const ensureInfiniteQueryData = async <
+    TQueryFnData = unknown,
+    TError = unknown,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam> & {
+      revalidateIfStale?: boolean;
+    },
+  ): Promise<InfiniteData<TQueryFnData, TPageParam>> => {
+    const { revalidateIfStale = false, ...restOptions } = options;
+    const wrappedOptions = {
+      ...restOptions,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchInitialInfiniteData({ options: restOptions, signal }),
+    } as unknown as QueryOptions<
+      InfiniteData<TQueryFnData, TPageParam>,
+      TError,
+      InfiniteData<TQueryFnData, TPageParam>,
+      TQueryKey
+    >;
+
+    const query = cache.build(queryClient, wrappedOptions) as QueryLike;
+    const currentData = query.state.data() as InfiniteData<TQueryFnData, TPageParam> | undefined;
+
+    if (currentData !== undefined) {
+      if (revalidateIfStale && query.state.isStale()) {
+        query.fetch({ force: true }).catch(noop);
+      }
+      return currentData;
+    }
+
+    await query.fetch({ force: true });
+    return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
+  };
+
   const getQueryState: QueryClient['getQueryState'] = <
     TQueryFnData = unknown,
     TError = Error,
@@ -369,15 +408,64 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     return query?.state as QueryState<TQueryFnData, TError> | undefined;
   };
 
+  const fetchInfiniteQuery = async <
+    TQueryFnData = unknown,
+    TError = unknown,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ): Promise<InfiniteData<TQueryFnData, TPageParam>> => {
+    const wrappedOptions = {
+      ...options,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchInitialInfiniteData({ options, signal }),
+    } as unknown as QueryOptions<
+      InfiniteData<TQueryFnData, TPageParam>,
+      TError,
+      InfiniteData<TQueryFnData, TPageParam>,
+      TQueryKey
+    >;
+
+    const query = cache.build(queryClient, wrappedOptions) as QueryLike;
+
+    if (query.state.data() !== undefined) {
+      const staleTime = resolveStaleTime(query as Query<any, any, any, any>);
+      const isFresh =
+        staleTime === 'static' ||
+        staleTime === Infinity ||
+        Date.now() - query.state.dataUpdatedAt() < staleTime;
+      if (isFresh) {
+        return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
+      }
+    }
+
+    if (options.retry === undefined) {
+      const originalRetry = (query as any).resolvedOptions.retry;
+      (query as any).resolvedOptions.retry = false;
+      try {
+        await query.fetch({ force: true });
+      } finally {
+        (query as any).resolvedOptions.retry = originalRetry;
+      }
+      if (query.state.error()) {
+        throw query.state.error();
+      }
+    } else {
+      await query.fetch({ force: true });
+    }
+    return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
+  };
+
   const prefetchInfiniteQuery = async <
     TQueryFnData = unknown,
     TError = unknown,
-    TData = TQueryFnData,
     TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
   >(
-    options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
   ): Promise<void> => {
-    await fetchQuery(options).catch(noop);
+    await fetchInfiniteQuery(options).catch(noop);
   };
 
   const fetchQuery = async <
@@ -467,9 +555,11 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     isFetching,
     isMutating,
     fetchQuery,
+    fetchInfiniteQuery,
     prefetchQuery,
     prefetchInfiniteQuery,
     getQueryState,
+    ensureInfiniteQueryData,
     removeQueries,
     cancelQueries,
     refetchQueries,

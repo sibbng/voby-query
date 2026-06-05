@@ -265,6 +265,158 @@ describe('queryClient', () => {
     });
   });
 
+  describe('fetchInfiniteQuery', () => {
+    it('should fetch initial infinite data when not cached', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
+        return { items: [`page ${pageParam}`], next: pageParam + 1 };
+      });
+
+      const data = await queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 1,
+        getNextPageParam: (lastPage: { next: number }) => lastPage.next,
+      });
+
+      expect(data).toEqual({
+        pages: [{ items: ['page 1'], next: 2 }],
+        pageParams: [1],
+      });
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return cached data on cache hit when still fresh', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
+        return { items: [`page ${pageParam}`], next: pageParam + 1 };
+      });
+
+      const first = await queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 1,
+        getNextPageParam: (lastPage: { next: number }) => lastPage.next,
+        staleTime: 5000,
+      });
+
+      const second = await queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 1,
+        getNextPageParam: (lastPage: { next: number }) => lastPage.next,
+        staleTime: 5000,
+      });
+
+      expect(first).toEqual(second);
+      expect(queryFn).toHaveBeenCalledTimes(1); // returned from cache
+    });
+
+    it('should refetch when stale', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
+        return { items: [`page ${pageParam}`] };
+      });
+
+      await queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        staleTime: 0,
+      });
+
+      await queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        staleTime: 0,
+      });
+
+      expect(queryFn).toHaveBeenCalledTimes(2); // refetched because stale
+    });
+
+    it('should not retry by default', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = () => Promise.reject(new Error('fail'));
+
+      await expect(
+        queryClient.fetchInfiniteQuery({
+          queryKey: key,
+          queryFn: queryFn as any,
+          initialPageParam: 1,
+          getNextPageParam: () => undefined,
+        }),
+      ).rejects.toThrow('fail');
+    });
+  });
+
+  describe('ensureInfiniteQueryData', () => {
+    it('should return cached infinite data if the query exists', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn();
+
+      queryClient.setQueryData(key, {
+        pages: [{ value: 'cached' }],
+        pageParams: [1],
+      });
+
+      const data = await queryClient.ensureInfiniteQueryData({
+        queryKey: key,
+        queryFn: queryFn as any,
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+      });
+
+      expect(data).toEqual({ pages: [{ value: 'cached' }], pageParams: [1] });
+      expect(queryFn).toHaveBeenCalledTimes(0);
+    });
+
+    it('should fetch and return initial data if not cached', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
+        return { value: `fetched ${pageParam}`, next: pageParam + 1 };
+      });
+
+      const data = await queryClient.ensureInfiniteQueryData({
+        queryKey: key,
+        queryFn,
+        initialPageParam: 5,
+        getNextPageParam: (lastPage: { next: number }) => lastPage.next,
+      });
+
+      expect(data).toEqual({
+        pages: [{ value: 'fetched 5', next: 6 }],
+        pageParams: [5],
+      });
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should respect initialData', async () => {
+      const key = queryKey();
+      const queryClient = createQueryClient();
+      const queryFn = vi.fn();
+
+      const data = await queryClient.ensureInfiniteQueryData({
+        queryKey: key,
+        queryFn: queryFn as any,
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        initialData: { pages: [{ value: 'initial' }], pageParams: [1] },
+      });
+
+      expect(data).toEqual({ pages: [{ value: 'initial' }], pageParams: [1] });
+      expect(queryFn).toHaveBeenCalledTimes(0);
+    });
+  });
+
   describe('fetchQuery', () => {
     it('should not retry by default', async () => {
       const key = queryKey();

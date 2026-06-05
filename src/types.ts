@@ -359,18 +359,35 @@ export type QueryClient = {
   ensureQueryData: <TQueryFnData, TData = TQueryFnData>(
     options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<TData>;
+  ensureInfiniteQueryData: <
+    TQueryFnData,
+    TError = Error,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
   fetchQuery: <TQueryFnData, TData = TQueryFnData>(
     options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<TData>;
+  fetchInfiniteQuery: <
+    TQueryFnData,
+    TError = Error,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
   prefetchQuery: <TQueryFnData, TData = TQueryFnData>(
     options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
   ) => Promise<void>;
   prefetchInfiniteQuery: <
     TQueryFnData,
-    TData = TQueryFnData,
+    TError = Error,
     TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
   >(
-    options: QueryOptions<TQueryFnData, unknown, TData, TQueryKey>,
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
   ) => Promise<void>;
   getQueriesData: <TQueryFnData = unknown>(
     filters: QueryFilters,
