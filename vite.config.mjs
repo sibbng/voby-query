@@ -47,4 +47,7 @@ export default defineConfig({
     ignorePatterns: ['dist/**', 'node_modules/**'],
     singleQuote: true,
   },
+  staged: {
+    '*.{js,ts,tsx,mjs,vue,svelte}': 'vp check --fix',
+  },
 });
