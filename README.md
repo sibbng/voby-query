@@ -4,44 +4,44 @@ A port of TanStack Query for [Voby](https://voby.dev).
 
 ## Feature comparison
 
-| Feature | voby-query | TanStack React Query |
-|---|---|---|
-| `useQuery` | ✅ | ✅ |
-| `useMutation` | ✅ | ✅ |
-| `useInfiniteQuery` | ✅ | ✅ |
-| `useQueries` | ✅ | ✅ |
-| `useSuspenseQuery` | ✅ | ✅ |
-| `useSuspenseInfiniteQuery` | ✅ | ✅ |
-| `useSuspenseQueries` | ✅ | ✅ |
-| `usePrefetchQuery` | ✅ | ✅ |
-| `usePrefetchInfiniteQuery` | ✅ | ✅ |
-| `useIsFetching` / `useIsMutating` | ✅ | ✅ |
-| `useMutationState` | ✅ | ✅ |
-| `QueryClient` | ✅ | ✅ |
-| `QueryCache` / `MutationCache` | ✅ | ✅ |
-| `onlineManager` / `focusManager` | ✅ | ✅ |
-| `timeoutManager` | ✅ | ✅ |
-| `DataTag` inference | ✅ | ✅ |
-| `queryOptions` / `mutationOptions` | ✅ | ✅ |
-| `infiniteQueryOptions` | ✅ | ✅ |
-| `enabled` / `queryKey` | ✅ | ✅ |
-| `staleTime` / `gcTime` | ✅ | ✅ |
-| `retry` / `retryDelay` | ✅ | ✅ |
-| `networkMode` | ✅ | ✅ |
-| `structuralSharing` / `select` | ✅ | ✅ |
-| SSR hydration | ❌ | ✅ |
-| Devtools | ❌ | ✅ |
-| Persist plugin | ❌ | ✅ |
+| Feature                            | voby-query | TanStack React Query |
+| ---------------------------------- | ---------- | -------------------- |
+| `useQuery`                         | ✅         | ✅                   |
+| `useMutation`                      | ✅         | ✅                   |
+| `useInfiniteQuery`                 | ✅         | ✅                   |
+| `useQueries`                       | ✅         | ✅                   |
+| `useSuspenseQuery`                 | ✅         | ✅                   |
+| `useSuspenseInfiniteQuery`         | ✅         | ✅                   |
+| `useSuspenseQueries`               | ✅         | ✅                   |
+| `usePrefetchQuery`                 | ✅         | ✅                   |
+| `usePrefetchInfiniteQuery`         | ✅         | ✅                   |
+| `useIsFetching` / `useIsMutating`  | ✅         | ✅                   |
+| `useMutationState`                 | ✅         | ✅                   |
+| `QueryClient`                      | ✅         | ✅                   |
+| `QueryCache` / `MutationCache`     | ✅         | ✅                   |
+| `onlineManager` / `focusManager`   | ✅         | ✅                   |
+| `timeoutManager`                   | ✅         | ✅                   |
+| `DataTag` inference                | ✅         | ✅                   |
+| `queryOptions` / `mutationOptions` | ✅         | ✅                   |
+| `infiniteQueryOptions`             | ✅         | ✅                   |
+| `enabled` / `queryKey`             | ✅         | ✅                   |
+| `staleTime` / `gcTime`             | ✅         | ✅                   |
+| `retry` / `retryDelay`             | ✅         | ✅                   |
+| `networkMode`                      | ✅         | ✅                   |
+| `structuralSharing` / `select`     | ✅         | ✅                   |
+| SSR hydration                      | ❌         | ✅                   |
+| Devtools                           | ❌         | ✅                   |
+| Persist plugin                     | ❌         | ✅                   |
 
 ## Architectural notes
 
 The following TanStack Query internals are not present in voby-query:
 
-| Internal | Why |
-|---|---|
-| `notifyManager` | Voby's signal-based reactivity doesn't require microtask-coalescing — each signal consumer updates independently and synchronously. |
-| `environmentManager` | Only 4 inline `typeof window` checks exist. A dedicated manager adds no practical benefit. |
-| SSR hydration/dehydration | Voby does not support SSR yet. These can be added later. |
+| Internal                  | Why                                                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `notifyManager`           | Voby's signal-based reactivity doesn't require microtask-coalescing — each signal consumer updates independently and synchronously. |
+| `environmentManager`      | Only 4 inline `typeof window` checks exist. A dedicated manager adds no practical benefit.                                          |
+| SSR hydration/dehydration | Voby does not support SSR yet. These can be added later.                                                                            |
 
 ## Installation
 
@@ -125,7 +125,10 @@ const mutation = useMutation({
 });
 
 return (
-  <button onClick={() => mutation().mutate({ title: 'New todo' })} disabled={mutation().isPending()}>
+  <button
+    onClick={() => mutation().mutate({ title: 'New todo' })}
+    disabled={mutation().isPending()}
+  >
     {mutation().isPending() ? 'Saving...' : 'Add Todo'}
   </button>
 );

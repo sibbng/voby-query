@@ -450,93 +450,97 @@ test('useQuery refetchOnWindowFocus: false', async () => {
   expect(queryFnMock).toHaveBeenCalledTimes(1); // Should NOT be called again
 });
 
-test('useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true', { retry: 3 }, async () => {
-  const queryClient = createQueryClient();
-  let fetchCount = 0;
-  const abortedSignals: AbortSignal[] = [];
-  const resolveFetches = new Map<number, (value: string) => void>();
-  let refetch: () => Promise<void> = async () => {};
+test(
+  'useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true',
+  { retry: 3 },
+  async () => {
+    const queryClient = createQueryClient();
+    let fetchCount = 0;
+    const abortedSignals: AbortSignal[] = [];
+    const resolveFetches = new Map<number, (value: string) => void>();
+    let refetch: () => Promise<void> = async () => {};
 
-  function TestComponent() {
-    const query = useQuery({
-      queryKey: ['refetch-focus-cancel-refetch'],
-      queryFn: async ({ signal }) => {
-        fetchCount++;
-        const requestId = fetchCount;
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: ['refetch-focus-cancel-refetch'],
+        queryFn: async ({ signal }) => {
+          fetchCount++;
+          const requestId = fetchCount;
 
-        signal.addEventListener(
-          'abort',
-          () => {
-            abortedSignals.push(signal);
-          },
-          { once: true },
-        );
+          signal.addEventListener(
+            'abort',
+            () => {
+              abortedSignals.push(signal);
+            },
+            { once: true },
+          );
 
-        return new Promise<string>((resolve, reject) => {
-          const onAbort = () => {
-            signal.removeEventListener('abort', onAbort);
-            reject(new DOMException('Aborted', 'AbortError'));
-          };
+          return new Promise<string>((resolve, reject) => {
+            const onAbort = () => {
+              signal.removeEventListener('abort', onAbort);
+              reject(new DOMException('Aborted', 'AbortError'));
+            };
 
-          signal.addEventListener('abort', onAbort, { once: true });
-          resolveFetches.set(requestId, (value) => {
-            signal.removeEventListener('abort', onAbort);
-            resolve(value);
+            signal.addEventListener('abort', onAbort, { once: true });
+            resolveFetches.set(requestId, (value) => {
+              signal.removeEventListener('abort', onAbort);
+              resolve(value);
+            });
           });
-        });
-      },
-      staleTime: 0,
-      cancelRefetch: true,
-      refetchOnWindowFocus: true,
+        },
+        staleTime: 0,
+        cancelRefetch: true,
+        refetchOnWindowFocus: true,
+      });
+
+      refetch = () => query().refetch();
+
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await flush();
+    expect(fetchCount).toBe(1);
+
+    resolveFetches.get(1)?.('Initial value');
+    await waitFor(() => expect(document.body.textContent).toBe('Initial value'));
+
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
     });
 
-    refetch = () => query().refetch();
+    const refetchPromise = refetch();
+    await flush();
+    expect(fetchCount).toBe(2);
 
-    return <div>{() => query().data() ?? 'Loading...'}</div>;
-  }
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <TestComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
+    if (originalVisibility) {
+      Object.defineProperty(document, 'visibilityState', originalVisibility);
+    }
 
-  await flush();
-  expect(fetchCount).toBe(1);
+    expect(fetchCount).toBe(3);
+    expect(abortedSignals).toHaveLength(1);
+    expect(abortedSignals[0]?.aborted).toBe(true);
 
-  resolveFetches.get(1)?.('Initial value');
-  await waitFor(() => expect(document.body.textContent).toBe('Initial value'));
+    resolveFetches.get(2)?.('Stale value');
+    await flush();
+    expect(document.body.textContent).toBe('Initial value');
 
-  const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
-  Object.defineProperty(document, 'visibilityState', {
-    configurable: true,
-    get: () => 'visible',
-  });
-
-  const refetchPromise = refetch();
-  await flush();
-  expect(fetchCount).toBe(2);
-
-  document.dispatchEvent(new Event('visibilitychange'));
-  await flush();
-
-  if (originalVisibility) {
-    Object.defineProperty(document, 'visibilityState', originalVisibility);
-  }
-
-  expect(fetchCount).toBe(3);
-  expect(abortedSignals).toHaveLength(1);
-  expect(abortedSignals[0]?.aborted).toBe(true);
-
-  resolveFetches.get(2)?.('Stale value');
-  await flush();
-  expect(document.body.textContent).toBe('Initial value');
-
-  resolveFetches.get(3)?.('Focused value');
-  await refetchPromise;
-  await waitFor(() => expect(document.body.textContent).toBe('Focused value'));
-});
+    resolveFetches.get(3)?.('Focused value');
+    await refetchPromise;
+    await waitFor(() => expect(document.body.textContent).toBe('Focused value'));
+  },
+);
 
 test('useQuery refetchInterval: data refetches periodically', { retry: 10 }, async () => {
   const queryClient = createQueryClient();
@@ -597,81 +601,85 @@ test('useQuery refetchInterval: data refetches periodically', { retry: 10 }, asy
   await flush();
 }); // Retry to account for timing issues
 
-test('useQuery refetchInterval cancels the active request when cancelRefetch is true', { retry: 3 }, async () => {
-  const queryClient = createQueryClient();
-  let fetchCount = 0;
-  const abortedSignals: AbortSignal[] = [];
-  const resolveFetches = new Map<number, (value: string) => void>();
-  const intervalMs = 50;
-  const showComponent = $(true);
+test(
+  'useQuery refetchInterval cancels the active request when cancelRefetch is true',
+  { retry: 3 },
+  async () => {
+    const queryClient = createQueryClient();
+    let fetchCount = 0;
+    const abortedSignals: AbortSignal[] = [];
+    const resolveFetches = new Map<number, (value: string) => void>();
+    const intervalMs = 50;
+    const showComponent = $(true);
 
-  function TestComponent() {
-    const query = useQuery({
-      queryKey: ['refetch-interval-cancel-refetch'],
-      queryFn: async ({ signal }) => {
-        fetchCount++;
-        const requestId = fetchCount;
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: ['refetch-interval-cancel-refetch'],
+        queryFn: async ({ signal }) => {
+          fetchCount++;
+          const requestId = fetchCount;
 
-        signal.addEventListener(
-          'abort',
-          () => {
-            abortedSignals.push(signal);
-          },
-          { once: true },
-        );
+          signal.addEventListener(
+            'abort',
+            () => {
+              abortedSignals.push(signal);
+            },
+            { once: true },
+          );
 
-        return new Promise<string>((resolve, reject) => {
-          const onAbort = () => {
-            signal.removeEventListener('abort', onAbort);
-            reject(new DOMException('Aborted', 'AbortError'));
-          };
+          return new Promise<string>((resolve, reject) => {
+            const onAbort = () => {
+              signal.removeEventListener('abort', onAbort);
+              reject(new DOMException('Aborted', 'AbortError'));
+            };
 
-          signal.addEventListener('abort', onAbort, { once: true });
-          resolveFetches.set(requestId, (value) => {
-            signal.removeEventListener('abort', onAbort);
-            resolve(value);
+            signal.addEventListener('abort', onAbort, { once: true });
+            resolveFetches.set(requestId, (value) => {
+              signal.removeEventListener('abort', onAbort);
+              resolve(value);
+            });
           });
-        });
-      },
-      refetchInterval: intervalMs,
-      cancelRefetch: true,
-    });
+        },
+        refetchInterval: intervalMs,
+        cancelRefetch: true,
+      });
 
-    return <div>{() => query().data() ?? 'Loading...'}</div>;
-  }
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
 
-  function App() {
-    return (
-      <QueryClientProvider value={queryClient}>
-        <If when={showComponent}>
-          <TestComponent />
-        </If>
-      </QueryClientProvider>
-    );
-  }
+    function App() {
+      return (
+        <QueryClientProvider value={queryClient}>
+          <If when={showComponent}>
+            <TestComponent />
+          </If>
+        </QueryClientProvider>
+      );
+    }
 
-  render(<App />, document.body);
+    render(<App />, document.body);
 
-  await flush();
-  expect(fetchCount).toBe(1);
+    await flush();
+    expect(fetchCount).toBe(1);
 
-  await new Promise((resolve) => setTimeout(resolve, intervalMs * 2 + 20));
-  await flush();
+    await new Promise((resolve) => setTimeout(resolve, intervalMs * 2 + 20));
+    await flush();
 
-  expect(fetchCount).toBe(2);
-  expect(abortedSignals).toHaveLength(1);
-  expect(abortedSignals[0]?.aborted).toBe(true);
+    expect(fetchCount).toBe(2);
+    expect(abortedSignals).toHaveLength(1);
+    expect(abortedSignals[0]?.aborted).toBe(true);
 
-  resolveFetches.get(1)?.('Stale interval value');
-  await flush();
-  expect(document.body.textContent).toBe('Loading...');
+    resolveFetches.get(1)?.('Stale interval value');
+    await flush();
+    expect(document.body.textContent).toBe('Loading...');
 
-  resolveFetches.get(2)?.('Interval value');
-  await waitFor(() => expect(document.body.textContent).toBe('Interval value'));
+    resolveFetches.get(2)?.('Interval value');
+    await waitFor(() => expect(document.body.textContent).toBe('Interval value'));
 
-  showComponent(false);
-  await flush();
-});
+    showComponent(false);
+    await flush();
+  },
+);
 
 test('useQuery refetchInterval: stops if component unmounts', async () => {
   const queryClient = createQueryClient();
