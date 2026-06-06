@@ -1,5 +1,5 @@
-import { $, useMemo, useRoot } from 'voby';
-import { hashFn, shouldThrowError } from './utils.ts';
+import { $, $$, useMemo, useRoot } from 'voby';
+import { hashFn, resolveKey, shouldThrowError } from './utils.ts';
 import { timeoutManager } from './timeoutManager.ts';
 import type {
   MutateOptions,
@@ -8,6 +8,7 @@ import type {
   MutationState,
   MutationStatus,
   QueryClient,
+  ResolvedMutationOptions,
 } from './types.ts';
 import type { MutationCache } from './mutationCache.ts';
 
@@ -20,7 +21,7 @@ export type Mutation<
   cacheKey: string;
   mutationHash?: string;
   state: MutationState<TData, TError, TVariables, TContext>;
-  resolvedOptions: MutationOptions<TData, TError, TVariables, TContext>;
+  resolvedOptions: ResolvedMutationOptions<TData, TError, TVariables, TContext>;
   mutate: (
     variables: TVariables,
     options?: MutateOptions<TData, TError, TVariables, TContext>,
@@ -48,7 +49,7 @@ export const resolveMutationOptions = <
 >(
   queryClient: QueryClient,
   options: MutationOptions<TData, TError, TVariables, TContext>,
-): MutationOptions<TData, TError, TVariables, TContext> => {
+): ResolvedMutationOptions<TData, TError, TVariables, TContext> => {
   return {
     ...(queryClient.getDefaultOptions().mutations as MutationOptions<
       TData,
@@ -63,7 +64,9 @@ export const resolveMutationOptions = <
       TContext
     >),
     ...options,
-  };
+    mutationKey: options.mutationKey ? resolveKey(options.mutationKey) : undefined,
+    queryClient,
+  } as ResolvedMutationOptions<TData, TError, TVariables, TContext>;
 };
 
 export const createMutation = <
@@ -80,7 +83,7 @@ export const createMutation = <
   mutationCache: MutationCache<Mutation<any, any, any, any>>;
   cacheKey: string;
   mutationHash?: string;
-  resolvedOptions: MutationOptions<TData, TError, TVariables, TContext>;
+  resolvedOptions: ResolvedMutationOptions<TData, TError, TVariables, TContext>;
 }): Mutation<TData, TError, TVariables, TContext> => {
   const shouldRetry = (failureCount: number, error: TError): boolean => {
     const { retry } = mutation.resolvedOptions;

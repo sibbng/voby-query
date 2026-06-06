@@ -36,7 +36,9 @@ export function useQuery<
     const currentQuery = query();
     const { state, resolvedOptions } = currentQuery;
 
-    return {
+    const shouldThrow = state.isError() && resolvedOptions.throwOnError;
+
+    const result = {
       ...state,
       data: useMemo(() => {
         const data = state.data();
@@ -72,5 +74,16 @@ export function useQuery<
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
     };
+
+    if (shouldThrow) {
+      const error = state.error()!;
+      return new Proxy(result, {
+        get() {
+          throw error;
+        },
+      });
+    }
+
+    return result;
   }) as UseQueryResult<Awaited<TData>, TError>;
 }

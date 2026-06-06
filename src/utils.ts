@@ -40,7 +40,7 @@ export function hashQueryKeyByOptions<TQueryKey extends QueryKey = QueryKey>(
   return hashFnOption(queryKey);
 }
 
-const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
+export const resolveKey = (queryKey: QueryKey | MutationKey): unknown[] => {
   const resolved = $$(queryKey);
   return Array.isArray(resolved) ? resolved.map((item) => $$(item)) : [];
 };

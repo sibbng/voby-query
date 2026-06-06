@@ -10,8 +10,9 @@ import type {
   QueryRefetchOptions,
   QueryState,
   QueryStatus,
+  ResolvedQueryOptions,
 } from './types.ts';
-import { ensureQueryFn, replaceData, shouldThrowError } from './utils.ts';
+import { ensureQueryFn, replaceData, resolveKey, shouldThrowError } from './utils.ts';
 import { onlineManager } from './onlineManager.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import { focusManager } from './focusManager.ts';
@@ -65,7 +66,7 @@ export type Query<
   destroy: () => void;
   fetch: (options?: QueryFetchOptions) => Promise<void>;
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
-  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
+  resolvedOptions: ResolvedQueryOptions<TQueryFnData, TError, TData>;
   instances: number;
   controller: AbortController;
   isFetching: boolean;
@@ -80,7 +81,7 @@ export type Query<
   removeInstance: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
-  scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => void;
+  scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
   isCancelled: boolean;
   inactiveCleanup?: () => void;
 };
@@ -124,9 +125,8 @@ export const resolveQueryOptions = <
 >(
   queryClient: QueryClient,
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-): QueryOptions<TQueryFnData, TError, TData, TQueryKey> => {
-  const resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey> = {
-    queryClient,
+): ResolvedQueryOptions<TQueryFnData, TError, TData> => {
+  return {
     ...(queryClient.getDefaultOptions().queries as QueryOptions<
       TQueryFnData,
       TError,
@@ -140,14 +140,14 @@ export const resolveQueryOptions = <
       TQueryKey
     >),
     ...options,
-  };
-
-  resolvedOptions.enabled = $$(resolvedOptions.enabled);
-  if (typeof resolvedOptions.initialData === 'function') {
-    resolvedOptions.initialData = (resolvedOptions.initialData as () => TData | undefined)();
-  }
-
-  return resolvedOptions;
+    queryClient,
+    queryKey: resolveKey(options.queryKey) as unknown[],
+    enabled: $$(options.enabled ?? true),
+    initialData:
+      typeof options.initialData === 'function'
+        ? (options.initialData as () => TData | undefined)()
+        : options.initialData,
+  } as ResolvedQueryOptions<TQueryFnData, TError, TData>;
 };
 
 export const resolveStaleTime = (query: Query<any, any, any, any>): number | 'static' => {
@@ -164,15 +164,18 @@ const scheduleQueryStale = (query: Query<any, any, any, any>) => {
     return;
   }
 
-  query.state.isStale(false);
-
   const staleTime = resolveStaleTime(query);
-  if (staleTime === 'static' || staleTime === Infinity) return;
+  if (staleTime === 'static' || staleTime === Infinity) {
+    query.state.isStale(false);
+    return;
+  }
 
   if (staleTime <= 0) {
     query.state.isStale(true);
     return;
   }
+
+  query.state.isStale(false);
 
   const id = timeoutManager.setTimeout(() => {
     query.state.isStale(true);
@@ -207,7 +210,7 @@ export const createQuery = <
 }: {
   cache: QueryCache;
   queryHash: string;
-  resolvedOptions: QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
+  resolvedOptions: ResolvedQueryOptions<TQueryFnData, TError, TData>;
 }): Query<TQueryFnData, TError, TData, TQueryKey> => {
   const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
@@ -232,7 +235,11 @@ export const createQuery = <
       query.destroyDisposer();
       query.isActive = true;
       query.instances++;
-      untrack(() => {
+      untrack(async () => {
+        const isOnline = onlineManager.isOnline();
+        const networkMode = query.resolvedOptions.networkMode;
+        const shouldSkipDueToNetworkMode = networkMode === 'online' && !isOnline;
+
         if (query.resolvedOptions.enabled) {
           const shouldRefetch = (() => {
             const refetchOnMount = query.resolvedOptions.refetchOnMount;
@@ -244,12 +251,13 @@ export const createQuery = <
             if (query.state.isStale() || query.state.isPending()) return true;
             return false;
           })();
-          if (shouldRefetch) {
-            void query.refetch();
+          if (shouldRefetch && !shouldSkipDueToNetworkMode) {
+            await query.refetch();
           }
         }
         if (query.state.fetchStatus() !== 'fetching') {
-          query.state.fetchStatus(onlineManager.isOnline() ? 'idle' : 'paused');
+          const shouldBePaused = networkMode === 'online' ? !isOnline : false;
+          query.state.fetchStatus(shouldBePaused ? 'paused' : 'idle');
         }
         if (query.instances === 1) {
           const cleanups: (() => void)[] = [];
@@ -257,9 +265,9 @@ export const createQuery = <
           if (query.resolvedOptions.refetchInterval) {
             const intervalDelay = query.resolvedOptions.refetchInterval;
             let intervalId: ManagedTimerId;
-            const timeoutId = timeoutManager.setTimeout(() => {
-              intervalId = timeoutManager.setInterval(() => {
-                void query.refetch();
+            const timeoutId = timeoutManager.setTimeout(async () => {
+              intervalId = timeoutManager.setInterval(async () => {
+                await query.refetch();
               }, intervalDelay);
             }, intervalDelay);
             cleanups.push(() => {
@@ -268,26 +276,26 @@ export const createQuery = <
             });
           }
           if (query.resolvedOptions.networkMode === 'online') {
-            const unsubOnline = onlineManager.subscribe(() => {
+            const unsubOnline = onlineManager.subscribe(async () => {
               if (onlineManager.isOnline()) {
                 if (query.resolvedOptions.refetchOnReconnect) {
                   query.state.fetchStatus('fetching');
-                  void query.refetch();
+                  await query.refetch();
                 }
               } else {
-                void query.cancel({ revert: false, silent: true });
+                await query.cancel({ revert: false, silent: true });
                 query.state.fetchStatus('paused');
               }
             });
             cleanups.push(unsubOnline);
           }
           if (query.resolvedOptions.refetchOnWindowFocus) {
-            const unsubFocus = focusManager.subscribe(() => {
+            const unsubFocus = focusManager.subscribe(async () => {
               if (
                 focusManager.isFocused() &&
                 (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
               ) {
-                void query.refetch();
+                await query.refetch();
               }
             });
             cleanups.push(unsubFocus);
@@ -365,11 +373,10 @@ export const createQuery = <
     isFetching: false,
     refetch: async ({
       throwOnError = query.resolvedOptions.throwOnError,
-      cancelRefetch = query.resolvedOptions.cancelRefetch,
+      cancelRefetch = true,
     }: QueryRefetchOptions = {}) => {
-      if (!query.resolvedOptions.enabled) return;
-      if (cancelRefetch) {
-        await query.cancel({ revert: false, silent: true });
+      if (cancelRefetch && query.state.data() !== undefined) {
+        query.cancel({ revert: false, silent: true });
       }
       return query.fetch({ retryAttempt: 0, throwOnError, force: true });
     },
@@ -379,7 +386,7 @@ export const createQuery = <
       force = false,
       fetchFn,
     } = {}) => {
-      if (!query.resolvedOptions.enabled) return;
+      if (!force && !query.resolvedOptions.enabled) return;
       if (!force && !query.isActive) return;
       if (query.isFetching && !query.isCancelled) {
         return query.fetchPromise!;
@@ -393,6 +400,7 @@ export const createQuery = <
       query.revertState = createQueryStateSnapshot(query.state);
       let fetchPromise!: Promise<void>;
       let didFetchSucceed = false;
+      let retryScheduled = false;
       fetchPromise = (async () => {
         try {
           query.state.fetchStatus('fetching');
@@ -429,20 +437,32 @@ export const createQuery = <
           cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
           cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
         } catch (err) {
-          if (!signal.aborted) {
+          const isCancelledError = err instanceof CancelledError;
+
+          if (!signal.aborted && !isCancelledError) {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
             query.state.error(error);
-            query.state.status('error');
+            query.state.failureCount((prev) => prev + 1);
+            query.state.failureReason(error);
             query.state.errorUpdatedAt(Date.now());
             query.state.errorUpdateCount((previous) => previous + 1);
             query.state.isInvalidated(query.state.data() !== undefined);
             query.staleDisposer();
             query.staleDisposer = () => {};
             query.state.isStale(true);
+            // useQuery relies on synchronous throw via Proxy in useMemo.
+            // When throwOnError comes from query defaults (isDefaultThrowOnError),
+            // we only set status to 'error' and let useQuery throw synchronously.
+            // When throwOnError is explicitly passed to refetch()/fetch() (direct API),
+            // we also throw to reject the promise for backward compatibility.
+            const isDefaultThrowOnError = throwOnError === query.resolvedOptions.throwOnError;
             if (shouldThrowError(throwOnError, [error])) {
-              throw error;
+              query.state.status('error');
+              if (!isDefaultThrowOnError) {
+                throw error;
+              }
             }
-            query.scheduleRetry(retryAttempt + 1, error, fetchFn);
+            retryScheduled = query.scheduleRetry(retryAttempt + 1, error, fetchFn);
             cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
             cache.config.onSettled?.(
               query.state.data(),
@@ -450,6 +470,17 @@ export const createQuery = <
               query as Query<any, any, any, any>,
             );
             cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+          } else if (isCancelledError) {
+            query.state.error(err as unknown as TError);
+            query.state.status('error');
+            if (!err.silent) {
+              cache.config.onSettled?.(
+                query.state.data(),
+                err as unknown,
+                query as Query<any, any, any, any>,
+              );
+              cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+            }
           }
         } finally {
           if (query.fetchPromise === fetchPromise) {
@@ -459,9 +490,11 @@ export const createQuery = <
             const shouldSkipFinalize =
               !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
             if (!shouldSkipFinalize) {
-              query.isFetching = false;
-              if (query.state.fetchStatus() !== 'paused') {
-                query.state.fetchStatus('idle');
+              if (!retryScheduled) {
+                query.isFetching = false;
+                if (query.state.fetchStatus() !== 'paused') {
+                  query.state.fetchStatus('idle');
+                }
               }
               if (didFetchSucceed) scheduleQueryStale(query);
             }
@@ -473,10 +506,16 @@ export const createQuery = <
 
       return fetchPromise;
     },
-    scheduleRetry: (attempt: number, error: TError, fetchFn?: QueryFetchFn) => {
+    scheduleRetry: (attempt: number, error: TError, fetchFn?: QueryFetchFn): boolean => {
       const { retry, retryDelay } = query.resolvedOptions;
-      if (retry === false) return;
-      if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) return;
+      if (retry === false) {
+        query.state.status('error');
+        return false;
+      }
+      if (typeof retry === 'function' && !retry(attempt - 1, error as TError)) {
+        query.state.status('error');
+        return false;
+      }
       const delay =
         typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
       if (
@@ -487,20 +526,25 @@ export const createQuery = <
         useEventListener(
           window,
           'online',
-          () => {
-            void query.fetch({ retryAttempt: attempt, fetchFn, force: true });
+          async () => {
+            await query.fetch({ retryAttempt: attempt, fetchFn, force: true });
           },
           { once: true },
         );
-        return;
+        return true;
       }
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
-        const id = timeoutManager.setTimeout(() => {
+        const id = timeoutManager.setTimeout(async () => {
           query.retryDisposer = () => {};
-          void query.fetch({ retryAttempt: attempt, fetchFn, force: true });
+          query.isFetching = false;
+          query.fetchPromise = undefined;
+          await query.fetch({ retryAttempt: attempt, fetchFn, force: true });
         }, delay ?? 0);
         query.retryDisposer = () => timeoutManager.clearTimeout(id);
+        return true;
       }
+      query.state.status('error');
+      return false;
     },
   };
 
@@ -513,13 +557,15 @@ export const createQuery = <
     const error = $<TError | null>(null, { equals: false });
     const errorUpdateCount = $(0);
     const errorUpdatedAt = $(0);
+    const failureCount = $(0);
+    const failureReason = $<TError | null>(null);
     const meta = $(null);
     const isInvalidated = $(false);
     const status = $<QueryStatus>(
       query.resolvedOptions.initialData !== undefined ? 'success' : 'pending',
     );
     const fetchStatus = $<FetchStatus>('idle');
-    const isStale = $(false);
+    const isStale = $(query.resolvedOptions.initialData === undefined);
 
     query.state = {
       data,
@@ -528,6 +574,8 @@ export const createQuery = <
       error,
       errorUpdateCount,
       errorUpdatedAt,
+      failureCount,
+      failureReason,
       meta,
       isInvalidated,
       status,
@@ -539,12 +587,12 @@ export const createQuery = <
       isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
       isPending: useMemo((): boolean => status() === 'pending'),
       isSuccess: useMemo((): boolean => status() === 'success'),
-      isError: useMemo((): boolean => status() === 'error'),
+      isError: useMemo((): boolean => error() !== null),
       isLoading: useMemo((): boolean => status() === 'pending' && fetchStatus() === 'fetching'),
-      isLoadingError: useMemo((): boolean => status() === 'error' && dataUpdateCount() === 0),
-      isRefetchError: useMemo((): boolean => status() === 'error' && dataUpdateCount() > 0),
+      isLoadingError: useMemo((): boolean => error() !== null && dataUpdateCount() === 0),
+      isRefetchError: useMemo((): boolean => error() !== null && dataUpdateCount() > 0),
       isPlaceholderData: useMemo(
-        (): boolean => query.resolvedOptions.placeholderData !== undefined && data() === undefined,
+        (): boolean => status() === 'pending' && !!query.resolvedOptions.placeholderData,
       ),
       isStale,
       isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),

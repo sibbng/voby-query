@@ -79,6 +79,8 @@ export type QueryState<D = undefined, TError = Error> = {
   error: Observable<TError | null>;
   errorUpdateCount: Observable<number>;
   errorUpdatedAt: Observable<number>;
+  failureCount: Observable<number>;
+  failureReason: Observable<TError | null>;
   meta: Observable<null>;
   isInvalidated: Observable<boolean>;
   status: Observable<QueryStatus>;
@@ -201,7 +203,7 @@ export type QueryOptions<
     signal: AbortSignal;
     queryKey: TQueryKey;
     meta?: Record<string, unknown>;
-  }) => Promise<TQueryFnData>;
+  }) => Promise<TQueryFnData> | TQueryFnData;
   queryClient?: QueryClient;
   initialData?: TData | (() => TData | undefined);
   initialDataUpdatedAt?: number;
@@ -235,6 +237,16 @@ export type QueryOptions<
       ) => boolean | 'always');
   meta?: Record<string, unknown>;
   queryKeyHashFn?: (queryKey: QueryKey) => string;
+};
+
+export type ResolvedQueryOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+> = Omit<QueryOptions<TQueryFnData, TError, TData, QueryKey>, 'queryKey' | 'enabled'> & {
+  queryKey: unknown[];
+  enabled: boolean;
+  queryClient: QueryClient;
 };
 
 export type InfiniteQueryOptions<
@@ -300,6 +312,16 @@ export type MutationOptions<
   throwOnError?: boolean | ((error: TError) => boolean);
   meta?: Record<string, unknown>;
   queryClient?: QueryClient;
+};
+
+export type ResolvedMutationOptions<
+  TData = unknown,
+  TError = unknown,
+  TVariables = TData,
+  TContext = unknown,
+> = Omit<MutationOptions<TData, TError, TVariables, TContext>, 'mutationKey'> & {
+  mutationKey: unknown[];
+  queryClient: QueryClient;
 };
 
 export type MutateOptions<

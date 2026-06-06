@@ -19,6 +19,7 @@ export default defineConfig({
       {
         test: {
           include: [
+            'tests/__tests__/**/*.{test,spec}.{ts,tsx}',
             'tests/browser/**/*.{test,spec}.{ts,tsx}',
             'tests/**/*.browser.{test,spec}.{ts,tsx}',
           ],
