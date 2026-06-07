@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import {
   addToEnd,
   addToStart,
@@ -12,6 +12,14 @@ import {
   skipToken,
   ensureQueryFn,
 } from '../src/utils.ts';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('core/utils', () => {
   describe('isPlainObject', () => {

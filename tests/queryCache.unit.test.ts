@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryCache } from '../src/queryCache.ts';
 import { createQueryClient } from '../src/index.ts';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 let queryKeyCounter = 0;
 const queryKey = () => [`query_${queryKeyCounter++}`];

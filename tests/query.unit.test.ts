@@ -1,5 +1,13 @@
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createQueryClient } from '../src/index.ts';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 let keyCounter = 0;
 const queryKey = () => [`query_${keyCounter++}`];
@@ -174,12 +182,16 @@ describe('query', () => {
       return 'data';
     });
 
-    await queryClient.prefetchQuery({ queryKey: key, queryFn });
+    const prefetchPromise = queryClient.prefetchQuery({ queryKey: key, queryFn });
+    await vi.advanceTimersByTimeAsync(60);
+    await prefetchPromise;
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
 
     await query.cancel({ revert: false, silent: true }).catch(() => {});
 
-    await query.fetch({ force: true });
+    const refetchPromise = query.fetch({ force: true });
+    await vi.advanceTimersByTimeAsync(60);
+    await refetchPromise;
     expect(query.state.data()).toBe('data');
     expect(queryFn).toHaveBeenCalledTimes(2);
   });
@@ -217,13 +229,14 @@ describe('query', () => {
       queryFn,
       retry: false,
     });
-    await new Promise((r) => setTimeout(r, 10));
+    await vi.advanceTimersByTimeAsync(10);
 
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
     const signal = queryFn.mock.calls[0]![0].signal;
     expect(signal.aborted).toBe(false);
 
     await query.cancel({ revert: false, silent: true }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(110);
     await promise.catch(() => {});
 
     expect(signal.aborted).toBe(true);
@@ -294,7 +307,9 @@ describe('query', () => {
       .fn()
       .mockImplementation(() => new Promise((r) => setTimeout(r, 100)).then(() => 'data'));
 
-    await queryClient.prefetchQuery({ queryKey: key, queryFn });
+    const prefetchPromise = queryClient.prefetchQuery({ queryKey: key, queryFn });
+    await vi.advanceTimersByTimeAsync(110);
+    await prefetchPromise;
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
 
     const updates: string[] = [];
@@ -303,7 +318,9 @@ describe('query', () => {
     });
 
     void query.fetch({ force: true });
-    await query.fetch({ force: true });
+    const fetchPromise = query.fetch({ force: true });
+    await vi.advanceTimersByTimeAsync(110);
+    await fetchPromise;
 
     expect(updates).toContain('updated');
     unsubscribe();

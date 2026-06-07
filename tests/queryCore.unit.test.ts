@@ -1,8 +1,15 @@
-import { expect, test, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
 import { createQueryClient } from '../src';
 import { CancelledError } from '../src/useQuery';
 import { QueryCache } from '../src/queryCache';
-import { sleep } from './utils';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>
   [...queryClient.getQueryCache().values()].find(
@@ -457,7 +464,7 @@ test('isRefetching is true when fetching and status is success', async () => {
   expect(query.state.isRefetching()).toBe(true);
 
   resolveRefetch('refetched');
-  await sleep(10);
+  await vi.advanceTimersByTimeAsync(10);
 
   expect(query.state.isRefetching()).toBe(false);
   expect(query.state.isSuccess()).toBe(true);

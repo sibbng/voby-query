@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import {
   type DataTag,
   type InferDataFromTag,
@@ -11,6 +11,14 @@ import {
   infiniteQueryOptions,
   createQueryClient,
 } from '../src/index.ts';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 type Expect<T extends true> = T;
 type Equal<T, U> = [T, U] extends [U, T] ? true : false;

@@ -10,3 +10,7 @@ export const render: typeof vobyRender = (...args: Parameters<typeof vobyRender>
   globalThis.unmount = disposer;
   return disposer;
 };
+
+let keyCounter = 0;
+export const queryKey = () => [`query_${keyCounter++}`];
+export const mutationKey = () => [`mutation_${keyCounter++}`];

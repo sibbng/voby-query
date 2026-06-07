@@ -1,5 +1,13 @@
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createQueryClient } from '../src/index.ts';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 let keyCounter = 0;
 const mutationKey = () => [`mutation_${keyCounter++}`];
@@ -89,7 +97,7 @@ describe('mutations', () => {
         mutationKey: key1,
         mutationFn: async () => {
           results.push('start-A');
-          await new Promise((r) => setTimeout(r, 10));
+          await Promise.resolve();
           results.push('finish-A');
           return 'a';
         },
@@ -103,7 +111,7 @@ describe('mutations', () => {
         mutationKey: key2,
         mutationFn: async () => {
           results.push('start-B');
-          await new Promise((r) => setTimeout(r, 10));
+          await Promise.resolve();
           results.push('finish-B');
           return 'b';
         },
@@ -169,7 +177,7 @@ describe('mutations', () => {
           },
           onSuccess: async () => {
             results.push('onSuccess-async-start');
-            await new Promise((r) => setTimeout(r, 10));
+            await Promise.resolve();
             results.push('onSuccess-async-end');
           },
           onSettled: () => {
@@ -204,7 +212,7 @@ describe('mutations', () => {
           },
           onSuccess: async () => {
             results.push('async-onSuccess');
-            await new Promise((r) => setTimeout(r, 10));
+            await Promise.resolve();
             return 'success-return-ignored';
           },
           onError: () => {
@@ -226,7 +234,8 @@ describe('mutations', () => {
       const newMutationError = new Error('mutation-error');
 
       let mutationError: Error | undefined;
-      await executeMutation(
+
+      const mutationPromise = executeMutation(
         queryClient,
         {
           mutationKey: key,
@@ -240,10 +249,10 @@ describe('mutations', () => {
           },
           onError: async () => {
             results.push('onError-async');
-            await new Promise((r) => setTimeout(r, 10));
+            await Promise.resolve();
             return Promise.all([
-              new Promise((r) => setTimeout(r, 10)).then(() => results.push('error-cleanup-1')),
-              new Promise((r) => setTimeout(r, 20)).then(() => results.push('error-cleanup-2')),
+              Promise.resolve().then(() => results.push('error-cleanup-1')),
+              Promise.resolve().then(() => results.push('error-cleanup-2')),
             ]);
           },
         },
@@ -252,7 +261,7 @@ describe('mutations', () => {
         mutationError = error;
       });
 
-      await new Promise((r) => setTimeout(r, 50));
+      await mutationPromise;
 
       expect(results).toEqual(['onMutate', 'onError-async', 'error-cleanup-1', 'error-cleanup-2']);
 

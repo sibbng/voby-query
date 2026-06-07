@@ -1,7 +1,14 @@
-import { expect, expectTypeOf, test, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, expect, expectTypeOf, test, vi } from 'vite-plus/test';
 import { createQueryClient } from '../src';
 import { CancelledError } from '../src/useQuery';
-import { sleep } from './utils';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>
   [...queryClient.getQueryCache().values()].find(
@@ -86,20 +93,24 @@ test('queryClient.prefetchQuery basic functionality', async () => {
   });
 
   // Scenario 1: Prefetch with a long staleTime
-  await queryClient.prefetchQuery({
+  const prefetchPromise1 = queryClient.prefetchQuery({
     queryKey: ['prefetch-test-1'],
     queryFn: queryFnMock,
     staleTime: 1000 * 60, // 1 minute
   });
+  await vi.advanceTimersByTimeAsync(15);
+  await prefetchPromise1;
 
   expect(queryFnMock).toHaveBeenCalledTimes(1);
   expect(queryClient.getQueryData(['prefetch-test-1'])).toBe('prefetched data');
 
   // Calling fetchQuery always calls queryFn
-  const dataFromFetch = await queryClient.fetchQuery({
+  const fetchPromise1 = queryClient.fetchQuery({
     queryKey: ['prefetch-test-1'],
     queryFn: queryFnMock, // Pass the same mock
   });
+  await vi.advanceTimersByTimeAsync(15);
+  const dataFromFetch = await fetchPromise1;
   expect(dataFromFetch).toBe('prefetched data');
   expect(queryFnMock).toHaveBeenCalledTimes(2); // Called again by fetchQuery
 
@@ -108,19 +119,23 @@ test('queryClient.prefetchQuery basic functionality', async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return 'prefetched data stale';
   });
-  await queryClient.prefetchQuery({
+  const prefetchPromise2 = queryClient.prefetchQuery({
     queryKey: ['prefetch-test-2'],
     queryFn: queryFnMock2,
     staleTime: 0, // Explicitly stale
   });
+  await vi.advanceTimersByTimeAsync(15);
+  await prefetchPromise2;
   expect(queryFnMock2).toHaveBeenCalledTimes(1);
   expect(queryClient.getQueryData(['prefetch-test-2'])).toBe('prefetched data stale');
 
   // Calling fetchQuery should call queryFn again because data is stale
-  const dataFromFetchStale = await queryClient.fetchQuery({
+  const fetchPromise2 = queryClient.fetchQuery({
     queryKey: ['prefetch-test-2'],
     queryFn: queryFnMock2,
   });
+  await vi.advanceTimersByTimeAsync(15);
+  const dataFromFetchStale = await fetchPromise2;
   expect(dataFromFetchStale).toBe('prefetched data stale');
   expect(queryFnMock2).toHaveBeenCalledTimes(2); // Called again
 });
@@ -837,7 +852,7 @@ test('gcTime: Infinity — scheduleDestroy does not destroy the cache entry', as
 
   const query = findQuery(queryClient, 'gc-infinity');
   query?.scheduleDestroy();
-  await sleep(10);
+  await vi.advanceTimersByTimeAsync(10);
 
   expect(queryClient.getQueryData(['gc-infinity'])).toBe('gc data');
 });
@@ -867,7 +882,9 @@ test(
     });
 
     await fetchPromise;
-    await sleep(50);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
 
     expect(callCount).toBe(4); // 1 initial + 3 retries
   },
@@ -888,7 +905,7 @@ test('retry: function — called with failureCount (0-based) and error', async (
   });
 
   await fetchPromise;
-  await sleep(10); // let at least one retry fire
+  await vi.advanceTimersByTimeAsync(1);
 
   expect(retryFn).toHaveBeenCalled();
   expect(retryFn.mock.calls[0][0]).toBe(0); // failureCount starts at 0
@@ -910,7 +927,8 @@ test('retry: function — stops retrying when it returns false', async () => {
   });
 
   await fetchPromise;
-  await sleep(50);
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.advanceTimersByTimeAsync(1);
 
   expect(callCount).toBe(3); // 1 initial + 2 retries
 });
@@ -929,7 +947,7 @@ test('retryDelay: function — called with attempt number and error', async () =
   });
 
   await fetchPromise;
-  await sleep(10);
+  await vi.advanceTimersByTimeAsync(1);
 
   expect(retryDelayFn).toHaveBeenCalled();
   expect(retryDelayFn.mock.calls[0][0]).toBe(1); // attempt starts at 1
