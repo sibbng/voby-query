@@ -3,10 +3,10 @@ name: Run Tests
 on:
   push:
     branches:
-      - '**' # Runs on pushes to all branches
+      - '**'
   pull_request:
     branches:
-      - main # Runs on PRs targeting main, can be adjusted to all branches if needed
+      - main
 
 jobs:
   test:
@@ -14,22 +14,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4 # Reads version from packageManager field in package.json
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium # Install only chromium for speed, or remove browser name for all
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium
 
       - name: Run tests
         run: pnpm test
