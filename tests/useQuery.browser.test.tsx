@@ -542,13 +542,13 @@ test(
   },
 );
 
-test.fails('useQuery refetchInterval: data refetches periodically', { retry: 10 }, async () => {
+test('useQuery refetchInterval: data refetches periodically', async () => {
   const queryClient = createQueryClient();
   const queryFnMock = vi.fn(async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return `Interval data ${Date.now()}`;
   });
-  const intervalMs = 50;
+  const intervalMs = 100;
   const showComponent = $(true);
 
   function TestComponent() {
@@ -573,33 +573,14 @@ test.fails('useQuery refetchInterval: data refetches periodically', { retry: 10 
   render(<App />, document.body);
 
   await waitFor(() => expect(document.body.textContent).toContain('Interval data'));
-  expect(queryFnMock).toHaveBeenCalledTimes(1); // Initial call
+  expect(queryFnMock).toHaveBeenCalledTimes(1);
 
-  // Wait for a period covering a few intervals
-  // e.g., 2.5 * intervalMs to reliably catch 2 more fetches
-  await new Promise((resolve) => setTimeout(resolve, intervalMs * 2.5 + 20)); // +20 for queryFn execution time
+  await sleep(intervalMs * 5);
+  expect(queryFnMock.mock.calls.length).toBeGreaterThanOrEqual(4);
 
-  // (Initial Call) + (Call after intervalMs) + (Call after 2*intervalMs)
-  // Depending on timing, it might be 2 or 3. Let's check for at least 2.
-  // The exact number can be tricky due to setTimeout precision and test environment.
-  // A more robust check might be to ensure it's called more than once.
-  expect(queryFnMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-  // For a more precise check, we could mock useInterval if possible, or use fake timers.
-  // Given current tools, this is a reasonable approximation.
-  // Typically, it should be 3 calls (initial + 2 intervals)
-  // Let's aim for 3, but acknowledge it might be flaky.
-  // For 50ms interval, over 120ms (2.5 * 50), we expect:
-  // Call 1 @ ~0-10ms
-  // Call 2 @ ~50-60ms
-  // Call 3 @ ~100-110ms
-  // So 3 calls is expected.
-
-  expect(queryFnMock.mock.calls.length).toBe(3);
-
-  // Cleanup: unmount component to stop interval
   showComponent(false);
   await flush();
-}); // Retry to account for timing issues
+});
 
 test('useQuery refetchInterval: stops if component unmounts', async () => {
   const queryClient = createQueryClient();
