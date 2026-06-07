@@ -285,7 +285,7 @@ describe('useQuery', () => {
     expect(states[1]).toMatchObject({ data: 'data' });
   });
 
-  test.fails('should fetch when refetchOnMount is false and nothing has been fetched yet', async () => {
+  test('should fetch when refetchOnMount is false and nothing has been fetched yet', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -297,6 +297,7 @@ describe('useQuery', () => {
         refetchOnMount: false,
       });
       const q = query();
+      states.push(snapshot(q));
       useEffect(() => {
         states.push(snapshot(q));
       });
@@ -316,7 +317,7 @@ describe('useQuery', () => {
     expect(states[1]).toMatchObject({ data: 'test' });
   });
 
-  test.fails('should not fetch when refetchOnMount is false and data has been fetched already', async () => {
+  test('should not fetch when refetchOnMount is false and data has been fetched already', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -343,6 +344,7 @@ describe('useQuery', () => {
       document.body,
     );
 
+    await flush();
     expect(states.length).toBe(1);
     expect(states[0]).toMatchObject({ data: 'prefetched' });
   });

@@ -247,7 +247,7 @@ export const createQuery = <
               return refetchOnMount(query);
             }
             if (refetchOnMount === 'always') return true;
-            if (refetchOnMount === false) return false;
+            if (refetchOnMount === false && !query.state.isPending()) return false;
             if (query.state.isStale() || query.state.isPending()) return true;
             return false;
           })();
