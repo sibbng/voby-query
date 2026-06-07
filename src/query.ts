@@ -16,6 +16,7 @@ import { ensureQueryFn, replaceData, resolveKey, shouldThrowError } from './util
 import { onlineManager } from './onlineManager.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import { focusManager } from './focusManager.ts';
+import { createMachine, type MachineInstance } from './machines.ts';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -30,6 +31,7 @@ export class CancelledError extends Error {
     this.silent = silent;
   }
 }
+
 type QueryStateSnapshot<D = undefined, TError = Error> = {
   data: D;
   dataUpdateCount: number;
@@ -42,17 +44,23 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   fetchStatus: FetchStatus;
   isStale: boolean;
 };
+
 type QueryFetchFn = (options: {
   signal: AbortSignal;
   queryKey: QueryKey;
   meta?: Record<string, unknown>;
 }) => Promise<unknown>;
+
 type QueryFetchOptions = {
   retryAttempt?: number;
   throwOnError?: boolean;
   force?: boolean;
   fetchFn?: QueryFetchFn;
 };
+
+type FetchState = 'idle' | 'fetching' | 'success' | 'error' | 'retrying' | 'cancelled' | 'paused';
+type FetchEvent = 'FETCH' | 'SUCCESS' | 'FAIL' | 'RETRYING' | 'RETRY' | 'CANCEL' | 'PAUSE';
+
 export type Query<
   TQueryFnData = unknown,
   TError = unknown,
@@ -84,6 +92,7 @@ export type Query<
   scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
   isCancelled: boolean;
   inactiveCleanup?: () => void;
+  fetchMachine: MachineInstance<FetchState, FetchEvent>;
 };
 
 const createQueryStateSnapshot = <D, TError>(
@@ -226,6 +235,7 @@ export const createQuery = <
     retryDisposer: () => {},
     fetchPromise: undefined,
     revertState: undefined,
+    fetchMachine: undefined as any,
     isStaleByTime: (staleTime) => {
       if (query.state.data() === undefined) return true;
       if (staleTime === 'static' || staleTime === Infinity) return false;
@@ -284,7 +294,7 @@ export const createQuery = <
                 }
               } else {
                 await query.cancel({ revert: false, silent: true });
-                query.state.fetchStatus('paused');
+                query.fetchMachine.send('PAUSE');
               }
             });
             cleanups.push(unsubOnline);
@@ -318,29 +328,27 @@ export const createQuery = <
       }
     },
     cancel: async ({ revert = true, silent = false } = {}) => {
-      const wasFetching = query.isFetching || query.fetchPromise !== undefined;
+      const currentState = query.fetchMachine.getState();
+      if (currentState !== 'fetching' && currentState !== 'retrying' && currentState !== 'paused') {
+        return;
+      }
+
       const hadPreviousData = query.revertState?.data !== undefined;
 
-      if (wasFetching) {
+      if (currentState !== 'paused') {
         query.controller.abort();
       }
-      query.isCancelled = wasFetching;
+      query.isCancelled = true;
       query.retryDisposer();
       query.retryDisposer = () => {};
-      query.isFetching = false;
-      query.fetchPromise = undefined;
 
       if (revert && query.revertState) {
         restoreQueryStateSnapshot(query.state, query.revertState);
       }
 
-      if (query.state.fetchStatus() !== 'paused') {
-        query.state.fetchStatus('idle');
-      }
+      query.fetchMachine.send('CANCEL');
 
-      query.revertState = undefined;
-
-      if (wasFetching && revert && !silent && !hadPreviousData) {
+      if (currentState !== 'paused' && revert && !silent && !hadPreviousData) {
         throw new CancelledError({ revert, silent });
       }
     },
@@ -386,24 +394,23 @@ export const createQuery = <
       force = false,
       fetchFn,
     } = {}) => {
-      if (!force && !query.resolvedOptions.enabled) return;
-      if (!force && !query.isActive) return;
-      if (query.isFetching && !query.isCancelled) {
-        return query.fetchPromise!;
-      }
-      if (query.state.fetchStatus() === 'paused') return;
+      const currentState = query.fetchMachine.getState();
 
-      query.isFetching = true;
-      query.isCancelled = false;
-      query.controller = new AbortController();
+      if (currentState === 'fetching') return query.fetchPromise;
+      if (currentState === 'retrying') {
+        query.fetchMachine.send('RETRY');
+      } else if (force) {
+        query.fetchMachine.send('FETCH', true);
+      } else {
+        if (!query.fetchMachine.can('FETCH')) return;
+        query.fetchMachine.send('FETCH');
+      }
+
       const signal = query.controller.signal;
-      query.revertState = createQueryStateSnapshot(query.state);
       let fetchPromise!: Promise<void>;
-      let didFetchSucceed = false;
-      let retryScheduled = false;
+
       fetchPromise = (async () => {
         try {
-          query.state.fetchStatus('fetching');
           const meta = query.resolvedOptions.meta;
           const result = await untrack(() =>
             (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
@@ -412,9 +419,7 @@ export const createQuery = <
               meta,
             }),
           );
-          if (query.isCancelled || signal.aborted) {
-            return;
-          }
+          if (query.isCancelled || signal.aborted) return;
 
           let newData: TData;
           if (isDevelopment) {
@@ -424,7 +429,6 @@ export const createQuery = <
               console.error(
                 `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${String(error)}`,
               );
-
               throw error;
             }
           } else {
@@ -432,12 +436,14 @@ export const createQuery = <
           }
 
           setQuerySuccessData(query, newData, Date.now(), false);
-          didFetchSucceed = true;
+          query.fetchMachine.send('SUCCESS');
+          scheduleQueryStale(query);
           cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
           cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
           cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
         } catch (err) {
           const isCancelledError = err instanceof CancelledError;
+          if (query.fetchMachine.getState() !== 'fetching' && !isCancelledError) return;
 
           if (!signal.aborted && !isCancelledError) {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
@@ -462,7 +468,9 @@ export const createQuery = <
                 throw error;
               }
             }
-            retryScheduled = query.scheduleRetry(retryAttempt + 1, error, fetchFn);
+
+            const willRetry = query.scheduleRetry(retryAttempt + 1, error, fetchFn);
+            query.fetchMachine.send(willRetry ? 'RETRYING' : 'FAIL');
             cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
             cache.config.onSettled?.(
               query.state.data(),
@@ -486,24 +494,11 @@ export const createQuery = <
           if (query.fetchPromise === fetchPromise) {
             query.fetchPromise = undefined;
             query.revertState = undefined;
-
-            const shouldSkipFinalize =
-              !query.isCancelled && signal.aborted && query.state.fetchStatus() === 'fetching';
-            if (!shouldSkipFinalize) {
-              if (!retryScheduled) {
-                query.isFetching = false;
-                if (query.state.fetchStatus() !== 'paused') {
-                  query.state.fetchStatus('idle');
-                }
-              }
-              if (didFetchSucceed) scheduleQueryStale(query);
-            }
           }
         }
       })();
 
       query.fetchPromise = fetchPromise;
-
       return fetchPromise;
     },
     scheduleRetry: (attempt: number, error: TError, fetchFn?: QueryFetchFn): boolean => {
@@ -536,8 +531,6 @@ export const createQuery = <
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
         const id = timeoutManager.setTimeout(async () => {
           query.retryDisposer = () => {};
-          query.isFetching = false;
-          query.fetchPromise = undefined;
           await query.fetch({ retryAttempt: attempt, fetchFn, force: true });
         }, delay ?? 0);
         query.retryDisposer = () => timeoutManager.clearTimeout(id);
@@ -566,6 +559,114 @@ export const createQuery = <
     );
     const fetchStatus = $<FetchStatus>('idle');
     const isStale = $(query.resolvedOptions.initialData === undefined);
+
+    const fetchMachine = createMachine<FetchState, FetchEvent>({
+      initial: 'idle',
+      states: {
+        idle: {
+          onEnter: () => {
+            fetchStatus('idle');
+            query.isFetching = false;
+            query.fetchPromise = undefined;
+            query.revertState = undefined;
+          },
+          transitions: {
+            FETCH: {
+              target: 'fetching',
+              guard: () => query.resolvedOptions.enabled && query.isActive,
+            },
+          },
+        },
+        fetching: {
+          onEnter: () => {
+            fetchStatus('fetching');
+            query.isFetching = true;
+            query.isCancelled = false;
+            query.controller = new AbortController();
+            query.revertState = createQueryStateSnapshot(query.state);
+          },
+          onLeave: () => {
+            query.fetchPromise = undefined;
+          },
+          transitions: {
+            SUCCESS: { target: 'success' },
+            FAIL: { target: 'error' },
+            RETRYING: { target: 'retrying' },
+            PAUSE: { target: 'paused' },
+            CANCEL: { target: 'cancelled' },
+          },
+        },
+        retrying: {
+          onEnter: () => {
+            fetchStatus('fetching');
+            query.isFetching = true;
+          },
+          onLeave: () => {
+            query.fetchPromise = undefined;
+          },
+          transitions: {
+            RETRY: { target: 'fetching' },
+            CANCEL: { target: 'cancelled' },
+          },
+        },
+        paused: {
+          onEnter: () => {
+            fetchStatus('paused');
+            query.isFetching = false;
+          },
+          onLeave: () => {
+            query.fetchPromise = undefined;
+          },
+          transitions: {
+            FETCH: { target: 'fetching' },
+            CANCEL: { target: 'cancelled' },
+          },
+        },
+        success: {
+          onEnter: () => {
+            fetchStatus('idle');
+            query.isFetching = false;
+            query.revertState = undefined;
+          },
+          transitions: {
+            FETCH: {
+              target: 'fetching',
+              guard: () => query.resolvedOptions.enabled && query.isActive,
+            },
+          },
+        },
+        error: {
+          onEnter: () => {
+            fetchStatus('idle');
+            query.isFetching = false;
+            query.revertState = undefined;
+          },
+          transitions: {
+            FETCH: {
+              target: 'fetching',
+              guard: () => query.resolvedOptions.enabled && query.isActive,
+            },
+          },
+        },
+        cancelled: {
+          onEnter: () => {
+            fetchStatus('idle');
+            query.isFetching = false;
+            query.fetchPromise = undefined;
+            query.revertState = undefined;
+          },
+          transitions: {
+            FETCH: {
+              target: 'fetching',
+              guard: () => query.resolvedOptions.enabled && query.isActive,
+            },
+            PAUSE: { target: 'paused' },
+          },
+        },
+      },
+    });
+
+    query.fetchMachine = fetchMachine;
 
     query.state = {
       data,

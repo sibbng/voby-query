@@ -11,6 +11,10 @@ import type {
   ResolvedMutationOptions,
 } from './types.ts';
 import type { MutationCache } from './mutationCache.ts';
+import { createMachine, type MachineInstance } from './machines.ts';
+
+type MutationState_ = 'idle' | 'pending' | 'success' | 'error';
+type MutationEvent = 'MUTATE' | 'SUCCESS' | 'ERROR' | 'RESET';
 
 export type Mutation<
   TData = unknown,
@@ -35,6 +39,7 @@ export type Mutation<
   removeInstance: () => void;
   scheduleDestroy: () => void;
   instances: number;
+  machine: MachineInstance<MutationState_, MutationEvent>;
 };
 
 export const resolveMutationHash = (mutationKey?: MutationKey) => {
@@ -97,6 +102,20 @@ export const createMutation = <
 
   let state!: MutationState<TData, TError, TVariables, TContext>;
   let stateDisposer: () => void = () => {};
+  let machine!: MachineInstance<MutationState_, MutationEvent>;
+
+  const setInitialState = () => {
+    state.status('idle');
+    state.data(undefined);
+    state.error(null);
+    state.failureCount(0);
+    state.failureReason(null);
+    state.isPaused(false);
+    state.submittedAt(undefined);
+    state.variables(undefined);
+    state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
+  };
+
   useRoot((dispose) => {
     stateDisposer = dispose;
 
@@ -130,6 +149,46 @@ export const createMutation = <
       isSuccess: useMemo(() => status() === 'success'),
       meta,
     };
+
+    machine = createMachine<MutationState_, MutationEvent>({
+      initial: 'idle',
+      states: {
+        idle: {
+          onEnter: setInitialState,
+          transitions: {
+            MUTATE: { target: 'pending' },
+          },
+        },
+        pending: {
+          onEnter: () => {
+            status('pending');
+          },
+          transitions: {
+            SUCCESS: { target: 'success' },
+            ERROR: { target: 'error' },
+            MUTATE: { target: 'pending' },
+          },
+        },
+        success: {
+          onEnter: () => {
+            status('success');
+          },
+          transitions: {
+            MUTATE: { target: 'pending' },
+            RESET: { target: 'idle' },
+          },
+        },
+        error: {
+          onEnter: () => {
+            status('error');
+          },
+          transitions: {
+            MUTATE: { target: 'pending' },
+            RESET: { target: 'idle' },
+          },
+        },
+      },
+    });
   });
 
   const mutation: Mutation<TData, TError, TVariables, TContext> = {
@@ -139,6 +198,7 @@ export const createMutation = <
     resolvedOptions,
     instances: 0,
     stateDisposer,
+    machine,
     destroyDisposer: () => {},
     destroy: () => {
       mutation.destroyDisposer();
@@ -167,31 +227,28 @@ export const createMutation = <
       mutation.destroyDisposer = () => timeoutManager.clearTimeout(id);
     },
     reset: () => {
-      mutation.state.status('idle');
-      mutation.state.data(undefined);
-      mutation.state.error(null);
-      mutation.state.failureCount(0);
-      mutation.state.failureReason(null);
-      mutation.state.isPaused(false);
-      mutation.state.submittedAt(undefined);
-      mutation.state.variables(undefined);
-      mutation.state.meta((mutation.resolvedOptions.meta ?? {}) as Record<string, unknown>);
+      if (!machine.can('RESET')) return;
+      machine.send('RESET');
       mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
     },
     mutate: async (variables, mutateOptions) => {
+      if (!machine.can('MUTATE')) {
+        return undefined;
+      }
+
       if (mutationHash && !mutationCache.has(mutationHash)) {
         mutationCache.set(mutationHash, mutation);
       }
 
-      mutation.state.status('pending');
-      mutation.state.data(undefined);
-      mutation.state.error(null);
-      mutation.state.failureCount(0);
-      mutation.state.failureReason(null);
-      mutation.state.isPaused(false);
-      mutation.state.variables(variables);
-      mutation.state.submittedAt(Date.now());
-      mutation.state.meta((mutation.resolvedOptions.meta ?? {}) as Record<string, unknown>);
+      machine.send('MUTATE');
+      state.data(undefined);
+      state.error(null);
+      state.failureCount(0);
+      state.failureReason(null);
+      state.isPaused(false);
+      state.variables(variables);
+      state.submittedAt(Date.now());
+      state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
       mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
 
       let context: TContext | undefined;
@@ -213,8 +270,8 @@ export const createMutation = <
             break;
           } catch (error) {
             failureCount += 1;
-            mutation.state.failureCount(failureCount);
-            mutation.state.failureReason(error as TError);
+            state.failureCount(failureCount);
+            state.failureReason(error as TError);
 
             if (!shouldRetry(failureCount, error as TError)) {
               throw error;
@@ -230,11 +287,11 @@ export const createMutation = <
           }
         }
 
-        mutation.state.status('success');
-        mutation.state.data(data);
-        mutation.state.error(null);
-        mutation.state.failureCount(0);
-        mutation.state.failureReason(null);
+        machine.send('SUCCESS');
+        state.data(data);
+        state.error(null);
+        state.failureCount(0);
+        state.failureReason(null);
         mutationCache.notify({
           type: 'updated',
           mutation: mutation as Mutation<any, any, any, any>,
@@ -248,11 +305,11 @@ export const createMutation = <
 
         return data;
       } catch (error) {
-        mutation.state.status('error');
-        mutation.state.error(error as TError);
-        mutation.state.failureReason(error as TError);
-        if (mutation.state.failureCount() === 0) {
-          mutation.state.failureCount(1);
+        machine.send('ERROR');
+        state.error(error as TError);
+        state.failureReason(error as TError);
+        if (state.failureCount() === 0) {
+          state.failureCount(1);
         }
         mutationCache.notify({
           type: 'updated',
@@ -270,7 +327,7 @@ export const createMutation = <
         }
       }
 
-      return mutation.state.data();
+      return state.data();
     },
     mutateAsync: undefined as never,
   };
