@@ -351,7 +351,7 @@ describe('useQuery', () => {
 
   // #region select / placeholderData / initialData
 
-  test.fails('should be able to select a part of the data with select', async () => {
+  test('should be able to select a part of the data with select', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -359,7 +359,7 @@ describe('useQuery', () => {
     function Page() {
       const query = useQuery({
         queryKey: key,
-        queryFn: () => ({ name: 'test' }),
+        queryFn: () => sleep(10).then(() => ({ name: 'test' })),
         select: (data: any) => data.name,
       });
       const q = query();
@@ -376,7 +376,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await sleep(20);
     expect(document.body.textContent).toBe('test');
 
     expect(states.length).toBe(2);
