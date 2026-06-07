@@ -25,10 +25,11 @@ export function useQuery<
   TQueryKey extends QueryKey = QueryKey,
 >(
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: import('./types.ts').QueryClient,
 ): UseQueryResult<Awaited<TData>, TError> {
   const lastData = $<TQueryFnData | undefined>();
 
-  const query = useBaseQuery(options.queryClient, (client) =>
+  const query = useBaseQuery(queryClient ?? options.queryClient, (client) =>
     client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options),
   );
 
@@ -73,6 +74,13 @@ export function useQuery<
       }),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
+      promise: (): Promise<Awaited<TData>> => {
+        const d = state.data();
+        if (d !== undefined) return Promise.resolve(d as Awaited<TData>);
+        return (currentQuery.fetchPromise ?? currentQuery.fetch()).then(
+          () => state.data()! as Awaited<TData>,
+        );
+      },
     };
 
     if (shouldThrow) {

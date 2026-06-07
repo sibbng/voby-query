@@ -15,8 +15,9 @@ export function useSuspenseQuery<
   TQueryKey extends QueryKey = QueryKey,
 >(
   options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: import('./types.ts').QueryClient,
 ): UseSuspenseQueryResult<Awaited<TData>, TError> {
-  const query = useBaseQuery(options.queryClient, (client) =>
+  const query = useBaseQuery(queryClient ?? options.queryClient, (client) =>
     client.cache.build<TQueryFnData, TError, TData, TQueryKey>(
       client,
       ensureSuspenseTimers(options) as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,

@@ -30,11 +30,12 @@ export function useInfiniteQuery<
   TPageParam = unknown,
 >(
   options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  queryClient?: import('./types.ts').QueryClient,
 ): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
 
-  const query = useBaseQuery(options.queryClient, (client) => {
+  const query = useBaseQuery(queryClient ?? options.queryClient, (client) => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
@@ -151,6 +152,14 @@ export function useInfiniteQuery<
         fetchPage('backward', fetchOptions),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
+      promise: (): Promise<Awaited<InfiniteData<TQueryFnData, TPageParam>>> => {
+        const d = state.data();
+        if (d !== undefined)
+          return Promise.resolve(d as Awaited<InfiniteData<TQueryFnData, TPageParam>>);
+        return (currentQuery.fetchPromise ?? currentQuery.fetch()).then(
+          () => state.data()! as Awaited<InfiniteData<TQueryFnData, TPageParam>>,
+        );
+      },
     };
   }) as UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError>;
 }

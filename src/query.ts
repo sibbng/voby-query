@@ -596,6 +596,10 @@ export const createQuery = <
       ),
       isStale,
       isIdle: useMemo((): boolean => fetchStatus() === 'idle' && status() === 'pending'),
+      isInitialLoading: useMemo(
+        (): boolean => status() === 'pending' && fetchStatus() === 'fetching',
+      ),
+      isEnabled: useMemo((): boolean => query.resolvedOptions.enabled),
     } as QueryState<TData, TError>;
   });
 

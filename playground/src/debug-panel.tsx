@@ -59,6 +59,8 @@ const createQuerySnapshot = (query: any): QuerySnapshot<any, any> => {
     isPlaceholderData: state.isPlaceholderData(),
     isStale: state.isStale(),
     isIdle: state.isIdle(),
+    isInitialLoading: state.isInitialLoading(),
+    isEnabled: Boolean(query.resolvedOptions.enabled),
     isInvalidated: state.isInvalidated(),
     observers: query.instances,
     hasData: data !== undefined,

@@ -34,10 +34,11 @@ export function useSuspenseInfiniteQuery<
     InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
     'enabled' | 'placeholderData' | 'throwOnError'
   >,
+  queryClient?: import('./types.ts').QueryClient,
 ): UseSuspenseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
 
-  const query = useBaseQuery(options.queryClient, (client) => {
+  const query = useBaseQuery(queryClient ?? options.queryClient, (client) => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
