@@ -221,7 +221,7 @@ describe('useQuery', () => {
     });
   });
 
-  test.fails('should set isFetchedAfterMount to true after a query has been fetched', async () => {
+  test('should set isFetchedAfterMount to true after a query has been fetched', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
 

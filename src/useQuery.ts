@@ -1,4 +1,4 @@
-import { $, useMemo } from 'voby';
+import { $, useMemo, untrack } from 'voby';
 import { useBaseQuery } from './useBaseQuery.ts';
 import type { QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 
@@ -37,10 +37,24 @@ export function useQuery<
     const currentQuery = query();
     const { state, resolvedOptions } = currentQuery;
 
+    // Snapshot the update counts at mount time so isFetchedAfterMount
+    // reflects fetches that happened *after* this observer mounted.
+    // Using untrack() to avoid registering these reads as reactive deps
+    // on the outer memo — we only want to re-evaluate when the query changes.
+    const mountedAtCounts = {
+      dataUpdateCount: untrack(() => state.dataUpdateCount()),
+      errorUpdateCount: untrack(() => state.errorUpdateCount()),
+    };
+
     const shouldThrow = state.isError() && resolvedOptions.throwOnError;
 
     const result = {
       ...state,
+      isFetchedAfterMount: useMemo(
+        (): boolean =>
+          state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
+          state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+      ),
       data: useMemo(() => {
         const data = state.data();
 
