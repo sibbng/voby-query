@@ -1,6 +1,7 @@
 import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
 import { noop } from './utils.ts';
 import { useQueryClient } from './queryClient.ts';
+import { QueryObserver } from './queryObserver.ts';
 import type { QueryClient, QueriesResultItem, QueriesResults, UseQueriesOptions } from './types.ts';
 
 export type { UseQueriesOptions } from './types.ts';
@@ -18,12 +19,15 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
 
   const lastDataMap = new Map<string, unknown>();
 
-  const queries = useMemo(
+  const observers = useMemo(
     () => {
       return options.queries.map((opts) => {
         const query = client.cache.build(client, opts as any);
-        useCleanup(query.addInstance());
-        return query;
+        useCleanup((query as any).addInstance());
+        const obs = new QueryObserver(query, opts as any);
+        useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+        useCleanup(() => obs.destroy());
+        return obs;
       });
     },
     { sync: true },
@@ -31,7 +35,8 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
 
   const queryDataMemos = useMemo(
     () => {
-      return queries().map((q: any) => {
+      return observers().map((obs: any) => {
+        const q = (obs as any).query;
         const opts = q.resolvedOptions;
         return useMemo(() => {
           const rawData = q.state.data();
@@ -67,14 +72,15 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
     tick();
 
     const dataMemos = queryDataMemos();
-    const results = queries().map((q: any, i: number) =>
-      Object.freeze({
+    const results = observers().map((obs: any, i: number) => {
+      const q = obs.query;
+      return Object.freeze({
         ...q.state,
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,
-      }),
-    );
+      });
+    });
 
     if (options.combine) {
       return options.combine(results as any) as TCombinedResult;

@@ -1,6 +1,8 @@
-import { useMemo, useResource } from 'voby';
-import { useBaseQuery } from './useBaseQuery.ts';
+import { $, useCleanup, useMemo, useResource } from 'voby';
+import { useQueryClient } from './queryClient.ts';
+import { QueryObserver } from './queryObserver.ts';
 import type {
+  QueryClient as QC,
   QueryKey,
   QueryOptions,
   UseSuspenseQueryOptions,
@@ -15,17 +17,32 @@ export function useSuspenseQuery<
   TQueryKey extends QueryKey = QueryKey,
 >(
   options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  queryClient?: import('./types.ts').QueryClient,
+  queryClient?: QC,
 ): UseSuspenseQueryResult<Awaited<TData>, TError> {
-  const query = useBaseQuery(queryClient ?? options.queryClient, (client) =>
-    client.cache.build<TQueryFnData, TError, TData, TQueryKey>(
-      client,
-      ensureSuspenseTimers(options) as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-    ),
-  );
+  const client = useQueryClient(queryClient ?? options.queryClient);
+
+  // Suspense queries use staleTime: Infinity to prevent re-fetching on re-render
+  const suspenseOptions = ensureSuspenseTimers(options) as QueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey
+  >;
+
+  const tick = $(0);
+
+  const observer = useMemo(() => {
+    const q = client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, suspenseOptions);
+    useCleanup((q as any).addInstance());
+    const obs = new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, suspenseOptions);
+    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+    useCleanup(() => obs.destroy());
+    return obs;
+  });
 
   const resource = useResource<Awaited<TData>>(() => {
-    const currentQuery = query();
+    const obs = observer();
+    const currentQuery = obs.query;
 
     if (currentQuery.state.data() !== undefined) {
       return currentQuery.state.data() as Awaited<TData>;
@@ -43,8 +60,11 @@ export function useSuspenseQuery<
   });
 
   return useMemo(() => {
-    const currentQuery = query();
-    const { state: stateObservable, resolvedOptions } = currentQuery;
+    tick(); // depend on observer notifications
+    const obs = observer();
+    const currentQuery = obs.query;
+    const stateObservable = currentQuery.state;
+    const obsOptions = obs.resolvedOptions;
 
     if (stateObservable.status() === 'error') {
       throw stateObservable.error()!;
@@ -60,8 +80,8 @@ export function useSuspenseQuery<
       data: useMemo(() => {
         const currentData = stateObservable.data();
 
-        if (resolvedOptions.select && currentData !== undefined) {
-          return resolvedOptions.select(currentData as any) as Awaited<TData>;
+        if (obsOptions.select && currentData !== undefined) {
+          return obsOptions.select(currentData as any) as Awaited<TData>;
         }
 
         return currentData as Awaited<TData>;

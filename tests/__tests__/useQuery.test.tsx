@@ -256,7 +256,7 @@ describe('useQuery', () => {
     expect(document.body.textContent).toContain('isFetchedAfterMount: true');
   });
 
-  test.fails('should be able to watch a query without providing a query function', async () => {
+  test('should be able to watch a query without providing a query function', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -266,6 +266,7 @@ describe('useQuery', () => {
     function Page() {
       const query = useQuery<string>({ queryKey: key });
       const q = query();
+      states.push(snapshot(q));
       useEffect(() => {
         states.push(snapshot(q));
       });
@@ -431,13 +432,16 @@ describe('useQuery', () => {
         placeholderData: keepPreviousData,
       });
       const q = query();
+      states.push(snapshot(q));
       useEffect(() => {
+        const q = query();
         states.push(snapshot(q));
       });
       return (
         <div>
           <span>data: {() => query().data() ?? 'undefined'}</span>
           <span>isPaused: {() => String(query().isPaused())}</span>
+          <button onClick={() => count(count() + 1)}>increment</button>
         </div>
       );
     }
@@ -587,11 +591,12 @@ describe('useQuery', () => {
 
   // #region enabled
 
-  test.fails('should wait for the query to become enabled before fetching', async () => {
+  test('should wait for the query to become enabled before fetching', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const enabled = $(false);
+    let currentQuery: any;
 
     function Page() {
       const query = useQuery({
@@ -600,13 +605,12 @@ describe('useQuery', () => {
         enabled,
       });
       const q = query();
-      useEffect(() => {
-        states.push(snapshot(q));
-      });
+      currentQuery = query;
+      states.push(snapshot(q));
       return (
         <div>
-          <div>data: {() => q.data() as string}</div>
-          <button onClick={() => enabled(true)}>enable</button>
+          <div>data: {() => query().data() as string}</div>
+          <button onClick={() => enabled(true)}>enabled: {() => enabled().toString()}</button>
         </div>
       );
     }
@@ -625,14 +629,19 @@ describe('useQuery', () => {
       data: undefined,
     });
 
-    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(10);
+    document.querySelector('button')?.click();
+    await sleep(100);
     expect(document.body.textContent).toContain('data: data');
-
+    states.push(snapshot(currentQuery()));
     expect(states.length).toBe(2);
+    expect(states[1]).toMatchObject({
+      isFetching: false,
+      isSuccess: true,
+      data: 'data',
+    });
   });
 
-  test.fails('should not fetch when switching to a disabled query', async () => {
+  test('should not fetch when switching to a disabled query', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -644,8 +653,8 @@ describe('useQuery', () => {
         queryFn: () => sleep(5).then(() => count()),
         enabled: () => count() === 0,
       });
-      const q = query();
       useEffect(() => {
+        const q = query();
         states.push(snapshot(q));
       });
       return (
@@ -678,7 +687,7 @@ describe('useQuery', () => {
     expect(states[2]).toMatchObject({ data: undefined, isFetching: false, isSuccess: false });
   });
 
-  test.fails('should not update disabled query when refetching with refetchQueries', async () => {
+  test('should not update disabled query when refetching with refetchQueries', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -694,9 +703,9 @@ describe('useQuery', () => {
         },
         enabled: false,
       });
-      const q = query();
+
       useEffect(() => {
-        states.push(snapshot(q));
+        states.push(snapshot(query()));
       });
       return null;
     }
@@ -960,7 +969,7 @@ describe('useQuery', () => {
     expect(fetchCount).toBe(1);
   });
 
-  test.fails('should not refetch on window focus when the query is disabled', async () => {
+  test('should not refetch on window focus when the query is disabled', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1210,7 +1219,6 @@ describe('useQuery', () => {
       return (
         <div>
           {() => {
-            console.log('query result:', query());
             return query().status();
           }}
         </div>

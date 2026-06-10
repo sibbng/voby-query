@@ -1,19 +1,21 @@
-import { $, useMemo } from 'voby';
+import { $, useCleanup, useMemo } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
   hasPreviousPage,
   refetchInfiniteData,
 } from './infiniteQuery.ts';
-import { useBaseQuery } from './useBaseQuery.ts';
+import { QueryObserver } from './queryObserver.ts';
 import type { Query } from './query.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
   InfiniteQueryOptions,
+  QueryClient as QC,
   QueryKey,
   UseInfiniteQueryResult,
 } from './types.ts';
+import { useQueryClient } from './queryClient.ts';
 
 export type {
   InfiniteData,
@@ -30,12 +32,13 @@ export function useInfiniteQuery<
   TPageParam = unknown,
 >(
   options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
-  queryClient?: import('./types.ts').QueryClient,
+  queryClient?: QC,
 ): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
+  const client = useQueryClient(queryClient ?? options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
 
-  const query = useBaseQuery(queryClient ?? options.queryClient, (client) => {
+  const observer = useMemo(() => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
@@ -58,12 +61,18 @@ export function useInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TQueryKey
     >(client, wrappedOptions as any);
-    return nextQuery;
+    useCleanup((nextQuery as any).addInstance());
+    const obs = new QueryObserver(nextQuery, wrappedOptions as any);
+    useCleanup(obs.subscribe(() => {}));
+    useCleanup(() => obs.destroy());
+    return obs;
   });
 
   return useMemo(() => {
-    const currentQuery = query();
-    const { state, resolvedOptions } = currentQuery;
+    const obs = observer();
+    const currentQuery = obs.query;
+    const state = currentQuery.state;
+    const resolvedOptions = currentQuery.resolvedOptions;
     const infiniteOptions = options;
 
     const fetchPage = async (direction: InfiniteQueryDirection, fetchOptions = {}) => {

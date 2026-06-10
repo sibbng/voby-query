@@ -1,20 +1,22 @@
-import { $, useMemo, useResource } from 'voby';
+import { $, useCleanup, useMemo, useResource } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
   hasPreviousPage,
   refetchInfiniteData,
 } from './infiniteQuery.ts';
-import { useBaseQuery } from './useBaseQuery.ts';
 import type { Query } from './query.ts';
+import { QueryObserver } from './queryObserver.ts';
 import { ensureSuspenseTimers } from './utils.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
   InfiniteQueryOptions,
+  QueryClient as QC,
   QueryKey,
   UseSuspenseInfiniteQueryResult,
 } from './types.ts';
+import { useQueryClient } from './queryClient.ts';
 
 export type {
   InfiniteData,
@@ -34,11 +36,13 @@ export function useSuspenseInfiniteQuery<
     InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
     'enabled' | 'placeholderData' | 'throwOnError'
   >,
-  queryClient?: import('./types.ts').QueryClient,
+  queryClient?: QC,
 ): UseSuspenseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
+  const client = useQueryClient(queryClient ?? options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
+  const tick = $(0);
 
-  const query = useBaseQuery(queryClient ?? options.queryClient, (client) => {
+  const observer = useMemo(() => {
     let nextQuery!: Query<
       InfiniteData<TQueryFnData, TPageParam>,
       TError,
@@ -62,11 +66,16 @@ export function useSuspenseInfiniteQuery<
       InfiniteData<TQueryFnData, TPageParam>,
       TQueryKey
     >(client, wrappedOptions as any);
-    return nextQuery;
+    useCleanup((nextQuery as any).addInstance());
+    const obs = new QueryObserver(nextQuery, wrappedOptions as any);
+    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+    useCleanup(() => obs.destroy());
+    return obs;
   });
 
   const resource = useResource<Awaited<InfiniteData<TQueryFnData, TPageParam>>>(() => {
-    const currentQuery = query();
+    const obs = observer();
+    const currentQuery = obs.query;
 
     if (currentQuery.state.data() !== undefined) {
       return currentQuery.state.data() as Awaited<InfiniteData<TQueryFnData, TPageParam>>;
@@ -88,8 +97,11 @@ export function useSuspenseInfiniteQuery<
   });
 
   return useMemo(() => {
-    const currentQuery = query();
-    const { state, resolvedOptions } = currentQuery;
+    tick(); // depend on observer notifications
+    const obs = observer();
+    const currentQuery = obs.query;
+    const state = currentQuery.state;
+    const resolvedOptions = currentQuery.resolvedOptions;
 
     if (state.status() === 'error') {
       throw state.error()!;

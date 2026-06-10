@@ -12,6 +12,7 @@ import type {
   QueryStatus,
   ResolvedQueryOptions,
 } from './types.ts';
+import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
 import { ensureQueryFn, replaceData, resolveKey, shouldThrowError } from './utils.ts';
 import { onlineManager } from './onlineManager.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
@@ -76,6 +77,9 @@ export type Query<
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
   resolvedOptions: ResolvedQueryOptions<TQueryFnData, TError, TData>;
   instances: number;
+  observers: Set<QueryObserverType<TQueryFnData, TError, TData, TQueryKey>>;
+  addObserver: (observer: QueryObserverType<TQueryFnData, TError, TData, TQueryKey>) => void;
+  removeObserver: (observer: QueryObserverType<TQueryFnData, TError, TData, TQueryKey>) => void;
   controller: AbortController;
   isFetching: boolean;
   fetchPromise?: Promise<void>;
@@ -164,32 +168,58 @@ export const resolveStaleTime = (query: Query<any, any, any, any>): number | 'st
   return typeof staleTime === 'function' ? staleTime(query) : staleTime;
 };
 
-const scheduleQueryStale = (query: Query<any, any, any, any>) => {
+export const scheduleQueryStale = (query: Query<any, any, any, any>) => {
   query.staleDisposer();
   query.staleDisposer = () => {};
 
-  if (query.state.data() === undefined) {
-    query.state.isStale(true);
-    return;
+  // Compute current staleness
+  let isStale: boolean;
+  if (query.observers.size > 0) {
+    isStale = Array.from(query.observers).some((observer) => observer.isStale());
+  } else if (query.state.data() === undefined || query.state.isInvalidated()) {
+    isStale = true;
+  } else {
+    const staleTime = resolveStaleTime(query);
+    if (staleTime === 'static' || staleTime === Infinity) {
+      isStale = false;
+    } else if (staleTime <= 0) {
+      isStale = true;
+    } else {
+      isStale = false;
+    }
   }
 
-  const staleTime = resolveStaleTime(query);
-  if (staleTime === 'static' || staleTime === Infinity) {
-    query.state.isStale(false);
-    return;
+  query.state.isStale(isStale);
+
+  // Schedule future update if needed (when not permanently stale/not stale)
+  if (query.observers.size > 0) {
+    // With observers: use the minimum staleTime across all observers
+    let minStaleTime: number | 'static' = 'static';
+    for (const observer of query.observers) {
+      const observerStaleTime = observer.resolvedOptions.staleTime;
+      const resolved =
+        typeof observerStaleTime === 'function' ? observerStaleTime(query) : observerStaleTime;
+      if (resolved === 'static' || resolved === Infinity) continue;
+      if (minStaleTime === 'static' || (typeof resolved === 'number' && resolved < minStaleTime)) {
+        minStaleTime = resolved;
+      }
+    }
+    if (minStaleTime !== 'static' && typeof minStaleTime === 'number' && minStaleTime > 0) {
+      const id = timeoutManager.setTimeout(() => {
+        query.state.isStale(true);
+      }, minStaleTime);
+      query.staleDisposer = () => timeoutManager.clearTimeout(id);
+    }
+  } else if (!isStale) {
+    // Without observers: use query-level staleTime
+    const staleTime = resolveStaleTime(query);
+    if (staleTime !== 'static' && staleTime !== Infinity && staleTime > 0) {
+      const id = timeoutManager.setTimeout(() => {
+        query.state.isStale(true);
+      }, staleTime);
+      query.staleDisposer = () => timeoutManager.clearTimeout(id);
+    }
   }
-
-  if (staleTime <= 0) {
-    query.state.isStale(true);
-    return;
-  }
-
-  query.state.isStale(false);
-
-  const id = timeoutManager.setTimeout(() => {
-    query.state.isStale(true);
-  }, staleTime);
-  query.staleDisposer = () => timeoutManager.clearTimeout(id);
 };
 
 export const setQuerySuccessData = (
@@ -226,6 +256,23 @@ export const createQuery = <
     isActive: false,
     resolvedOptions,
     instances: 0,
+    observers: new Set(),
+    addObserver: (observer) => {
+      query.observers.add(observer);
+      if (query.observers.size === 1) {
+        query.destroyDisposer();
+      }
+      if (!query.isActive) {
+        query.isActive = true;
+      }
+    },
+    removeObserver: (observer) => {
+      query.observers.delete(observer);
+      if (query.observers.size === 0) {
+        query.isActive = false;
+        query.scheduleDestroy();
+      }
+    },
     state: undefined as any,
     controller: new AbortController(),
     isCancelled: false,
@@ -435,9 +482,8 @@ export const createQuery = <
             newData = replaceData(query.state.data(), result, query.resolvedOptions) as TData;
           }
 
-          setQuerySuccessData(query, newData, Date.now(), false);
+          setQuerySuccessData(query, newData, Date.now(), true);
           query.fetchMachine.send('SUCCESS');
-          scheduleQueryStale(query);
           cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
           cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
           cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });

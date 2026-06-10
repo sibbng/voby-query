@@ -1,5 +1,6 @@
 import { $, type ObservableReadonly, useCleanup, useMemo, useResource } from 'voby';
 import { useQueryClient } from './queryClient.ts';
+import { QueryObserver } from './queryObserver.ts';
 import { ensureSuspenseTimers } from './utils.ts';
 import type { QueryClient, QueriesResultItem, UseQueriesOptions } from './types.ts';
 
@@ -22,13 +23,16 @@ export function useSuspenseQueries<
 
   useCleanup(client.cache.subscribe(() => tick((v) => v + 1)));
 
-  const queries = useMemo(
+  const observers = useMemo(
     () => {
       return options.queries.map((opts) => {
         const suspenseOpts = ensureSuspenseTimers(opts as any);
         const query = client.cache.build(client, suspenseOpts);
-        useCleanup(query.addInstance());
-        return query;
+        useCleanup((query as any).addInstance());
+        const obs = new QueryObserver(query, suspenseOpts);
+        useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+        useCleanup(() => obs.destroy());
+        return obs;
       });
     },
     { sync: true },
@@ -36,7 +40,8 @@ export function useSuspenseQueries<
 
   const queryDataMemos = useMemo(
     () => {
-      return queries().map((q: any) => {
+      return observers().map((obs: any) => {
+        const q = obs.query;
         const opts = q.resolvedOptions;
         return useMemo(() => {
           const rawData = q.state.data();
@@ -51,10 +56,11 @@ export function useSuspenseQueries<
   );
 
   const resource = useResource<TCombinedResult>(() => {
-    const currentQueries = queries();
+    const currentObservers = observers();
     const pending: Promise<void>[] = [];
 
-    for (const q of currentQueries) {
+    for (const obs of currentObservers) {
+      const q = (obs as any).query;
       if (q.state.data() !== undefined) continue;
       if (q.state.error() !== null) throw q.state.error();
 
@@ -63,12 +69,15 @@ export function useSuspenseQueries<
 
     const buildResults = () => {
       const dataMemos = queryDataMemos();
-      const results = currentQueries.map((q: any, i: number) => ({
-        ...q.state,
-        data: dataMemos[i],
-        refetch: q.refetch,
-        cancel: q.cancel,
-      }));
+      const results = currentObservers.map((obs: any, i: number) => {
+        const q = obs.query;
+        return {
+          ...q.state,
+          data: dataMemos[i],
+          refetch: q.refetch,
+          cancel: q.cancel,
+        };
+      });
 
       if (options.combine) {
         return options.combine(results as any) as TCombinedResult;
@@ -86,20 +95,24 @@ export function useSuspenseQueries<
   return useMemo(() => {
     tick();
 
-    const currentQueries = queries();
-    for (const q of currentQueries) {
+    const currentObservers = observers();
+    for (const obs of currentObservers) {
+      const q = (obs as any).query;
       if (q.state.status() === 'error') {
         throw q.state.error()!;
       }
     }
 
     const dataMemos = queryDataMemos();
-    const results = currentQueries.map((q: any, i: number) => ({
-      ...q.state,
-      data: dataMemos[i],
-      refetch: q.refetch,
-      cancel: q.cancel,
-    }));
+    const results = currentObservers.map((obs: any, i: number) => {
+      const q = obs.query;
+      return {
+        ...q.state,
+        data: dataMemos[i],
+        refetch: q.refetch,
+        cancel: q.cancel,
+      };
+    });
 
     const combined: TCombinedResult = options.combine
       ? (options.combine(results as any) as TCombinedResult)

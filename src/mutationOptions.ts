@@ -1,4 +1,4 @@
-import type { MutationKey } from './types.ts';
+import type { MutationKey, MutationOptions as MO } from './types.ts';
 
 export function mutationOptions<
   TData = unknown,
@@ -8,11 +8,8 @@ export function mutationOptions<
 >(
   options: {
     mutationKey: MutationKey;
-  } & Omit<
-    import('./types.ts').MutationOptions<TData, TError, TVariables, TContext>,
-    'mutationKey'
-  >,
-): import('./types.ts').MutationOptions<TData, TError, TVariables, TContext>;
+  } & Omit<MO<TData, TError, TVariables, TContext>, 'mutationKey'>,
+): MO<TData, TError, TVariables, TContext>;
 
 export function mutationOptions<
   TData = unknown,
@@ -20,11 +17,8 @@ export function mutationOptions<
   TVariables = void,
   TContext = unknown,
 >(
-  options: Omit<
-    import('./types.ts').MutationOptions<TData, TError, TVariables, TContext>,
-    'mutationKey'
-  >,
-): Omit<import('./types.ts').MutationOptions<TData, TError, TVariables, TContext>, 'mutationKey'>;
+  options: Omit<MO<TData, TError, TVariables, TContext>, 'mutationKey'>,
+): Omit<MO<TData, TError, TVariables, TContext>, 'mutationKey'>;
 
 export function mutationOptions(options: unknown) {
   return options;

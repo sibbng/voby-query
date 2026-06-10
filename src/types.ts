@@ -196,6 +196,7 @@ export type MutationFilters = {
   predicate?: (mutation: import('./mutation.ts').Mutation<any, any, any, any>) => boolean;
 };
 
+// Full user-facing options — includes both query-level and observer-level fields
 export type QueryOptions<
   TQueryFnData = unknown,
   TError = unknown,
@@ -248,6 +249,63 @@ export type QueryOptions<
   queryKeyHashFn?: (queryKey: QueryKey) => string;
 };
 
+// Observer-level fields only — per hook call
+export type ObserverOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = {
+  enabled?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['enabled'];
+  staleTime?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['staleTime'];
+  refetchInterval?:
+    | QueryOptions<TQueryFnData, TError, TData, TQueryKey>['refetchInterval']
+    | false
+    | ((
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => number | false);
+  refetchIntervalInBackground?: QueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey
+  >['refetchIntervalInBackground'];
+  refetchOnWindowFocus?:
+    | QueryOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnWindowFocus']
+    | ((
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean | 'always');
+  refetchOnReconnect?:
+    | QueryOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnReconnect']
+    | 'always'
+    | ((
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean | 'always');
+  refetchOnMount?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnMount'];
+  retryOnMount?:
+    | QueryOptions<TQueryFnData, TError, TData, TQueryKey>['retryOnMount']
+    | ((query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>) => boolean);
+  throwOnError?:
+    | QueryOptions<TQueryFnData, TError, TData, TQueryKey>['throwOnError']
+    | ((
+        error: TError,
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean);
+  select?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  placeholderData?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
+  notifyOnChangeProps?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps'];
+  subscribed?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['subscribed'];
+  suspense?: boolean;
+};
+
+// Combined — what users pass to useQuery (same as QueryOptions)
+export type UseQueryOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
+
 export type ResolvedQueryOptions<
   TQueryFnData = unknown,
   TError = unknown,
@@ -256,6 +314,42 @@ export type ResolvedQueryOptions<
   queryKey: unknown[];
   enabled: boolean;
   queryClient: QueryClient;
+};
+
+export type ResolvedObserverOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = {
+  enabled: boolean;
+  staleTime: NonNullable<ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['staleTime']>;
+  refetchInterval: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchInterval'];
+  refetchIntervalInBackground: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchIntervalInBackground']
+  >;
+  refetchOnWindowFocus: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnWindowFocus']
+  >;
+  refetchOnReconnect: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnReconnect']
+  >;
+  refetchOnMount: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnMount']
+  >;
+  retryOnMount: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['retryOnMount']
+  >;
+  throwOnError: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['throwOnError']
+  >;
+  select: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  placeholderData: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
+  notifyOnChangeProps: NonNullable<
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps']
+  >;
+  subscribed: NonNullable<ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['subscribed']>;
+  suspense: NonNullable<ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['suspense']>;
 };
 
 export type InfiniteQueryOptions<

@@ -1,6 +1,8 @@
-import { $, useMemo, untrack } from 'voby';
-import { useBaseQuery } from './useBaseQuery.ts';
-import type { QueryKey, QueryOptions, UseQueryResult } from './types.ts';
+import { $, useCleanup, useMemo, untrack } from 'voby';
+import { useQueryClient } from './queryClient.ts';
+import { QueryObserver } from './queryObserver.ts';
+import type { QueryClient as QC, QueryKey, QueryOptions, UseQueryResult } from './types.ts';
+import { CancelledError } from './query.ts';
 
 export { CancelledError } from './query.ts';
 export type {
@@ -25,28 +27,34 @@ export function useQuery<
   TQueryKey extends QueryKey = QueryKey,
 >(
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  queryClient?: import('./types.ts').QueryClient,
+  queryClient?: QC,
 ): UseQueryResult<Awaited<TData>, TError> {
+  const client = useQueryClient(queryClient ?? options.queryClient);
   const lastData = $<TQueryFnData | undefined>();
 
-  const query = useBaseQuery(queryClient ?? options.queryClient, (client) =>
-    client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options),
-  );
+  const observer = useMemo(() => {
+    const q = client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options);
+    useCleanup((q as any).addInstance());
+    const obs = new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, options);
+    useCleanup(obs.subscribe(() => {}));
+    useCleanup(() => obs.destroy());
+    return obs;
+  });
 
   return useMemo(() => {
-    const currentQuery = query();
-    const { state, resolvedOptions } = currentQuery;
+    const obs = observer();
+    const currentQuery = obs.query;
+    const state = currentQuery.state;
+    const obsOptions = currentQuery.resolvedOptions;
 
     // Snapshot the update counts at mount time so isFetchedAfterMount
     // reflects fetches that happened *after* this observer mounted.
-    // Using untrack() to avoid registering these reads as reactive deps
-    // on the outer memo — we only want to re-evaluate when the query changes.
     const mountedAtCounts = {
       dataUpdateCount: untrack(() => state.dataUpdateCount()),
       errorUpdateCount: untrack(() => state.errorUpdateCount()),
     };
 
-    const shouldThrow = state.isError() && resolvedOptions.throwOnError;
+    const shouldThrow = state.isError() && obsOptions.throwOnError;
 
     const result = {
       ...state,
@@ -59,20 +67,20 @@ export function useQuery<
         const data = state.data();
 
         if (state.isPending()) {
-          if (typeof resolvedOptions.placeholderData === 'function') {
+          if (typeof obsOptions.placeholderData === 'function') {
             const placeholderValue = (
-              resolvedOptions.placeholderData as (
+              obsOptions.placeholderData as (
                 prev: TQueryFnData | undefined,
               ) => TQueryFnData | undefined
             )(lastData());
             if (placeholderValue !== undefined) {
-              if (resolvedOptions.select) {
-                return resolvedOptions.select(placeholderValue as any) as Awaited<TData>;
+              if (obsOptions.select) {
+                return obsOptions.select(placeholderValue as any) as Awaited<TData>;
               }
               return placeholderValue as Awaited<TData>;
             }
-          } else if (resolvedOptions.placeholderData !== undefined) {
-            return resolvedOptions.placeholderData as Awaited<TData>;
+          } else if (obsOptions.placeholderData !== undefined) {
+            return obsOptions.placeholderData as Awaited<TData>;
           }
         }
 
@@ -80,8 +88,8 @@ export function useQuery<
           lastData(data as TQueryFnData);
         }
 
-        if (resolvedOptions.select && data !== undefined) {
-          return resolvedOptions.select(data as any) as Awaited<TData>;
+        if (obsOptions.select && data !== undefined) {
+          return obsOptions.select(data as any) as Awaited<TData>;
         }
 
         return data as Awaited<TData>;
