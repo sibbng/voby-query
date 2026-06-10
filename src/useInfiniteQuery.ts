@@ -102,7 +102,7 @@ export function useInfiniteQuery<
       }
     };
 
-    return {
+    return Object.freeze({
       ...state,
       data: useMemo(() => {
         const data = state.data();
@@ -160,6 +160,6 @@ export function useInfiniteQuery<
           () => state.data()! as Awaited<InfiniteData<TQueryFnData, TPageParam>>,
         );
       },
-    };
+    });
   }) as UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError>;
 }

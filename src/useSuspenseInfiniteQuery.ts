@@ -134,7 +134,7 @@ export function useSuspenseInfiniteQuery<
 
     const { isPlaceholderData: _isPlaceholderData, ...rest } = state;
 
-    return {
+    return Object.freeze({
       ...rest,
       data: useMemo(() => {
         const currentData = state.data();
@@ -159,7 +159,7 @@ export function useSuspenseInfiniteQuery<
         fetchPage('backward', fetchOptions),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
-    };
+    });
   }) as unknown as UseSuspenseInfiniteQueryResult<
     Awaited<InfiniteData<TQueryFnData, TPageParam>>,
     TError

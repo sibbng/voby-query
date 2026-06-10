@@ -97,6 +97,8 @@ export function useQuery<
       },
     };
 
+    Object.freeze(result);
+
     if (shouldThrow) {
       const error = state.error()!;
       return new Proxy(result, {

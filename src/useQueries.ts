@@ -67,12 +67,14 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
     tick();
 
     const dataMemos = queryDataMemos();
-    const results = queries().map((q: any, i: number) => ({
-      ...q.state,
-      data: dataMemos[i],
-      refetch: q.refetch,
-      cancel: q.cancel,
-    }));
+    const results = queries().map((q: any, i: number) =>
+      Object.freeze({
+        ...q.state,
+        data: dataMemos[i],
+        refetch: q.refetch,
+        cancel: q.cancel,
+      }),
+    );
 
     if (options.combine) {
       return options.combine(results as any) as TCombinedResult;
