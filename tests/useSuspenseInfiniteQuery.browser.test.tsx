@@ -58,7 +58,7 @@ describe('useSuspenseInfiniteQuery', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('page 1');
     expect(fetchCount).toBe(1);
@@ -90,7 +90,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('pages=1');
   });
@@ -177,7 +177,7 @@ describe('useSuspenseInfiniteQuery', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
     await vi.advanceTimersByTimeAsync(10);
 
     expect(document.body.textContent).toContain('Caught: fetch failed');
@@ -209,7 +209,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('status=success');
   });
@@ -417,7 +417,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('page 1');
   });
@@ -459,7 +459,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-inf-clamp'] })!;
     expect(internalQuery.resolvedOptions.staleTime).toBeGreaterThanOrEqual(1000);
@@ -502,7 +502,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient
       .getQueryCache()
@@ -545,7 +545,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient
       .getQueryCache()
@@ -590,7 +590,7 @@ describe('useSuspenseInfiniteQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(staleTimeFn).toHaveBeenCalled();
 

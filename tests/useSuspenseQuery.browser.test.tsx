@@ -48,7 +48,7 @@ describe('useSuspenseQuery', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('suspense data');
     expect(fetchCount).toBe(1);
@@ -86,7 +86,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('id=42 name=test');
   });
@@ -159,7 +159,7 @@ describe('useSuspenseQuery', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('Caught: fetch failed');
@@ -189,7 +189,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('status=success');
   });
@@ -225,12 +225,12 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toContain('data v1');
 
     const refetch = queryClient.refetchQueries({ queryKey: ['suspend-refetch'] });
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     await refetch;
 
     expect(document.body.textContent).toContain('data v2');
@@ -261,7 +261,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('Alice');
   });
@@ -293,7 +293,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('data');
   });
@@ -324,7 +324,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-clamp'] })!;
     expect(internalQuery.resolvedOptions.staleTime).toBeGreaterThanOrEqual(1000);
@@ -356,7 +356,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-not-stale'] })!;
     expect(internalQuery.state.isStale()).toBe(false);
@@ -386,7 +386,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const internalQuery = queryClient.getQueryCache().find({ queryKey: ['suspend-default-gc'] })!;
     expect(internalQuery.resolvedOptions.gcTime).toBe(5 * 60 * 1000);
@@ -418,7 +418,7 @@ describe('useSuspenseQuery', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(staleTimeFn).toHaveBeenCalled();
 

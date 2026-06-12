@@ -87,7 +87,7 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('Stale: false');
 
     // Wait for staleTime to pass
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(51);
     // Check state after staleTime: data is still there, but now stale
     expect(document.body.textContent).toContain('Data: stale data');
     expect(document.body.textContent).toContain('Stale: true');
@@ -175,7 +175,7 @@ describe('useQuery.browser.test', () => {
     );
 
     expect(queryFnMock).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(21);
     expect(document.body.textContent).toBe('Data initially enabled');
 
     enabled(false); // Disable the query
@@ -186,7 +186,7 @@ describe('useQuery.browser.test', () => {
     const p = queryClient.invalidateQueries({ queryKey: ['enabled-test-2'] });
     await vi.advanceTimersByTimeAsync(1);
     await p;
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(queryFnMock).not.toHaveBeenCalled();
     expect(document.body.textContent).toBe('Data initially enabled');
@@ -225,10 +225,10 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('Data: Initial data value');
     expect(queryFnMock).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const p = queryClient.invalidateQueries({ queryKey: ['initial-data-test'] });
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(21);
     await p;
     await vi.advanceTimersByTimeAsync(1);
 
@@ -270,7 +270,7 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('Data: Placeholder value');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(51);
     expect(document.body.textContent).toContain('Actual fetched data');
     expect(document.body.textContent).toContain('Status: success');
     expect(document.body.textContent).toContain('Data: Actual fetched data');
@@ -304,7 +304,7 @@ describe('useQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(21);
     expect(document.body.textContent).toBe('Data: Original Name');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
@@ -347,7 +347,7 @@ describe('useQuery.browser.test', () => {
 
     render(<App />, document.body);
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toBe('GC Test Data');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData(queryKey)).toBe('GC Test Data');
@@ -355,7 +355,7 @@ describe('useQuery.browser.test', () => {
     showComponent(false);
     await vi.advanceTimersByTimeAsync(1);
 
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(51);
 
     expect(queryClient.getQueryData(queryKey)).toBeUndefined();
   });
@@ -384,11 +384,11 @@ describe('useQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Data fetched at');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(21);
 
     const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
     Object.defineProperty(document, 'visibilityState', {
@@ -401,7 +401,7 @@ describe('useQuery.browser.test', () => {
       Object.defineProperty(document, 'visibilityState', originalVisibility);
     }
 
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(51);
 
     expect(queryFnMock).toHaveBeenCalledTimes(2);
   });
@@ -430,17 +430,17 @@ describe('useQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Data fetched at');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(21);
 
     window.dispatchEvent(new Event('blur'));
     await vi.advanceTimersByTimeAsync(1);
     window.dispatchEvent(new Event('focus'));
     await vi.advanceTimersByTimeAsync(1);
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(51);
 
     expect(queryFnMock).toHaveBeenCalledTimes(1);
   });
@@ -569,11 +569,11 @@ describe('useQuery.browser.test', () => {
 
     render(<App />, document.body);
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Interval data');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(351);
     expect(queryFnMock.mock.calls.length).toBeGreaterThanOrEqual(4);
 
     showComponent(false);
@@ -610,7 +610,7 @@ describe('useQuery.browser.test', () => {
 
     render(<App />, document.body);
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Interval unmount data');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 
@@ -618,7 +618,7 @@ describe('useQuery.browser.test', () => {
     await vi.advanceTimersByTimeAsync(1);
     queryFnMock.mockClear();
 
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(51);
 
     expect(queryFnMock).not.toHaveBeenCalled();
   });
@@ -662,13 +662,13 @@ describe('useQuery.browser.test', () => {
     render(<App />, document.body);
 
     expect(document.body.textContent).toContain('Loading...');
-    await vi.advanceTimersByTimeAsync(120);
+    await vi.advanceTimersByTimeAsync(101);
     expect(document.body.textContent).toBe('cached data');
     expect(fetchCount).toBe(1);
 
     show(false);
     await vi.advanceTimersByTimeAsync(1);
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(51);
     show(true);
     await vi.advanceTimersByTimeAsync(1);
     expect(document.body.textContent).toBe('cached data');
@@ -676,14 +676,14 @@ describe('useQuery.browser.test', () => {
 
     show(false);
     await vi.advanceTimersByTimeAsync(1);
-    await vi.advanceTimersByTimeAsync(1200);
+    await vi.advanceTimersByTimeAsync(1001);
     const cacheData = queryClient.getQueryData(queryKey);
     expect(cacheData).toBe(undefined);
 
     show(true);
     await vi.advanceTimersByTimeAsync(1);
     expect(document.body.textContent).toBe('Loading...');
-    await vi.advanceTimersByTimeAsync(120);
+    await vi.advanceTimersByTimeAsync(101);
     expect(document.body.textContent).toBe('cached data');
     expect(fetchCount).toBe(2);
   });
@@ -731,7 +731,7 @@ describe('useQuery.browser.test', () => {
 
     expect(document.body.textContent).toContain('Loading...');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain(expectedData);
 
     expect(fetchCount).toBe(1);
@@ -742,7 +742,7 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain(expectedData);
 
     const p = queryClient.refetchQueries({ queryKey: [sharedQueryKey] });
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     await p;
     await vi.advanceTimersByTimeAsync(1);
 
@@ -1007,7 +1007,7 @@ describe('useQuery.browser.test', () => {
 
     expect(document.body.textContent).toContain('Data: none');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Data: 0');
     expect(document.body.textContent).toContain('isPlaceholderData: false');
 
@@ -1017,7 +1017,7 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('Data: 0');
     expect(document.body.textContent).toContain('isPlaceholderData: true');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
     expect(document.body.textContent).toContain('Data: 1');
     expect(document.body.textContent).toContain('isPlaceholderData: false');
   });

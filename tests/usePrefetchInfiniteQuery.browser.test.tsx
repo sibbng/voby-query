@@ -42,7 +42,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const data = queryClient.getQueryData(['prefetch-inf']);
     expect(data).toEqual({
@@ -86,7 +86,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const data = queryClient.getQueryData(['prefetch-inf-no-refetch']);
     expect(data).toEqual({
@@ -149,7 +149,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('page 1');
   });

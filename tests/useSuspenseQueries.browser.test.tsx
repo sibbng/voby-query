@@ -67,7 +67,7 @@ describe('useSuspenseQueries', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('data-a | data-b');
     expect(fetchCountA).toBe(1);
@@ -170,7 +170,7 @@ describe('useSuspenseQueries', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
     await vi.advanceTimersByTimeAsync(10);
 
     expect(document.body.textContent).toContain('Caught: fetch failed b');
@@ -222,7 +222,7 @@ describe('useSuspenseQueries', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('cached | fresh');
   });
@@ -267,7 +267,7 @@ describe('useSuspenseQueries', () => {
 
     expect(document.body.textContent).toBe('Loading...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('Total: 30');
   });

@@ -265,7 +265,7 @@ describe('useQueries.browser.test', () => {
     // Placeholder data shown immediately
     expect(document.body.textContent).toBe('placeholder-a | placeholder-b');
 
-    await vi.advanceTimersByTimeAsync(40);
+    await vi.advanceTimersByTimeAsync(31);
     expect(document.body.textContent).toBe('actual-a | actual-b');
   });
 

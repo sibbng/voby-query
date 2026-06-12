@@ -37,7 +37,7 @@ describe('usePrefetchQuery.browser.test', () => {
 
     expect(document.body.textContent).toBe('Prefetch done');
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const data = queryClient.getQueryData<string>(['prefetch-test-1']);
     expect(data).toBe('prefetched');
@@ -73,7 +73,7 @@ describe('usePrefetchQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     const data = queryClient.getQueryData<string>(['prefetch-no-refetch']);
     expect(data).toBe('existing');
@@ -122,7 +122,7 @@ describe('usePrefetchQuery.browser.test', () => {
 
     expect(document.body.textContent).toBe('Loading child...');
 
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(document.body.textContent).toBe('prefetched data');
   });
@@ -153,13 +153,13 @@ describe('usePrefetchQuery.browser.test', () => {
       document.body,
     );
 
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(queryClient.getQueryData(['reactive-prefetch', 1])).toBe('data-1');
     expect(fetchLog).toEqual([1]);
 
     id(2);
-    await vi.advanceTimersByTimeAsync(20);
+    await vi.advanceTimersByTimeAsync(11);
 
     expect(queryClient.getQueryData(['reactive-prefetch', 2])).toBe('data-2');
     expect(fetchLog).toEqual([1, 2]);

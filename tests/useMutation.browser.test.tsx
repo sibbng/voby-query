@@ -44,9 +44,9 @@ describe('useMutation', () => {
 
     expect(document.body.textContent).toBe('Idle');
     const promise = mutationResult().mutateAsync('test');
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(1);
     expect(document.body.textContent).toBe('Pending');
-    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(51);
     expect(document.body.textContent).toBe('Processed: test');
     expect(mutationResult().isSuccess()).toBe(true);
     expect(mutationResult().data()).toBe('Processed: test');
@@ -84,9 +84,9 @@ describe('useMutation', () => {
     const promise = mutationResult()
       .mutateAsync('fail')
       .catch(() => {});
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(1);
     expect(document.body.textContent).toBe('Pending');
-    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(51);
     expect(document.body.textContent).toBe('fail');
     expect(mutationResult().isError()).toBe(true);
     expect(mutationResult().error()?.message).toBe('fail');
@@ -121,7 +121,7 @@ describe('useMutation', () => {
 
     expect(document.body.textContent).toBe('Idle');
     const prom1 = mutationResult().mutateAsync('reset');
-    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(51);
     await prom1;
     expect(document.body.textContent).toBe('Processed: reset');
     mutationResult().reset();
@@ -154,7 +154,7 @@ describe('useMutation', () => {
     );
 
     const prom = mutationResult().mutateAsync('test-vars');
-    await vi.advanceTimersByTimeAsync(15);
+    await vi.advanceTimersByTimeAsync(11);
     await prom;
 
     expect(onSuccessMock).toHaveBeenCalledWith(
@@ -194,7 +194,7 @@ describe('useMutation', () => {
     const prom = mutationResult()
       .mutateAsync('error-vars')
       .catch(() => {});
-    await vi.advanceTimersByTimeAsync(15);
+    await vi.advanceTimersByTimeAsync(11);
     await prom;
 
     expect(onErrorMock).toHaveBeenCalledWith(
@@ -230,7 +230,7 @@ describe('useMutation', () => {
     );
 
     const promSS = mutationResult().mutateAsync('settled-success-vars');
-    await vi.advanceTimersByTimeAsync(15);
+    await vi.advanceTimersByTimeAsync(11);
     await promSS;
 
     expect(onSettledMock).toHaveBeenCalledWith(
@@ -270,7 +270,7 @@ describe('useMutation', () => {
     const promSE = mutationResult()
       .mutateAsync('settled-error-vars')
       .catch(() => {});
-    await vi.advanceTimersByTimeAsync(15);
+    await vi.advanceTimersByTimeAsync(11);
     await promSE;
 
     expect(onSettledMock).toHaveBeenCalledWith(
@@ -402,7 +402,7 @@ describe('useMutation', () => {
       document.body,
     );
     const promS = mutationSuccessResult().mutateAsync('vars-for-success');
-    await vi.advanceTimersByTimeAsync(20); // onMutate: 5ms + mutationFn: 10ms + buffer
+    await vi.advanceTimersByTimeAsync(16); // onMutate: 5ms + mutationFn: 10ms + buffer
     await promS;
 
     expect(onMutateMock).toHaveBeenCalledWith('vars-for-success');
@@ -434,7 +434,7 @@ describe('useMutation', () => {
     const promE = mutationErrorResult()
       .mutateAsync('vars-for-error')
       .catch(() => {});
-    await vi.advanceTimersByTimeAsync(20); // onMutate: 5ms + mutationFn: 10ms + buffer
+    await vi.advanceTimersByTimeAsync(16); // onMutate: 5ms + mutationFn: 10ms + buffer
     await promE;
 
     expect(onMutateMock).toHaveBeenCalledWith('vars-for-error');
@@ -494,7 +494,7 @@ describe('useMutation', () => {
     const promise2 = mutationResult().mutateAsync('call2');
     expect(mutationResult().status()).toBe('pending');
 
-    await vi.advanceTimersByTimeAsync(55); // Resolve both setTimeout(50) calls
+    await vi.advanceTimersByTimeAsync(51); // Resolve both setTimeout(50) calls
     await promise1;
     await promise2;
 
@@ -533,7 +533,7 @@ describe('useMutation', () => {
     mutationFnExecutionLog.length = 0; // Clear log
     const promise3 = mutationResult().mutateAsync('call3');
     expect(mutationResult().status()).toBe('pending');
-    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(51);
     await promise3;
 
     expect(mutationResult().status()).toBe('success');
@@ -685,11 +685,11 @@ describe('useMutation', () => {
 
     // Start a slow mutation — pending count should jump to 1
     const promise = mutationResult().mutateAsync('hello');
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(1);
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1');
 
     // After mutation settles, pending count drops back to 0
-    await vi.advanceTimersByTimeAsync(105);
+    await vi.advanceTimersByTimeAsync(101);
     await promise;
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
   });
@@ -731,7 +731,7 @@ describe('useMutation', () => {
 
     // Trigger mutation from inside the reactive context via a button click
     document.querySelector<HTMLButtonElement>('[data-testid="btn"]')!.click();
-    await vi.advanceTimersByTimeAsync(35);
+    await vi.advanceTimersByTimeAsync(31);
     expect(document.body.textContent).toContain('ok: after-clear');
   });
 
@@ -810,7 +810,7 @@ describe('useMutation', () => {
     expect(document.body.textContent).toContain('MutationStatus: pending');
 
     // Let mutation finish
-    await vi.advanceTimersByTimeAsync(35);
+    await vi.advanceTimersByTimeAsync(31);
     await p1;
     expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3');
     expect(document.body.textContent).toContain('MutationStatus: success');
@@ -825,7 +825,7 @@ describe('useMutation', () => {
     expect(document.body.textContent).toContain('Todos: Todo 1, Todo 2, Todo 3, fail-todo');
 
     // Wait for mutation to reject, triggering rollback
-    await vi.advanceTimersByTimeAsync(35);
+    await vi.advanceTimersByTimeAsync(31);
     await p2;
 
     // Should have successfully rolled back to state without fail-todo!
@@ -870,10 +870,10 @@ describe('useMutation', () => {
 
     // Start a new mutation after clear — useMutation re-registers, useMutationState reacts
     const promise = mutationResult().mutateAsync('post-clear');
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(1);
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('1');
 
-    await vi.advanceTimersByTimeAsync(105);
+    await vi.advanceTimersByTimeAsync(101);
     await promise;
     expect(document.querySelector('[data-testid="count"]')?.textContent).toBe('0');
   });
