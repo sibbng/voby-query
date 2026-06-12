@@ -1,157 +1,167 @@
-import { expect, test } from 'vite-plus/test';
-import { flush, render, sleep } from './utils';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
+import { render, sleep } from './utils';
 import { $, Suspense } from 'voby';
 import { createQueryClient, usePrefetchQuery, useSuspenseQuery } from '../src';
 import { QueryClientProvider } from '../src/context';
 
-test('usePrefetchQuery populates the cache', async () => {
-  const queryClient = createQueryClient();
-
-  function PrefetchComponent() {
-    usePrefetchQuery({
-      queryKey: ['prefetch-test-1'],
-      queryFn: async () => {
-        await sleep(5);
-        return 'prefetched';
-      },
-    });
-
-    return <p>Prefetch done</p>;
-  }
-
-  render(
-    <QueryClientProvider value={queryClient}>
-      <PrefetchComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
-
-  expect(document.body.textContent).toBe('Prefetch done');
-
-  await sleep(20);
-
-  const data = queryClient.getQueryData<string>(['prefetch-test-1']);
-  expect(data).toBe('prefetched');
-});
-
-test('usePrefetchQuery does not re-fetch when data is already cached', async () => {
-  const queryClient = createQueryClient();
-
-  await queryClient.fetchQuery({
-    queryKey: ['prefetch-no-refetch'],
-    queryFn: async () => 'existing',
+describe('usePrefetchQuery.browser.test', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  let fetchCount = 0;
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  function PrefetchComponent() {
-    usePrefetchQuery({
-      queryKey: ['prefetch-no-refetch'],
-      queryFn: async () => {
-        fetchCount++;
-        await sleep(5);
-        return 'new';
-      },
-    });
+  test('usePrefetchQuery populates the cache', async () => {
+    const queryClient = createQueryClient();
 
-    return <p>Done</p>;
-  }
+    function PrefetchComponent() {
+      usePrefetchQuery({
+        queryKey: ['prefetch-test-1'],
+        queryFn: async () => {
+          await sleep(5);
+          return 'prefetched';
+        },
+      });
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <PrefetchComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
+      return <p>Prefetch done</p>;
+    }
 
-  await sleep(20);
-
-  const data = queryClient.getQueryData<string>(['prefetch-no-refetch']);
-  expect(data).toBe('existing');
-  expect(fetchCount).toBe(0);
-});
-
-test('usePrefetchQuery before Suspense provides cached data on retry', async () => {
-  const queryClient = createQueryClient();
-
-  function PrefetchLayer() {
-    usePrefetchQuery({
-      queryKey: ['prefetch-suspense'],
-      queryFn: async () => {
-        await sleep(10);
-        return 'prefetched data';
-      },
-    });
-
-    return (
-      <Suspense fallback={<p>Loading child...</p>}>
-        <Child />
-      </Suspense>
+    render(
+      <QueryClientProvider value={queryClient}>
+        <PrefetchComponent />
+      </QueryClientProvider>,
+      document.body,
     );
-  }
 
-  function Child() {
-    const query = useSuspenseQuery({
-      queryKey: ['prefetch-suspense'],
-      queryFn: async () => {
-        await sleep(10);
-        return 'should not fetch';
-      },
+    expect(document.body.textContent).toBe('Prefetch done');
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    const data = queryClient.getQueryData<string>(['prefetch-test-1']);
+    expect(data).toBe('prefetched');
+  });
+
+  test('usePrefetchQuery does not re-fetch when data is already cached', async () => {
+    const queryClient = createQueryClient();
+
+    await queryClient.fetchQuery({
+      queryKey: ['prefetch-no-refetch'],
+      queryFn: async () => 'existing',
     });
 
-    return <p>{() => query().data()}</p>;
-  }
+    let fetchCount = 0;
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <Suspense fallback={<p>Outer loading</p>}>
-        <PrefetchLayer />
-      </Suspense>
-    </QueryClientProvider>,
-    document.body,
-  );
+    function PrefetchComponent() {
+      usePrefetchQuery({
+        queryKey: ['prefetch-no-refetch'],
+        queryFn: async () => {
+          fetchCount++;
+          await sleep(5);
+          return 'new';
+        },
+      });
 
-  expect(document.body.textContent).toBe('Loading child...');
+      return <p>Done</p>;
+    }
 
-  await sleep(30);
+    render(
+      <QueryClientProvider value={queryClient}>
+        <PrefetchComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
 
-  expect(document.body.textContent).toBe('prefetched data');
-});
+    await vi.advanceTimersByTimeAsync(20);
 
-test('usePrefetchQuery re-fetches reactively when queryKey changes', async () => {
-  const queryClient = createQueryClient();
-  const id = $(1);
-  const fetchLog: number[] = [];
+    const data = queryClient.getQueryData<string>(['prefetch-no-refetch']);
+    expect(data).toBe('existing');
+    expect(fetchCount).toBe(0);
+  });
 
-  function PrefetchComponent() {
-    usePrefetchQuery({
-      queryKey: ['reactive-prefetch', id],
-      queryFn: async () => {
-        const currentId = id();
-        fetchLog.push(currentId);
-        await sleep(5);
-        return `data-${currentId}`;
-      },
-    });
+  test('usePrefetchQuery before Suspense provides cached data on retry', async () => {
+    const queryClient = createQueryClient();
 
-    return <p>{() => `id=${id()}`}</p>;
-  }
+    function PrefetchLayer() {
+      usePrefetchQuery({
+        queryKey: ['prefetch-suspense'],
+        queryFn: async () => {
+          await sleep(10);
+          return 'prefetched data';
+        },
+      });
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <PrefetchComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
+      return (
+        <Suspense fallback={<p>Loading child...</p>}>
+          <Child />
+        </Suspense>
+      );
+    }
 
-  await sleep(20);
+    function Child() {
+      const query = useSuspenseQuery({
+        queryKey: ['prefetch-suspense'],
+        queryFn: async () => {
+          await sleep(10);
+          return 'should not fetch';
+        },
+      });
 
-  expect(queryClient.getQueryData(['reactive-prefetch', 1])).toBe('data-1');
-  expect(fetchLog).toEqual([1]);
+      return <p>{() => query().data()}</p>;
+    }
 
-  id(2);
-  await sleep(20);
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Suspense fallback={<p>Outer loading</p>}>
+          <PrefetchLayer />
+        </Suspense>
+      </QueryClientProvider>,
+      document.body,
+    );
 
-  expect(queryClient.getQueryData(['reactive-prefetch', 2])).toBe('data-2');
-  expect(fetchLog).toEqual([1, 2]);
+    expect(document.body.textContent).toBe('Loading child...');
+
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(document.body.textContent).toBe('prefetched data');
+  });
+
+  test('usePrefetchQuery re-fetches reactively when queryKey changes', async () => {
+    const queryClient = createQueryClient();
+    const id = $(1);
+    const fetchLog: number[] = [];
+
+    function PrefetchComponent() {
+      usePrefetchQuery({
+        queryKey: ['reactive-prefetch', id],
+        queryFn: async () => {
+          const currentId = id();
+          fetchLog.push(currentId);
+          await sleep(5);
+          return `data-${currentId}`;
+        },
+      });
+
+      return <p>{() => `id=${id()}`}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <PrefetchComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(queryClient.getQueryData(['reactive-prefetch', 1])).toBe('data-1');
+    expect(fetchLog).toEqual([1]);
+
+    id(2);
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(queryClient.getQueryData(['reactive-prefetch', 2])).toBe('data-2');
+    expect(fetchLog).toEqual([1, 2]);
+  });
 });

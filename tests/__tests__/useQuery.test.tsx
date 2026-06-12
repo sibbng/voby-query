@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { createQueryClient, keepPreviousData, onlineManager, focusManager } from '../../src';
 import { useQuery, CancelledError } from '../../src/useQuery';
 import { QueryClientProvider } from '../../src/context';
 import { $, ErrorBoundary, If, For, useEffect } from 'voby';
-import { flush, render, sleep } from '../utils';
+import { render, sleep } from '../utils';
 
 let keyCounter = 0;
 const queryKey = () => [`test-key-${++keyCounter}`];
@@ -40,6 +40,13 @@ function snapshot(q: any) {
 
 // #region Basic states
 describe('useQuery', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test('should allow to set default data value', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
@@ -61,7 +68,7 @@ describe('useQuery', () => {
 
     expect(document.body.textContent).toBe('default');
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toBe('test');
   });
 
@@ -91,7 +98,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
 
     expect(states.length).toEqual(2);
 
@@ -179,7 +186,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(100);
+    await vi.advanceTimersByTimeAsync(100);
     expect(document.body.textContent).toContain('Status: error');
 
     expect(states[0]).toMatchObject({
@@ -249,7 +256,7 @@ describe('useQuery', () => {
     expect(document.body.textContent).toContain('isFetched: true');
     expect(document.body.textContent).toContain('isFetchedAfterMount: false');
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(document.body.textContent).toContain('data: new data');
     expect(document.body.textContent).toContain('isFetched: true');
@@ -280,7 +287,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(states.length).toBe(2);
     expect(states[0]).toMatchObject({ data: undefined });
     expect(states[1]).toMatchObject({ data: 'data' });
@@ -312,7 +319,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(states.length).toBe(2);
     expect(states[0]).toMatchObject({ data: undefined });
     expect(states[1]).toMatchObject({ data: 'test' });
@@ -345,7 +352,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(states.length).toBe(1);
     expect(states[0]).toMatchObject({ data: 'prefetched' });
   });
@@ -379,7 +386,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(20);
+    await vi.advanceTimersByTimeAsync(20);
     expect(document.body.textContent).toBe('test');
 
     expect(states.length).toBe(2);
@@ -415,7 +422,7 @@ describe('useQuery', () => {
 
     expect(document.body.textContent).toBe('placeholder');
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toBe('data');
   });
 
@@ -453,11 +460,11 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: 0');
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: 1');
 
     expect(states[0]).toMatchObject({
@@ -513,7 +520,7 @@ describe('useQuery', () => {
 
     expect(document.body.textContent).toBe('initial');
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toBe('data');
   });
 
@@ -554,11 +561,11 @@ describe('useQuery', () => {
 
     expect(document.body.textContent).toContain('data: initial');
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: data1');
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: data2');
 
     expect(states[0]).toMatchObject({
@@ -630,7 +637,7 @@ describe('useQuery', () => {
     });
 
     document.querySelector('button')?.click();
-    await sleep(100);
+    await vi.advanceTimersByTimeAsync(100);
     expect(document.body.textContent).toContain('data: data');
     states.push(snapshot(currentQuery()));
     expect(states.length).toBe(2);
@@ -673,11 +680,11 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('data: 0');
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('count: 1');
     expect(document.body.textContent).toContain('data: undefined');
 
@@ -717,10 +724,10 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
 
     queryClient.refetchQueries({ queryKey: key });
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(states.length).toBe(1);
     expect(states[0]).toMatchObject({
@@ -759,7 +766,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data1');
     expect(fetchCount).toBe(1);
   });
@@ -798,18 +805,18 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: 1');
     expect(document.body.textContent).toContain('isStale: false');
     expect(document.body.textContent).toContain('isFetching: false');
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: 1');
     expect(document.body.textContent).toContain('isStale: true');
     expect(document.body.textContent).toContain('isFetching: true');
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: 2');
     expect(document.body.textContent).toContain('isStale: false');
     expect(document.body.textContent).toContain('isFetching: false');
@@ -839,7 +846,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data');
   });
 
@@ -876,7 +883,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(50);
+    await vi.advanceTimersByTimeAsync(50);
     expect(fetchCount).toBe(3);
     expect(document.body.textContent).toContain('error');
   });
@@ -917,12 +924,12 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: prefetched');
     expect(fetchCount).toBe(0);
 
     onlineManager.setOnline(true);
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: data1');
     expect(fetchCount).toBe(1);
 
@@ -959,12 +966,12 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: prefetched');
     expect(fetchCount).toBe(0);
 
     focusManager.setFocused(true);
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: data1');
     expect(fetchCount).toBe(1);
   });
@@ -998,10 +1005,10 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
 
     focusManager.setFocused(true);
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(fetchCount).toBe(0);
   });
 
@@ -1035,10 +1042,10 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
 
     focusManager.setFocused(true);
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(fetchCount).toBe(0);
   });
 
@@ -1066,7 +1073,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(120);
+    await vi.advanceTimersByTimeAsync(120);
     expect(fetchCount).toBeGreaterThanOrEqual(2);
   });
 
@@ -1105,12 +1112,12 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: undefined');
     expect(document.body.textContent).toContain('isPaused: true');
 
     onlineManager.setOnline(true);
-    await sleep(15);
+    await vi.advanceTimersByTimeAsync(15);
     expect(document.body.textContent).toContain('data: data');
     expect(document.body.textContent).toContain('isPaused: false');
 
@@ -1148,7 +1155,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('data: data');
     expect(document.body.textContent).toContain('isPaused: false');
     expect(fetchCount).toBe(1);
@@ -1191,7 +1198,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('Caught: test error');
   });
 
@@ -1240,7 +1247,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('Caught: cached error');
   });
 
@@ -1273,11 +1280,11 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('status: pending');
 
     queryClient.removeQueries({ queryKey: key });
-    await sleep(110);
+    await vi.advanceTimersByTimeAsync(110);
     expect(document.body.textContent).toContain('status: error');
   });
 
@@ -1321,7 +1328,7 @@ describe('useQuery', () => {
     );
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(fetchCount).toBe(1);
   });
 
@@ -1364,7 +1371,7 @@ describe('useQuery', () => {
     );
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(30);
+    await vi.advanceTimersByTimeAsync(30);
     expect(fetchCount).toBe(1);
   });
 
@@ -1407,7 +1414,7 @@ describe('useQuery', () => {
     );
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(30);
+    await vi.advanceTimersByTimeAsync(30);
     expect(fetchCount).toBe(2);
   });
 
@@ -1449,7 +1456,7 @@ describe('useQuery', () => {
     );
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await sleep(30);
+    await vi.advanceTimersByTimeAsync(30);
     expect(fetchCount).toBe(1);
   });
 
@@ -1488,12 +1495,12 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: data for 1');
 
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flush();
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('data: data for 2');
   });
 
@@ -1531,8 +1538,8 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(document.body.textContent).toContain('q1: first');
     expect(document.body.textContent).toContain('q2: second:first');
@@ -1570,7 +1577,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toContain('item-1');
     expect(document.body.textContent).toContain('item-2');
     expect(document.body.textContent).toContain('item-3');
@@ -1600,7 +1607,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await sleep(10);
+    await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toBe('data');
   });
 
@@ -1618,7 +1625,7 @@ describe('useQuery', () => {
       const query = useQuery({
         queryKey: key,
         queryFn: async () => {
-          await flush();
+          await new Promise((r) => setTimeout(r, 0));
           return { id: 1, name: 'test' };
         },
       });
@@ -1632,7 +1639,7 @@ describe('useQuery', () => {
       document.body,
     );
 
-    await flush();
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.body.textContent).toBe('test');
   });
 });

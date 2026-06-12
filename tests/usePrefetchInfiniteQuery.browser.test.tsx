@@ -1,147 +1,156 @@
-import { waitFor } from '@testing-library/dom';
 import { Suspense } from 'voby';
-import { expect, test } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { QueryClientProvider } from '../src/context';
 import { createQueryClient, usePrefetchInfiniteQuery, useSuspenseInfiniteQuery } from '../src';
-import { flush, render, sleep } from './utils';
+import { render, sleep } from './utils';
 
 type Page = {
   value: string;
   next?: number;
 };
 
-test('usePrefetchInfiniteQuery populates the cache with first page', async () => {
-  const queryClient = createQueryClient();
+describe('usePrefetchInfiniteQuery.browser.test', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-  function PrefetchComponent() {
-    usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf'], number>({
-      queryKey: ['prefetch-inf'],
-      initialPageParam: 1,
-      queryFn: async ({ pageParam }) => {
-        await sleep(5);
-        return { value: `page ${pageParam}`, next: pageParam + 1 };
-      },
-      getNextPageParam: (lastPage) => lastPage.next,
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('usePrefetchInfiniteQuery populates the cache with first page', async () => {
+    const queryClient = createQueryClient();
+
+    function PrefetchComponent() {
+      usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf'], number>({
+        queryKey: ['prefetch-inf'],
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          await sleep(5);
+          return { value: `page ${pageParam}`, next: pageParam + 1 };
+        },
+        getNextPageParam: (lastPage) => lastPage.next,
+      });
+
+      return <p>Prefetch done</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <PrefetchComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    const data = queryClient.getQueryData(['prefetch-inf']);
+    expect(data).toEqual({
+      pages: [{ value: 'page 1', next: 2 }],
+      pageParams: [1],
+    });
+  });
+
+  test('usePrefetchInfiniteQuery does not re-fetch when already cached', async () => {
+    const queryClient = createQueryClient();
+
+    await queryClient.fetchQuery({
+      queryKey: ['prefetch-inf-no-refetch'],
+      queryFn: async () => ({
+        pages: [{ value: 'existing', next: undefined }],
+        pageParams: [1],
+      }),
     });
 
-    return <p>Prefetch done</p>;
-  }
+    let fetchCount = 0;
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <PrefetchComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
+    function PrefetchComponent() {
+      usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf-no-refetch'], number>({
+        queryKey: ['prefetch-inf-no-refetch'],
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          fetchCount++;
+          await sleep(5);
+          return { value: `page ${pageParam}`, next: pageParam + 1 };
+        },
+        getNextPageParam: (lastPage) => lastPage.next,
+      });
 
-  await sleep(20);
+      return <p>Done</p>;
+    }
 
-  const data = queryClient.getQueryData(['prefetch-inf']);
-  expect(data).toEqual({
-    pages: [{ value: 'page 1', next: 2 }],
-    pageParams: [1],
-  });
-});
+    render(
+      <QueryClientProvider value={queryClient}>
+        <PrefetchComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
 
-test('usePrefetchInfiniteQuery does not re-fetch when already cached', async () => {
-  const queryClient = createQueryClient();
+    await vi.advanceTimersByTimeAsync(20);
 
-  await queryClient.fetchQuery({
-    queryKey: ['prefetch-inf-no-refetch'],
-    queryFn: async () => ({
+    const data = queryClient.getQueryData(['prefetch-inf-no-refetch']);
+    expect(data).toEqual({
       pages: [{ value: 'existing', next: undefined }],
       pageParams: [1],
-    }),
+    });
+    expect(fetchCount).toBe(0);
   });
 
-  let fetchCount = 0;
+  test('usePrefetchInfiniteQuery before Suspense eliminates waterfall', async () => {
+    const queryClient = createQueryClient();
 
-  function PrefetchComponent() {
-    usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf-no-refetch'], number>({
-      queryKey: ['prefetch-inf-no-refetch'],
-      initialPageParam: 1,
-      queryFn: async ({ pageParam }) => {
-        fetchCount++;
-        await sleep(5);
-        return { value: `page ${pageParam}`, next: pageParam + 1 };
-      },
-      getNextPageParam: (lastPage) => lastPage.next,
-    });
+    function PrefetchLayer() {
+      usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf-suspense'], number>({
+        queryKey: ['prefetch-inf-suspense'],
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          await sleep(10);
+          return { value: `page ${pageParam}`, next: pageParam + 1 };
+        },
+        getNextPageParam: (lastPage) => lastPage.next,
+      });
 
-    return <p>Done</p>;
-  }
+      return (
+        <Suspense fallback={<p>Should not suspend</p>}>
+          <Child />
+        </Suspense>
+      );
+    }
 
-  render(
-    <QueryClientProvider value={queryClient}>
-      <PrefetchComponent />
-    </QueryClientProvider>,
-    document.body,
-  );
+    function Child() {
+      const query = useSuspenseInfiniteQuery<Page, Error, ['prefetch-inf-suspense'], number>({
+        queryKey: ['prefetch-inf-suspense'],
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          await sleep(10);
+          return { value: `page ${pageParam}`, next: pageParam + 1 };
+        },
+        getNextPageParam: (lastPage) => lastPage.next,
+      });
 
-  await sleep(20);
+      return (
+        <p>
+          {() =>
+            query()
+              .data()
+              ?.pages.map((p) => p.value)
+              .join(', ')
+          }
+        </p>
+      );
+    }
 
-  const data = queryClient.getQueryData(['prefetch-inf-no-refetch']);
-  expect(data).toEqual({
-    pages: [{ value: 'existing', next: undefined }],
-    pageParams: [1],
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Suspense fallback={<p>Outer loading</p>}>
+          <PrefetchLayer />
+        </Suspense>
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(document.body.textContent).toBe('page 1');
   });
-  expect(fetchCount).toBe(0);
-});
-
-test('usePrefetchInfiniteQuery before Suspense eliminates waterfall', async () => {
-  const queryClient = createQueryClient();
-
-  function PrefetchLayer() {
-    usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf-suspense'], number>({
-      queryKey: ['prefetch-inf-suspense'],
-      initialPageParam: 1,
-      queryFn: async ({ pageParam }) => {
-        await sleep(10);
-        return { value: `page ${pageParam}`, next: pageParam + 1 };
-      },
-      getNextPageParam: (lastPage) => lastPage.next,
-    });
-
-    return (
-      <Suspense fallback={<p>Should not suspend</p>}>
-        <Child />
-      </Suspense>
-    );
-  }
-
-  function Child() {
-    const query = useSuspenseInfiniteQuery<Page, Error, ['prefetch-inf-suspense'], number>({
-      queryKey: ['prefetch-inf-suspense'],
-      initialPageParam: 1,
-      queryFn: async ({ pageParam }) => {
-        await sleep(10);
-        return { value: `page ${pageParam}`, next: pageParam + 1 };
-      },
-      getNextPageParam: (lastPage) => lastPage.next,
-    });
-
-    return (
-      <p>
-        {() =>
-          query()
-            .data()
-            ?.pages.map((p) => p.value)
-            .join(', ')
-        }
-      </p>
-    );
-  }
-
-  render(
-    <QueryClientProvider value={queryClient}>
-      <Suspense fallback={<p>Outer loading</p>}>
-        <PrefetchLayer />
-      </Suspense>
-    </QueryClientProvider>,
-    document.body,
-  );
-
-  await sleep(30);
-
-  expect(document.body.textContent).toBe('page 1');
 });
