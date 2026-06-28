@@ -3,5 +3,25 @@ packages:
   - playground
 
 overrides:
-  vite: npm:@voidzero-dev/vite-plus-core@0.1.22
-  vitest: npm:@voidzero-dev/vite-plus-test@0.1.22
+  vite: 'catalog:'
+  vitest: 'catalog:'
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@latest
+  vitest: 4.1.9
+  vite-plus: latest
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: '*'
+    vitest: '*'
+minimumReleaseAgeExclude:
+  - '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-darwin-x64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-linux-arm64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-linux-arm@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-linux-x64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-win32-arm64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview-win32-x64@7.0.0-dev.20260627.2'
+  - '@typescript/native-preview@7.0.0-dev.20260627.2'
