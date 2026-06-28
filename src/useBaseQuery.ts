@@ -1,11 +1,11 @@
-import { useCleanup, useMemo } from 'voby';
+import { useCleanup, useMemo, type ObservableReadonly } from 'voby';
 import { useQueryClient } from './queryClient.ts';
 import type { QueryClient } from './types.ts';
 
 export function useBaseQuery<T>(
   queryClient: QueryClient | undefined,
   buildQuery: (client: QueryClient) => T,
-) {
+): ObservableReadonly<T> {
   const client = useQueryClient(queryClient);
 
   return useMemo(() => {

@@ -4,7 +4,10 @@ import { playwright } from 'vite-plus/test/browser/providers/playwright';
 export default defineConfig({
   pack: {
     entry: ['src/index.ts'],
-    dts: true,
+    dts: {
+      enabled: true,
+      tsgo: true,
+    },
     format: ['esm'],
   },
   test: {
