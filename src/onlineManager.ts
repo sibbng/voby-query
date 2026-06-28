@@ -29,7 +29,6 @@ export class OnlineManager extends Subscribable<() => void> {
 
   protected onSubscribe(): void {
     if (!this.#cleanup) {
-      this.setOnline(this.#online);
       this.#cleanup = this.#setup(this.setOnline.bind(this));
     }
   }

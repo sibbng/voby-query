@@ -95,6 +95,7 @@ export type Query<
   reset: () => void;
   scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
   isCancelled: boolean;
+  prevEnabled?: boolean;
   inactiveCleanup?: () => void;
   fetchMachine: MachineInstance<FetchState, FetchEvent>;
 };
@@ -282,6 +283,7 @@ export const createQuery = <
     retryDisposer: () => {},
     fetchPromise: undefined,
     revertState: undefined,
+    prevEnabled: undefined as boolean | undefined,
     fetchMachine: undefined as any,
     isStaleByTime: (staleTime) => {
       if (query.state.data() === undefined) return true;
@@ -298,7 +300,10 @@ export const createQuery = <
         const shouldSkipDueToNetworkMode = networkMode === 'online' && !isOnline;
 
         if (query.resolvedOptions.enabled) {
+          const wasDisabled = query.prevEnabled === false;
+          query.prevEnabled = true;
           const shouldRefetch = (() => {
+            if (wasDisabled) return true;
             const refetchOnMount = query.resolvedOptions.refetchOnMount;
             if (typeof refetchOnMount === 'function') {
               return refetchOnMount(query);
@@ -311,6 +316,8 @@ export const createQuery = <
           if (shouldRefetch && !shouldSkipDueToNetworkMode) {
             await query.refetch();
           }
+        } else {
+          query.prevEnabled = false;
         }
         if (query.state.fetchStatus() !== 'fetching') {
           const shouldBePaused = networkMode === 'online' ? !isOnline : false;
@@ -407,7 +414,7 @@ export const createQuery = <
       query.state.status('pending');
       query.state.fetchStatus('idle');
       query.state.isInvalidated(false);
-      query.state.isStale(false);
+      query.state.isStale(true);
     },
     scheduleDestroy: () => {
       if (query.resolvedOptions.gcTime === Infinity) return;
@@ -443,7 +450,9 @@ export const createQuery = <
     } = {}) => {
       const currentState = query.fetchMachine.getState();
 
-      if (currentState === 'fetching') return query.fetchPromise;
+      if (currentState === 'fetching') {
+        return query.fetchPromise;
+      }
       if (currentState === 'retrying') {
         query.fetchMachine.send('RETRY');
       } else if (force) {
@@ -751,7 +760,7 @@ export const createQuery = <
   });
 
   if (query.resolvedOptions.initialData !== undefined) {
-    scheduleQueryStale(query);
+    untrack(() => scheduleQueryStale(query));
   }
 
   return query;

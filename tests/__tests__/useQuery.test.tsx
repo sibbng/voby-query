@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/tes
 import { createQueryClient, keepPreviousData, onlineManager, focusManager } from '../../src';
 import { useQuery, CancelledError } from '../../src/useQuery';
 import { QueryClientProvider } from '../../src/context';
-import { $, ErrorBoundary, If, For, useEffect } from 'voby';
+import { $, ErrorBoundary, If, For, useEffect, tick } from 'voby';
 import { render, sleep } from '../utils';
 
 let keyCounter = 0;
@@ -426,7 +426,7 @@ describe('useQuery', () => {
     expect(document.body.textContent).toBe('data');
   });
 
-  test.fails('should keep the previous data when placeholderData is set', async () => {
+  test('should keep the previous data when placeholderData is set', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     const states: Array<any> = [];
@@ -438,11 +438,8 @@ describe('useQuery', () => {
         queryFn: () => sleep(10).then(() => count()),
         placeholderData: keepPreviousData,
       });
-      const q = query();
-      states.push(snapshot(q));
       useEffect(() => {
-        const q = query();
-        states.push(snapshot(q));
+        states.push(snapshot(query()));
       });
       return (
         <div>
@@ -486,6 +483,321 @@ describe('useQuery', () => {
       isPlaceholderData: true,
     });
     expect(states[3]).toMatchObject({
+      data: 1,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+  });
+
+  test('placeholder data should run through select', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => sleep(10).then(() => 1),
+        placeholderData: 23,
+        select: (data: any) => String(data * 2),
+      });
+      const q = query();
+      useEffect(() => {
+        states.push(snapshot(q));
+      });
+      return (
+        <div>
+          <span>Data: {() => q.data() ?? 'undefined'}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    // Before fetch completes: placeholder data '46' (23 * 2) through select
+    expect(document.body.textContent).toContain('Data: 46');
+
+    await vi.advanceTimersByTimeAsync(11);
+
+    // After fetch: real data '2' (1 * 2) through select
+    expect(document.body.textContent).toContain('Data: 2');
+
+    expect(states).toMatchObject([
+      {
+        isSuccess: true,
+        isPlaceholderData: true,
+        data: '46',
+      },
+      {
+        isSuccess: true,
+        isPlaceholderData: false,
+        data: '2',
+      },
+    ]);
+  });
+
+  test('should transition to error state when placeholderData is set', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    const count = $(0);
+
+    function Page() {
+      const query = useQuery<number, Error>({
+        queryKey: [key, count],
+        queryFn: async () => {
+          await sleep(10);
+          if (count() === 2) {
+            throw new Error('Error test');
+          }
+          return Promise.resolve(count());
+        },
+        retry: false,
+        placeholderData: keepPreviousData,
+      });
+      useEffect(() => {
+        states.push(snapshot(query()));
+      });
+      return (
+        <div>
+          <span>data: {() => query().data() ?? 'undefined'}</span>
+          <span>error: {() => query().error()?.message ?? ''}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    // Fetch count=0
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 0');
+
+    // Key change to count=1
+    count(1);
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 1');
+
+    // Key change to count=2 — will error
+    count(2);
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('error: Error test');
+
+    expect(states.length).toBe(6);
+
+    // Initial
+    expect(states[0]).toMatchObject({
+      data: undefined,
+      isFetching: true,
+      status: 'pending',
+      error: null,
+      isPlaceholderData: false,
+    });
+    // Fetched (count=0)
+    expect(states[1]).toMatchObject({
+      data: 0,
+      isFetching: false,
+      status: 'success',
+      error: null,
+      isPlaceholderData: false,
+    });
+    // Key change to count=1 (placeholder)
+    expect(states[2]).toMatchObject({
+      data: 0,
+      isFetching: true,
+      status: 'success',
+      error: null,
+      isPlaceholderData: true,
+    });
+    // Fetched (count=1)
+    expect(states[3]).toMatchObject({
+      data: 1,
+      isFetching: false,
+      status: 'success',
+      error: null,
+      isPlaceholderData: false,
+    });
+    // Key change to count=2 (placeholder)
+    expect(states[4]).toMatchObject({
+      data: 1,
+      isFetching: true,
+      status: 'success',
+      error: null,
+      isPlaceholderData: true,
+    });
+    // Error
+    expect(states[5]).toMatchObject({
+      data: undefined,
+      isFetching: false,
+      status: 'error',
+      isPlaceholderData: false,
+    });
+    expect(states[5]!.error).toHaveProperty('message', 'Error test');
+  });
+
+  test('placeholder data function result should run through select', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    let placeholderFunctionRunCount = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => sleep(10).then(() => 1),
+        placeholderData: () => {
+          placeholderFunctionRunCount++;
+          return 23;
+        },
+        select: (data: any) => String(data * 2),
+      });
+      const q = query();
+      useEffect(() => {
+        states.push(snapshot(q));
+      });
+      return (
+        <div>
+          <span>Data: {() => q.data() ?? 'undefined'}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    // Before fetch: placeholder function returns 23, select transforms to '46'
+    expect(document.body.textContent).toContain('Data: 46');
+
+    await vi.advanceTimersByTimeAsync(11);
+
+    // After fetch: real data 1, select transforms to '2'
+    expect(document.body.textContent).toContain('Data: 2');
+
+    expect(states).toMatchObject([
+      {
+        isSuccess: true,
+        isPlaceholderData: true,
+        data: '46',
+      },
+      {
+        isSuccess: true,
+        isPlaceholderData: false,
+        data: '2',
+      },
+    ]);
+
+    // The placeholder function should only be called once
+    expect(placeholderFunctionRunCount).toEqual(1);
+  });
+
+  test('should keep the previous data on disabled query when placeholderData is set', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    const count = $(0);
+
+    function Page() {
+      const query = useQuery<number>({
+        queryKey: [key, count],
+        queryFn: () => sleep(10).then(() => count()),
+        enabled: false,
+        placeholderData: keepPreviousData,
+      });
+      states.push(snapshot(query()));
+      useEffect(() => {
+        states.push(snapshot(query()));
+      });
+      return (
+        <div>
+          <span>data: {() => query().data() ?? 'undefined'}</span>
+          <button onClick={() => query().refetch()}>refetch</button>
+          <button onClick={() => count(count() + 1)}>setCount</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    // Disabled query: no initial fetch
+    expect(document.body.textContent).toContain('data: undefined');
+
+    // Trigger manual refetch
+    document
+      .querySelectorAll('button')[0]
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 0');
+
+    // Change key while disabled
+    document
+      .querySelectorAll('button')[1]
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toContain('data: 0'); // placeholder
+
+    // Trigger refetch for new key
+    document
+      .querySelectorAll('button')[0]
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 1');
+
+    // Disabled query (no fetch triggered)
+    expect(states[0]).toMatchObject({
+      data: undefined,
+      isFetching: false,
+      isSuccess: false,
+      isPlaceholderData: false,
+    });
+    // Manual refetch started
+    expect(states[1]).toMatchObject({
+      data: undefined,
+      isFetching: true,
+      isSuccess: false,
+      isPlaceholderData: false,
+    });
+    // Fetched (count=0)
+    expect(states[2]).toMatchObject({
+      data: 0,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+    // Key changed while disabled (placeholder)
+    expect(states[3]).toMatchObject({
+      data: 0,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: true,
+    });
+    // Manual refetch for new key started
+    expect(states[4]).toMatchObject({
+      data: 0,
+      isFetching: true,
+      isSuccess: true,
+      isPlaceholderData: true,
+    });
+    // Fetched (count=1)
+    expect(states[5]).toMatchObject({
       data: 1,
       isFetching: false,
       isSuccess: true,
@@ -594,9 +906,335 @@ describe('useQuery', () => {
     });
   });
 
+  test('should keep the previous data when placeholderData is set and select fn transform is used', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    const count = $(0);
+
+    function Page() {
+      const query = useQuery<{ count: number }, Error, number>({
+        queryKey: [key, count],
+        queryFn: () => sleep(10).then(() => ({ count: count() })),
+        select: (data) => data.count,
+        placeholderData: keepPreviousData,
+      });
+      useEffect(() => {
+        states.push(snapshot(query()));
+      });
+      return (
+        <div>
+          <span>data: {() => String(query().data())}</span>
+          <button onClick={() => count(1)}>setCount</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 0');
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 1');
+
+    // Initial
+    expect(states[0]).toMatchObject({
+      data: undefined,
+      isFetching: true,
+      isSuccess: false,
+      isPlaceholderData: false,
+    });
+    // Fetched
+    expect(states[1]).toMatchObject({
+      data: 0,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+    // Set state
+    expect(states[2]).toMatchObject({
+      data: 0,
+      isFetching: true,
+      isSuccess: true,
+      isPlaceholderData: true,
+    });
+    // New data
+    expect(states[3]).toMatchObject({
+      data: 1,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+  });
+
+  test('should not show initial data from next query if placeholderData is set', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    const count = $(0);
+
+    function Page() {
+      const query = useQuery({
+        queryKey: [key, count],
+        queryFn: () => sleep(10).then(() => count()),
+        initialData: 99,
+        placeholderData: keepPreviousData,
+      });
+      useEffect(() => {
+        states.push(snapshot(query()));
+      });
+      return (
+        <div>
+          <span>
+            data: {() => String(query().data())}, count: {() => String(count())}, isFetching:{' '}
+            {() => String(query().isFetching())}
+          </span>
+          <button onClick={() => count(1)}>inc</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 0, count: 0, isFetching: false');
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.body.textContent).toContain('data: 1, count: 1, isFetching: false');
+
+    expect(states.length).toBe(4);
+
+    // Initial
+    expect(states[0]).toMatchObject({
+      data: 99,
+      isFetching: true,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+    // Fetched
+    expect(states[1]).toMatchObject({
+      data: 0,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+    // Set state
+    expect(states[2]).toMatchObject({
+      data: 99,
+      isFetching: true,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+    // New data
+    expect(states[3]).toMatchObject({
+      data: 1,
+      isFetching: false,
+      isSuccess: true,
+      isPlaceholderData: false,
+    });
+  });
+
+  test('select should only run when dependencies change if memoized', async () => {
+    const queryClient = createQueryClient();
+    const key1 = queryKey();
+    let selectRun = 0;
+    const count = $(2);
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key1,
+        queryFn: () => sleep(10).then(() => 0),
+        select: (data: number) => {
+          selectRun++;
+          return `selected ${data + count()}`;
+        },
+        placeholderData: 99,
+      });
+      return (
+        <div>
+          <h2>Data: {() => query().data() as unknown as string}</h2>
+          <button onClick={() => count(count() + 1)}>inc: {() => String(count())}</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    expect(document.body.textContent).toContain('Data: selected 101');
+    expect(selectRun).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: selected 2');
+    expect(selectRun).toBe(2);
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: selected 3');
+    expect(selectRun).toBe(3);
+  });
+
+  test('select should always return the correct state', async () => {
+    const queryClient = createQueryClient();
+    const key1 = queryKey();
+    const count = $(2);
+    const forceValue = $(1);
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key1,
+        queryFn: () => sleep(10).then(() => 0),
+        select: (data: number) => {
+          return `selected ${data + count()}`;
+        },
+        placeholderData: 99,
+      });
+      return (
+        <div>
+          <h2>Data: {() => query().data() as unknown as string}</h2>
+          <h2>forceValue: {() => String(forceValue())}</h2>
+          <button onClick={() => count(count() + 1)}>inc: {() => String(count())}</button>
+          <button onClick={() => forceValue(forceValue() + 1)}>forceUpdate</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    expect(document.body.textContent).toContain('Data: selected 101');
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: selected 2');
+
+    document
+      .querySelectorAll('button')[0]
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: selected 3');
+
+    document
+      .querySelectorAll('button')[1]
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.body.textContent).toContain('forceValue: 2');
+    // data should still be 3 after an independent re-render
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: selected 3');
+  });
+
+  test('select should structurally share data', async () => {
+    const queryClient = createQueryClient();
+    const key1 = queryKey();
+    const states: Array<any> = [];
+    const forceValue = $(1);
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key1,
+        queryFn: () => sleep(10).then(() => [1, 2]),
+        select: (res: number[]) => res.map((x) => x + 1),
+      });
+      useEffect(() => {
+        const d = query().data();
+        if (d !== undefined && d !== null) {
+          states.push(d);
+        }
+      });
+      return (
+        <div>
+          <h2>Data: {() => JSON.stringify(query().data())}</h2>
+          <h2>forceValue: {() => String(forceValue())}</h2>
+          <button onClick={() => forceValue(forceValue() + 1)}>forceUpdate</button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: [2,3]');
+    expect(states).toHaveLength(1);
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('forceValue: 2');
+    expect(document.body.textContent).toContain('Data: [2,3]');
+
+    // effect should not be triggered again due to structural sharing
+    expect(states).toHaveLength(1);
+  });
+
   // #endregion
 
   // #region enabled
+
+  test('should start with status pending, fetchStatus idle if enabled is false', async () => {
+    const queryClient = createQueryClient();
+    const key1 = queryKey();
+    const key2 = queryKey();
+
+    function Page() {
+      const first = useQuery({
+        queryKey: key1,
+        queryFn: () => sleep(10).then(() => 'data'),
+        enabled: false,
+      });
+      const second = useQuery({ queryKey: key2, queryFn: () => sleep(10).then(() => 'data') });
+      return (
+        <div>
+          <span>
+            First Status: {() => first().status()}, {() => first().fetchStatus()}
+          </span>
+          <span>
+            Second Status: {() => second().status()}, {() => second().fetchStatus()}
+          </span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    expect(document.body.textContent).toContain('First Status: pending, idle');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.body.textContent).toContain('Second Status: pending, fetching');
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Second Status: success, idle');
+  });
 
   test('should wait for the query to become enabled before fetching', async () => {
     const queryClient = createQueryClient();
@@ -736,6 +1374,69 @@ describe('useQuery', () => {
       isSuccess: false,
       isStale: false,
     });
+  });
+
+  test('should refetch when changed enabled to true in error state', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const queryFn = vi.fn<(...args: Array<unknown>) => unknown>();
+    queryFn.mockImplementation(() =>
+      sleep(10).then(() => Promise.reject(new Error('Suspense Error Bingo'))),
+    );
+
+    function Page() {
+      const enabled = $(true);
+      const query = useQuery({
+        queryKey: key,
+        queryFn,
+        enabled: enabled,
+        retry: false,
+        retryOnMount: false,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+      });
+      return (
+        <div>
+          <span>
+            {() => {
+              if (query().isPending()) return 'status: pending';
+              if (query().isError()) return 'error';
+              return 'rendered';
+            }}
+          </span>
+          <button aria-label="retry" onClick={() => enabled(!enabled())}>
+            retry {() => String(enabled())}
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    // initial state check
+    expect(document.body.textContent).toContain('status: pending');
+
+    // render error state component
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('error');
+    expect(queryFn).toBeCalledTimes(1);
+
+    // change to enabled to false
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('error');
+    expect(queryFn).toBeCalledTimes(1);
+
+    // change to enabled to true
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('error');
+    expect(queryFn).toBeCalledTimes(2);
   });
 
   // #endregion
@@ -1458,6 +2159,80 @@ describe('useQuery', () => {
     document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await vi.advanceTimersByTimeAsync(11);
     expect(fetchCount).toBe(1);
+  });
+
+  test('should update query state and refetch when reset with resetQueries', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+    let count = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          await sleep(10);
+          count++;
+          return count;
+        },
+        staleTime: Infinity,
+      });
+      useEffect(() => {
+        states.push(snapshot(query()));
+      });
+      return (
+        <div>
+          <button onClick={() => queryClient.resetQueries({ queryKey: key })}>reset</button>
+          <span>data: {() => String(query().data() ?? 'null')}</span>
+          <span>isFetching: {() => String(query().isFetching())}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 1');
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(states.length).toBe(4);
+    expect(document.body.textContent).toContain('data: 2');
+    expect(count).toBe(2);
+
+    expect(states[0]).toMatchObject({
+      data: undefined,
+      isPending: true,
+      isFetching: true,
+      isSuccess: false,
+      isStale: true,
+    });
+    expect(states[1]).toMatchObject({
+      data: 1,
+      isPending: false,
+      isFetching: false,
+      isSuccess: true,
+      isStale: false,
+    });
+    expect(states[2]).toMatchObject({
+      data: undefined,
+      isPending: true,
+      isFetching: true,
+      isSuccess: false,
+      isStale: true,
+    });
+    expect(states[3]).toMatchObject({
+      data: 2,
+      isPending: false,
+      isFetching: false,
+      isSuccess: true,
+      isStale: false,
+    });
   });
 
   // #endregion

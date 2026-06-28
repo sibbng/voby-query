@@ -266,7 +266,7 @@ describe('useQuery.browser.test', () => {
       document.body,
     );
 
-    expect(document.body.textContent).toContain('Status: pending');
+    expect(document.body.textContent).toContain('Status: success');
     expect(document.body.textContent).toContain('Data: Placeholder value');
     expect(queryFnMock).toHaveBeenCalledTimes(1);
 

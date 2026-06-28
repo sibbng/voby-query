@@ -129,7 +129,7 @@ return (
     onClick={() => mutation().mutate({ title: 'New todo' })}
     disabled={() => mutation().isPending()}
   >
-    {() => mutation().isPending() ? 'Saving...' : 'Add Todo'}
+    {() => (mutation().isPending() ? 'Saving...' : 'Add Todo')}
   </button>
 );
 ```

@@ -212,7 +212,9 @@ export type QueryOptions<
   queryClient?: QueryClient;
   initialData?: TData | (() => TData | undefined);
   initialDataUpdatedAt?: number;
-  placeholderData?: TData | ((previousData: TQueryFnData | undefined) => TQueryFnData | undefined);
+  placeholderData?:
+    | TQueryFnData
+    | ((previousData: TQueryFnData | undefined) => TQueryFnData | undefined);
   enabled?: FunctionMaybe<boolean>;
   staleTime?:
     | number

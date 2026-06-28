@@ -54,35 +54,53 @@ export function useQuery<
       errorUpdateCount: untrack(() => state.errorUpdateCount()),
     };
 
+    const placeholderValue = useMemo(() => {
+      if (!state.isPending()) return undefined;
+      if (typeof obsOptions.placeholderData === 'function') {
+        return (
+          obsOptions.placeholderData as (prev: TQueryFnData | undefined) => TQueryFnData | undefined
+        )(lastData());
+      }
+      return obsOptions.placeholderData;
+    });
+
+    const hasPlaceholderValue = useMemo(() => placeholderValue() !== undefined);
+
     const shouldThrow = state.isError() && obsOptions.throwOnError;
 
     const result = {
       ...state,
+      status: useMemo(() => (hasPlaceholderValue() ? 'success' : state.status())),
       isFetchedAfterMount: useMemo(
         (): boolean =>
           state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
           state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
       ),
+      isSuccess: useMemo(() => (hasPlaceholderValue() ? true : state.isSuccess())),
+      isPending: useMemo(() => (hasPlaceholderValue() ? false : state.isPending())),
+      isPlaceholderData: useMemo(() => hasPlaceholderValue()),
+      isLoading: useMemo(() => !hasPlaceholderValue() && state.isLoading()),
+      isInitialLoading: useMemo(() => !hasPlaceholderValue() && state.isInitialLoading()),
+      isRefetching: useMemo(() => {
+        const fetchStatus = state.fetchStatus();
+        if (fetchStatus !== 'fetching') return false;
+        if (hasPlaceholderValue()) return true;
+        return state.isRefetching();
+      }),
+      isLoadingError: useMemo(() => {
+        if (hasPlaceholderValue()) return false;
+        return state.isLoadingError();
+      }),
       data: useMemo(() => {
-        const data = state.data();
-
-        if (state.isPending()) {
-          if (typeof obsOptions.placeholderData === 'function') {
-            const placeholderValue = (
-              obsOptions.placeholderData as (
-                prev: TQueryFnData | undefined,
-              ) => TQueryFnData | undefined
-            )(lastData());
-            if (placeholderValue !== undefined) {
-              if (obsOptions.select) {
-                return obsOptions.select(placeholderValue as any) as Awaited<TData>;
-              }
-              return placeholderValue as Awaited<TData>;
-            }
-          } else if (obsOptions.placeholderData !== undefined) {
-            return obsOptions.placeholderData as Awaited<TData>;
+        const pv = placeholderValue();
+        if (pv !== undefined) {
+          if (obsOptions.select) {
+            return obsOptions.select(pv as any) as Awaited<TData>;
           }
+          return pv as Awaited<TData>;
         }
+
+        const data = state.data();
 
         if (state.isSuccess() && data !== undefined) {
           lastData(data as TQueryFnData);
