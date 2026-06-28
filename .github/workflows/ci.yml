@@ -19,6 +19,18 @@ jobs:
           cache: true
 
       - run: vp install
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: vpx playwright install chromium
+
       - run: vp pack
       - run: vp check
       - run: vp test

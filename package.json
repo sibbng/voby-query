@@ -24,7 +24,7 @@
     "prepublish": "vp check && vp pack",
     "test": "vp test",
     "typecheck": "tsc --noEmit",
-    "prepare": "pnpm vp config"
+    "prepare": "vp config"
   },
   "dependencies": {
     "std-env": "^4.1.0",
@@ -34,6 +34,7 @@
     "@testing-library/dom": "^10.4.1",
     "@typescript/native-preview": "7.0.0-dev.20260627.2",
     "@vitest/browser-playwright": "^4.1.9",
+    "happy-dom": "^20.10.6",
     "playwright": "^1.61.1",
     "typescript": "7.0.1-rc",
     "vite": "npm:@voidzero-dev/vite-plus-core@^0.1.22",
