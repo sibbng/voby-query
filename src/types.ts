@@ -11,7 +11,9 @@ export type CancelOptions = {
 };
 
 export type QueryRefetchOptions = {
-  throwOnError?: boolean;
+  throwOnError?:
+    | boolean
+    | ((error: any, query: import('./query.ts').Query<any, any, any, any>) => boolean);
   cancelRefetch?: boolean;
 };
 
@@ -224,18 +226,35 @@ export type QueryOptions<
       ) => number | 'static');
   refetchInterval?: number;
   gcTime?: number;
-  throwOnError?: boolean;
+  throwOnError?:
+    | boolean
+    | ((
+        error: TError,
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean);
   structuralSharing?:
     | boolean
     | ((oldData: TData | undefined, newData: Awaited<TQueryFnData>) => TData);
   select?: (data: TQueryFnData) => TData;
   networkMode?: 'online' | 'always' | 'offlineFirst';
-  refetchOnReconnect?: boolean;
+  refetchOnReconnect?:
+    | boolean
+    | 'always'
+    | ((
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean | 'always');
   retry?: boolean | number | ((failureCount: number, error: TError) => boolean);
-  retryOnMount?: boolean;
+  retryOnMount?:
+    | boolean
+    | ((query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>) => boolean);
   retryDelay?: number | ((retryAttempt: number, error: TError) => number);
   cancelRefetch?: boolean;
-  refetchOnWindowFocus?: boolean | 'always';
+  refetchOnWindowFocus?:
+    | boolean
+    | 'always'
+    | ((
+        query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
+      ) => boolean | 'always');
   refetchOnMount?:
     | boolean
     | 'always'

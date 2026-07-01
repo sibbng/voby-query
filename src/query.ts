@@ -53,7 +53,7 @@ type QueryFetchFn = (options: {
 
 type QueryFetchOptions = {
   retryAttempt?: number;
-  throwOnError?: boolean;
+  throwOnError?: QueryOptions<any, any, any, any>['throwOnError'];
   force?: boolean;
   fetchFn?: QueryFetchFn;
 };
@@ -268,6 +268,8 @@ export const createQuery = <
     removeObserver: (observer) => {
       query.observers.delete(observer);
       if (query.observers.size === 0) {
+        query.retryDisposer();
+        query.retryDisposer = () => {};
         query.isActive = false;
         query.scheduleDestroy();
       }
@@ -468,7 +470,7 @@ export const createQuery = <
             // When throwOnError is explicitly passed to refetch()/fetch() (direct API),
             // we also throw to reject the promise for backward compatibility.
             const isDefaultThrowOnError = throwOnError === query.resolvedOptions.throwOnError;
-            if (shouldThrowError(throwOnError, [error])) {
+            if (shouldThrowError(throwOnError, [error, query])) {
               query.state.status('error');
               if (!isDefaultThrowOnError) {
                 throw error;

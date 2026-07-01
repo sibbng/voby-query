@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/tes
 import { createQueryClient, keepPreviousData, onlineManager, focusManager } from '../../src';
 import { useQuery, CancelledError } from '../../src/useQuery';
 import { QueryClientProvider } from '../../src/context';
-import { $, ErrorBoundary, If, For, useEffect, tick } from 'voby';
+import { $, ErrorBoundary, For, useEffect, tick } from 'voby';
 import { render, sleep } from '../utils';
 
 let keyCounter = 0;
@@ -360,6 +360,100 @@ describe('useQuery', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(states.length).toBe(1);
     expect(states[0]).toMatchObject({ data: 'prefetched' });
+  });
+
+  test('should refetch fresh query when refetchOnMount is always', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+
+    await queryClient.prefetchQuery({
+      queryKey: key,
+      queryFn: () => 'prefetched',
+    });
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => 'data',
+        refetchOnMount: 'always',
+        staleTime: Infinity,
+      });
+      const q = query();
+      states.push(snapshot(q));
+      useEffect(() => {
+        states.push(snapshot(q));
+      });
+      return null;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(states.length).toBe(2);
+    expect(states[0]).toMatchObject({
+      data: 'prefetched',
+      isStale: false,
+      isFetching: true,
+    });
+    expect(states[1]).toMatchObject({
+      data: 'data',
+      isStale: false,
+      isFetching: false,
+    });
+  });
+
+  test('should refetch stale query when refetchOnMount is true', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const states: Array<any> = [];
+
+    await queryClient.prefetchQuery({
+      queryKey: key,
+      queryFn: () => 'prefetched',
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => 'data',
+        refetchOnMount: true,
+        staleTime: 0,
+      });
+      const q = query();
+      states.push(snapshot(q));
+      useEffect(() => {
+        states.push(snapshot(q));
+      });
+      return null;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(states.length).toBe(2);
+    expect(states[0]).toMatchObject({
+      data: 'prefetched',
+      isStale: true,
+      isFetching: true,
+    });
+    expect(states[1]).toMatchObject({
+      data: 'data',
+      isStale: true,
+      isFetching: false,
+    });
   });
 
   // #endregion
@@ -1758,6 +1852,164 @@ describe('useQuery', () => {
     expect(fetchCount).toBe(0);
   });
 
+  test('should not refetch on window focus when refetchOnWindowFocus returns false', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let fetchCount = 0;
+
+    await queryClient.prefetchQuery({ queryKey: key, queryFn: () => 'prefetched' });
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          fetchCount++;
+          return 'data' + fetchCount;
+        },
+        refetchOnMount: false,
+        refetchOnWindowFocus: () => false,
+      });
+      return (
+        <div>
+          <span>data: {() => query().data() as unknown as string}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    focusManager.setFocused(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchCount).toBe(0);
+  });
+
+  test('should not refetch fresh query on window focus when refetchOnWindowFocus is true', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let fetchCount = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          fetchCount++;
+          return 'data' + fetchCount;
+        },
+        staleTime: Infinity,
+        refetchOnWindowFocus: true,
+      });
+      return (
+        <div>
+          <span>data: {() => query().data() as unknown as string}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.body.textContent).toContain('data: data1');
+    expect(fetchCount).toBe(1);
+
+    focusManager.setFocused(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchCount).toBe(1);
+  });
+
+  test('should refetch fresh query on window focus when refetchOnWindowFocus is always', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let fetchCount = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          await sleep(10);
+          fetchCount++;
+          return 'data' + fetchCount;
+        },
+        staleTime: Infinity,
+        refetchOnWindowFocus: 'always',
+      });
+      return (
+        <div>
+          <span>data: {() => query().data() as unknown as string}</span>
+          <span>isFetching: {() => String(query().isFetching())}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: data1');
+    expect(document.body.textContent).toContain('isFetching: false');
+
+    focusManager.setFocused(true);
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: data2');
+    expect(document.body.textContent).toContain('isFetching: false');
+    expect(fetchCount).toBe(2);
+  });
+
+  test('should calculate window focus refetch behavior from a callback', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let fetchCount = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          await sleep(10);
+          return fetchCount++;
+        },
+        staleTime: 0,
+        retry: 0,
+        refetchOnWindowFocus: (query) => (query.state.data() ?? 0) < 1,
+      });
+      return <div>data: {() => String(query().data())}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 0');
+    expect(fetchCount).toBe(1);
+
+    focusManager.setFocused(true);
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data: 1');
+    expect(fetchCount).toBe(2);
+
+    focusManager.setFocused(true);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(fetchCount).toBe(2);
+  });
+
   test('should refetch periodically with refetchInterval', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
@@ -1960,6 +2212,85 @@ describe('useQuery', () => {
     expect(document.body.textContent).toContain('Caught: cached error');
   });
 
+  test('should set status to error instead of throwing when throwOnError returns false', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => Promise.reject(new Error('Local Error')),
+        retry: false,
+        throwOnError: (error: Error) => error.message !== 'Local Error',
+      });
+
+      return (
+        <div>
+          <h1>{() => query().status()}</h1>
+          <h2>{() => query().error()?.message ?? ''}</h2>
+        </div>
+      );
+    }
+
+    function ErrorFallback({ error }: { error: Error }) {
+      return <p>Caught: {error.message}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <ErrorBoundary
+          fallback={(props: { error: Error }) => <ErrorFallback error={props.error} />}
+        >
+          <Page />
+        </ErrorBoundary>
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.body.textContent).toContain('error');
+    expect(document.body.textContent).toContain('Local Error');
+  });
+
+  test('should throw to the error boundary when throwOnError returns true', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: () => Promise.reject(new Error('Remote Error')),
+        retry: false,
+        throwOnError: (error: Error) => error.message !== 'Local Error',
+      });
+
+      return (
+        <div>
+          <h1>{() => query().status()}</h1>
+          <h2>{() => query().error()?.message ?? ''}</h2>
+        </div>
+      );
+    }
+
+    function ErrorFallback({ error }: { error: Error }) {
+      return <p>Caught: {error.message}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <ErrorBoundary
+          fallback={(props: { error: Error }) => <ErrorFallback error={props.error} />}
+        >
+          <Page />
+        </ErrorBoundary>
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.body.textContent).toContain('Caught: Remote Error');
+  });
+
   test('should handle CancelledError when a query is cancelled', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
@@ -1995,6 +2326,240 @@ describe('useQuery', () => {
     queryClient.removeQueries({ queryKey: key });
     await vi.advanceTimersByTimeAsync(100);
     expect(document.body.textContent).toContain('status: error');
+  });
+
+  test('should continue retries when observers unmount and remount while waiting for a retry', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let count = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          count++;
+          await sleep(10);
+          return Promise.reject(new Error('some error'));
+        },
+        retry: 2,
+        retryDelay: 100,
+      });
+
+      return (
+        <div>
+          <div>error: {() => query().error()?.message ?? 'null'}</div>
+          <div>failureCount: {() => String(query().failureCount())}</div>
+          <div>failureReason: {() => query().failureReason()?.message ?? ''}</div>
+        </div>
+      );
+    }
+
+    function App() {
+      const show = $(true);
+
+      return (
+        <div>
+          <button onClick={() => show(!show())}>{() => (show() ? 'hide' : 'show')}</button>
+          {() => (show() ? <Page /> : null)}
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <App />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('failureCount: 1');
+    expect(document.body.textContent).toContain('failureReason: some error');
+
+    await vi.advanceTimersByTimeAsync(90);
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('show');
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    await vi.advanceTimersByTimeAsync(110);
+    await vi.advanceTimersByTimeAsync(110);
+    expect(document.body.textContent).toContain('error: some error');
+    expect(count).toBe(4);
+  });
+
+  test('should restart retries when observers remount after the query was cancelled', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let count = 0;
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          count++;
+          await sleep(10);
+          return Promise.reject(new Error('some error'));
+        },
+        retry: 2,
+        retryDelay: 100,
+      });
+
+      return (
+        <div>
+          <div>error: {() => query().error()?.message ?? 'null'}</div>
+          <div>failureCount: {() => String(query().failureCount())}</div>
+          <div>failureReason: {() => query().failureReason()?.message ?? ''}</div>
+        </div>
+      );
+    }
+
+    function App() {
+      const show = $(true);
+
+      return (
+        <div>
+          <button onClick={() => show(!show())}>{() => (show() ? 'hide' : 'show')}</button>
+          <button onClick={() => void queryClient.cancelQueries({ queryKey: key })}>cancel</button>
+          {() => (show() ? <Page /> : null)}
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <App />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('failureCount: 1');
+    expect(document.body.textContent).toContain('failureReason: some error');
+
+    document
+      .querySelectorAll('button')[0]
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document
+      .querySelectorAll('button')[1]
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toContain('show');
+
+    document
+      .querySelectorAll('button')[0]
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    await vi.advanceTimersByTimeAsync(110);
+    await vi.advanceTimersByTimeAsync(110);
+    expect(document.body.textContent).toContain('error: some error');
+    expect(count).toBe(4);
+  });
+
+  test('should pass the query to retryOnMount callback', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    const queryFn = vi.fn().mockRejectedValue(new Error('oops'));
+    const retryOnMount = vi.fn((query: any) => query.state.status() !== 'error');
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn,
+        retry: false,
+        retryOnMount,
+      });
+
+      return <div>{() => query().status()}</div>;
+    }
+
+    const dispose = render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.body.textContent).toContain('error');
+    dispose();
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(retryOnMount).toHaveBeenCalled();
+    const query = retryOnMount.mock.calls[retryOnMount.mock.calls.length - 1]![0];
+    expect(query.state.status()).toBe('error');
+    expect(query.state.data()).toBeUndefined();
+    expect(queryFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('should not call retryOnMount callback when the query already has data', async () => {
+    const queryClient = createQueryClient();
+    const key = queryKey();
+    let count = 0;
+    const retryOnMount = vi.fn(() => false);
+    const queryFn = vi.fn().mockImplementation(async () => {
+      await sleep(10);
+      count++;
+
+      if (count === 1) {
+        return 'data';
+      }
+
+      throw new Error('oops');
+    });
+
+    function Page() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn,
+        retry: false,
+        staleTime: 0,
+        refetchOnMount: true,
+        retryOnMount,
+      });
+
+      return (
+        <div>
+          <div>{() => query().data() ?? 'no data'}</div>
+          <div>{() => query().error()?.message ?? 'no error'}</div>
+          <button onClick={() => void query().refetch()}>refetch</button>
+        </div>
+      );
+    }
+
+    const dispose = render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data');
+
+    document.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('data');
+    expect(document.body.textContent).toContain('oops');
+
+    dispose();
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Page />
+      </QueryClientProvider>,
+      document.body,
+    );
+    await vi.advanceTimersByTimeAsync(11);
+
+    expect(retryOnMount).not.toHaveBeenCalled();
+    expect(queryFn).toHaveBeenCalledTimes(3);
   });
 
   // #endregion

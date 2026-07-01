@@ -3,7 +3,7 @@ import { useQueryClient } from './queryClient.ts';
 import { QueryObserver } from './queryObserver.ts';
 import type { QueryClient as QC, QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 import { CancelledError } from './query.ts';
-import { hashQueryKeyByOptions } from './utils.ts';
+import { hashQueryKeyByOptions, shouldThrowError } from './utils.ts';
 
 export { CancelledError } from './query.ts';
 export type {
@@ -91,7 +91,8 @@ export function useQuery<
 
     const hasPlaceholderValue = useMemo(() => placeholderValue() !== undefined);
 
-    const shouldThrow = state.isError() && obsOptions.throwOnError;
+    const shouldThrow =
+      state.isError() && shouldThrowError(obsOptions.throwOnError, [state.error()!, currentQuery]);
 
     const result = {
       ...state,

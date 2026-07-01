@@ -176,6 +176,20 @@ export class QueryObserver<
     return resolved ?? false;
   }
 
+  #shouldLoadOnMount(): boolean {
+    if (this.#query.state.data() !== undefined) return false;
+
+    if (this.#query.state.status() === 'error') {
+      const retryOnMount = this.#resolvedOptions.retryOnMount;
+      const shouldRetryOnMount =
+        typeof retryOnMount === 'function' ? retryOnMount(this.#query) : retryOnMount;
+
+      return shouldRetryOnMount !== false;
+    }
+
+    return true;
+  }
+
   #updateRefetchInterval(): void {
     untrack(() => {
       if (this.#refetchIntervalId !== undefined) {
@@ -198,14 +212,17 @@ export class QueryObserver<
   }
 
   shouldFetchOnMount(): boolean {
+    if (this.#shouldLoadOnMount()) return true;
+
+    if (this.#query.state.data() === undefined) return false;
+
     const refetchOnMount = this.#resolvedOptions.refetchOnMount;
     if (typeof refetchOnMount === 'function') {
       return !!refetchOnMount(this.#query);
     }
     if (refetchOnMount === 'always') return true;
-    if (refetchOnMount === false && !this.#query.state.isPending()) return false;
-    if (this.#query.state.isStale() || this.#query.state.isPending()) return true;
-    return false;
+    if (refetchOnMount === false) return false;
+    return this.#query.state.isStale();
   }
 
   shouldFetchOnWindowFocus(): boolean {
