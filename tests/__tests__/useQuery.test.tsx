@@ -44,6 +44,11 @@ describe('useQuery', () => {
     vi.useFakeTimers();
   });
   afterEach(() => {
+    const mountedRoot = globalThis as typeof globalThis & { unmount?: () => void };
+    mountedRoot.unmount?.();
+    mountedRoot.unmount = undefined;
+    onlineManager.setOnline(true);
+    focusManager.setFocused(undefined);
     vi.useRealTimers();
   });
 
@@ -1593,7 +1598,7 @@ describe('useQuery', () => {
 
   // #region refetchOnMount / refetchOnReconnect / refetchOnWindowFocus
 
-  test.skip('should handle refetchOnReconnect when the network comes back online', async () => {
+  test('should handle refetchOnReconnect when the network comes back online', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1637,7 +1642,7 @@ describe('useQuery', () => {
     onlineManager.setOnline(true);
   });
 
-  test.skip('should handle refetchOnWindowFocus', async () => {
+  test('should handle refetchOnWindowFocus', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1651,6 +1656,7 @@ describe('useQuery', () => {
           fetchCount++;
           return 'data' + fetchCount;
         },
+        refetchOnMount: false,
         retryOnMount: false,
         refetchOnWindowFocus: true,
       });
@@ -1714,7 +1720,7 @@ describe('useQuery', () => {
     expect(fetchCount).toBe(0);
   });
 
-  test.skip('should not refetch on window focus when refetchOnWindowFocus is false', async () => {
+  test('should not refetch on window focus when refetchOnWindowFocus is false', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1728,6 +1734,7 @@ describe('useQuery', () => {
           fetchCount++;
           return 'data' + fetchCount;
         },
+        refetchOnMount: false,
         refetchOnWindowFocus: false,
       });
       return (
@@ -1783,7 +1790,7 @@ describe('useQuery', () => {
 
   // #region network mode
 
-  test.skip('should handle network mode: online (paused when offline)', async () => {
+  test('should handle network mode: online (paused when offline)', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
