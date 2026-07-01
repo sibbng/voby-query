@@ -1,13 +1,10 @@
 import { $$, untrack } from 'voby';
-import { scheduleQueryStale, type Query } from './query.ts';
+import { focusManager } from './focusManager.ts';
+import { onlineManager } from './onlineManager.ts';
+import type { Query } from './query.ts';
 import type { QueryKey } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
-import type {
-  CancelOptions,
-  ObserverOptions,
-  QueryRefetchOptions,
-  ResolvedObserverOptions,
-} from './types.ts';
+import type { ObserverOptions, ResolvedObserverOptions } from './types.ts';
 
 export class QueryObserver<
   TQueryFnData = unknown,
@@ -20,6 +17,8 @@ export class QueryObserver<
   #listeners: Set<() => void> = new Set();
   #staleTimeoutId?: ManagedTimerId;
   #refetchIntervalId?: ManagedTimerId;
+  #focusCleanup?: () => void;
+  #onlineCleanup?: () => void;
   constructor(
     query: Query<TQueryFnData, TError, TData, TQueryKey>,
     options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
@@ -59,14 +58,56 @@ export class QueryObserver<
 
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
-    this.#query.addObserver(this);
-    this.#updateStaleTimeout();
-    this.#updateRefetchInterval();
+
+    if (this.#listeners.size === 1) {
+      this.#query.addObserver(this);
+      this.#subscribeToManagers();
+      this.#updateStaleTimeout();
+      this.#updateRefetchInterval();
+    }
+
     return () => {
       this.#listeners.delete(listener);
-      this.#query.removeObserver(this);
-      this.#clearTimers();
+
+      if (this.#listeners.size === 0) {
+        this.#query.removeObserver(this);
+        this.#clearTimers();
+        this.#clearManagerSubscriptions();
+      }
     };
+  }
+
+  #subscribeToManagers(): void {
+    this.#clearManagerSubscriptions();
+
+    this.#focusCleanup = focusManager.subscribe(async () => {
+      if (focusManager.isFocused() && this.shouldFetchOnWindowFocus()) {
+        await this.#refetchObserverQuery();
+      }
+    });
+
+    this.#onlineCleanup = onlineManager.subscribe(async () => {
+      if (
+        onlineManager.isOnline() &&
+        this.#query.fetchMachine.getState() !== 'paused' &&
+        this.shouldFetchOnReconnect()
+      ) {
+        await this.#refetchObserverQuery();
+      }
+    });
+  }
+
+  #clearManagerSubscriptions(): void {
+    this.#focusCleanup?.();
+    this.#focusCleanup = undefined;
+    this.#onlineCleanup?.();
+    this.#onlineCleanup = undefined;
+  }
+
+  #refetchObserverQuery(): Promise<void> {
+    return this.#query.refetch({
+      cancelRefetch: this.#query.resolvedOptions.cancelRefetch ?? true,
+    });
   }
 
   #clearTimers(): void {
@@ -132,9 +173,11 @@ export class QueryObserver<
       if (!interval) return;
 
       this.#refetchIntervalId = timeoutManager.setTimeout(() => {
-        void this.#query.refetch();
+        void this.#refetchObserverQuery();
         this.#refetchIntervalId = timeoutManager.setInterval(async () => {
-          await this.#query.refetch();
+          if (this.#resolvedOptions.refetchIntervalInBackground || focusManager.isFocused()) {
+            await this.#refetchObserverQuery();
+          }
         }, interval as number) as any;
       }, interval as number) as any;
     });
@@ -214,6 +257,7 @@ export class QueryObserver<
 
   destroy(): void {
     this.#clearTimers();
+    this.#clearManagerSubscriptions();
     this.#listeners.clear();
   }
 }

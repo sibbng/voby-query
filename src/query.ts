@@ -15,8 +15,7 @@ import type {
 import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
 import { ensureQueryFn, replaceData, resolveKey, shouldThrowError } from './utils.ts';
 import { onlineManager } from './onlineManager.ts';
-import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
-import { focusManager } from './focusManager.ts';
+import { timeoutManager } from './timeoutManager.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
 
 const isBrowser = typeof window !== 'undefined';
@@ -326,25 +325,11 @@ export const createQuery = <
         if (query.instances === 1) {
           const cleanups: (() => void)[] = [];
 
-          if (query.resolvedOptions.refetchInterval) {
-            const intervalDelay = query.resolvedOptions.refetchInterval;
-            let intervalId: ManagedTimerId;
-            const timeoutId = timeoutManager.setTimeout(async () => {
-              intervalId = timeoutManager.setInterval(async () => {
-                await query.refetch();
-              }, intervalDelay);
-            }, intervalDelay);
-            cleanups.push(() => {
-              timeoutManager.clearTimeout(timeoutId);
-              timeoutManager.clearInterval(intervalId);
-            });
-          }
           if (query.resolvedOptions.networkMode === 'online') {
             const unsubOnline = onlineManager.subscribe(async () => {
               if (onlineManager.isOnline()) {
-                if (query.resolvedOptions.refetchOnReconnect) {
-                  query.state.fetchStatus('fetching');
-                  await query.refetch();
+                if (query.fetchMachine.getState() === 'paused') {
+                  await query.refetch({ cancelRefetch: false });
                 }
               } else {
                 await query.cancel({ revert: false, silent: true });
@@ -352,17 +337,6 @@ export const createQuery = <
               }
             });
             cleanups.push(unsubOnline);
-          }
-          if (query.resolvedOptions.refetchOnWindowFocus) {
-            const unsubFocus = focusManager.subscribe(async () => {
-              if (
-                focusManager.isFocused() &&
-                (query.resolvedOptions.refetchOnWindowFocus === 'always' || query.state.isStale())
-              ) {
-                await query.refetch();
-              }
-            });
-            cleanups.push(unsubFocus);
           }
 
           query.inactiveCleanup = () => {

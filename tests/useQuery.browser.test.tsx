@@ -445,6 +445,68 @@ describe('useQuery.browser.test', () => {
     expect(queryFnMock).toHaveBeenCalledTimes(1);
   });
 
+  test('useQuery refetchOnWindowFocus honors observer settings for shared keys', async () => {
+    const queryClient = createQueryClient();
+    const sharedKey = ['refetch-focus-shared'];
+    const queryFnMock = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return `Shared data ${queryFnMock.mock.calls.length}`;
+    });
+
+    await queryClient.prefetchQuery({
+      queryKey: sharedKey,
+      queryFn: async () => 'Prefetched data',
+    });
+
+    function OptOut() {
+      useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        staleTime: 0,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+      });
+
+      return null;
+    }
+
+    function OptIn() {
+      const query = useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        staleTime: 0,
+        refetchOnMount: false,
+        refetchOnWindowFocus: true,
+      });
+
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <OptOut />
+        <OptIn />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(queryFnMock).toHaveBeenCalledTimes(0);
+
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(11);
+    if (originalVisibility) {
+      Object.defineProperty(document, 'visibilityState', originalVisibility);
+    }
+
+    expect(queryFnMock).toHaveBeenCalledTimes(1);
+  });
+
   test(
     'useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true',
     { retry: 3 },
@@ -621,6 +683,56 @@ describe('useQuery.browser.test', () => {
     await vi.advanceTimersByTimeAsync(51);
 
     expect(queryFnMock).not.toHaveBeenCalled();
+  });
+
+  test('useQuery refetchInterval honors observer settings for shared keys', async () => {
+    const queryClient = createQueryClient();
+    const sharedKey = ['refetch-interval-shared'];
+    const queryFnMock = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return `Interval shared data ${queryFnMock.mock.calls.length}`;
+    });
+
+    await queryClient.prefetchQuery({
+      queryKey: sharedKey,
+      queryFn: async () => 'Prefetched interval data',
+    });
+
+    function OptOut() {
+      useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        refetchOnMount: false,
+      });
+
+      return null;
+    }
+
+    function OptIn() {
+      const query = useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        refetchOnMount: false,
+        refetchInterval: 50,
+      });
+
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <OptOut />
+        <OptIn />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(queryFnMock).toHaveBeenCalledTimes(0);
+
+    await vi.advanceTimersByTimeAsync(61);
+
+    expect(queryFnMock).toHaveBeenCalledTimes(1);
   });
 
   test('gcTime cache: remount within and after gcTime', async () => {
