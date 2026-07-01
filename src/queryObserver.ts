@@ -62,8 +62,22 @@ export class QueryObserver<
     if (this.#listeners.size === 1) {
       this.#query.addObserver(this);
       this.#subscribeToManagers();
+
+      const shouldFetchOnSubscribe = untrack(() => {
+        if (!this.#resolvedOptions.enabled) return false;
+        if (this.#query.state.fetchStatus() === 'paused') return false;
+
+        return this.shouldFetchOnMount();
+      });
+
       this.#updateStaleTimeout();
       this.#updateRefetchInterval();
+
+      if (shouldFetchOnSubscribe) {
+        untrack(() => {
+          void this.#refetchObserverQuery();
+        });
+      }
     }
 
     return () => {
@@ -249,9 +263,26 @@ export class QueryObserver<
   }
 
   setOptions(options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>): void {
+    const previousOptions = this.#resolvedOptions;
     this.#resolvedOptions = this.#resolveOptions(options);
+
+    const shouldFetchOnOptionsUpdate = untrack(
+      () =>
+        this.#listeners.size > 0 &&
+        previousOptions.enabled === false &&
+        this.#resolvedOptions.enabled &&
+        this.#query.state.fetchStatus() !== 'paused',
+    );
+
     this.#updateStaleTimeout();
     this.#updateRefetchInterval();
+
+    if (shouldFetchOnOptionsUpdate) {
+      untrack(() => {
+        void this.#refetchObserverQuery();
+      });
+    }
+
     this.#notify();
   }
 

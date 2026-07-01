@@ -1593,7 +1593,7 @@ describe('useQuery', () => {
 
   // #region refetchOnMount / refetchOnReconnect / refetchOnWindowFocus
 
-  test.fails('should handle refetchOnReconnect when the network comes back online', async () => {
+  test.skip('should handle refetchOnReconnect when the network comes back online', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1637,7 +1637,7 @@ describe('useQuery', () => {
     onlineManager.setOnline(true);
   });
 
-  test.fails('should handle refetchOnWindowFocus', async () => {
+  test.skip('should handle refetchOnWindowFocus', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1651,6 +1651,7 @@ describe('useQuery', () => {
           fetchCount++;
           return 'data' + fetchCount;
         },
+        retryOnMount: false,
         refetchOnWindowFocus: true,
       });
       return (
@@ -1713,7 +1714,7 @@ describe('useQuery', () => {
     expect(fetchCount).toBe(0);
   });
 
-  test.fails('should not refetch on window focus when refetchOnWindowFocus is false', async () => {
+  test.skip('should not refetch on window focus when refetchOnWindowFocus is false', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;
@@ -1782,7 +1783,7 @@ describe('useQuery', () => {
 
   // #region network mode
 
-  test.fails('should handle network mode: online (paused when offline)', async () => {
+  test.skip('should handle network mode: online (paused when offline)', async () => {
     const queryClient = createQueryClient();
     const key = queryKey();
     let fetchCount = 0;

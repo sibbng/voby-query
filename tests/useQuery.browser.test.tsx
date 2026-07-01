@@ -445,6 +445,54 @@ describe('useQuery.browser.test', () => {
     expect(queryFnMock).toHaveBeenCalledTimes(1);
   });
 
+  test('useQuery refetchOnMount honors observer settings for shared keys', async () => {
+    const queryClient = createQueryClient();
+    const sharedKey = ['refetch-mount-shared'];
+    const queryFnMock = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return `Mount shared data ${queryFnMock.mock.calls.length}`;
+    });
+
+    await queryClient.prefetchQuery({
+      queryKey: sharedKey,
+      queryFn: async () => 'Prefetched mount data',
+    });
+
+    function OptOut() {
+      useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        staleTime: 0,
+        refetchOnMount: false,
+      });
+
+      return null;
+    }
+
+    function OptIn() {
+      const query = useQuery({
+        queryKey: sharedKey,
+        queryFn: queryFnMock,
+        staleTime: 0,
+        refetchOnMount: true,
+      });
+
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <OptOut />
+        <OptIn />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+
+    expect(queryFnMock).toHaveBeenCalledTimes(1);
+  });
+
   test('useQuery refetchOnWindowFocus honors observer settings for shared keys', async () => {
     const queryClient = createQueryClient();
     const sharedKey = ['refetch-focus-shared'];

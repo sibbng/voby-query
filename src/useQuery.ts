@@ -1,8 +1,9 @@
-import { $, useCleanup, useMemo, untrack } from 'voby';
+import { $, useCleanup, useEffect, useMemo, untrack } from 'voby';
 import { useQueryClient } from './queryClient.ts';
 import { QueryObserver } from './queryObserver.ts';
 import type { QueryClient as QC, QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 import { CancelledError } from './query.ts';
+import { hashQueryKeyByOptions } from './utils.ts';
 
 export { CancelledError } from './query.ts';
 export type {
@@ -31,21 +32,45 @@ export function useQuery<
 ): UseQueryResult<Awaited<TData>, TError> {
   const client = useQueryClient(queryClient ?? options.queryClient);
   const lastData = $<TQueryFnData | undefined>();
+  const observerQueryHash = useMemo(() => {
+    const queryDefaults = client.getQueryDefaults(options.queryKey) as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey
+    >;
+    const queryKeyHashFn =
+      options.queryKeyHashFn ??
+      queryDefaults.queryKeyHashFn ??
+      client.getDefaultOptions().queries.queryKeyHashFn;
+
+    return hashQueryKeyByOptions(options.queryKey, { queryKeyHashFn });
+  });
 
   const observer = useMemo(() => {
-    const q = client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options);
+    observerQueryHash();
+    const q = untrack(() =>
+      client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options),
+    );
     useCleanup((q as any).addInstance());
-    const obs = new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, options);
+    const obs = untrack(
+      () => new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, options),
+    );
     useCleanup(obs.subscribe(() => {}));
     useCleanup(() => obs.destroy());
     return obs;
+  });
+
+  useEffect(() => {
+    client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options);
+    observer().setOptions(options);
   });
 
   return useMemo(() => {
     const obs = observer();
     const currentQuery = obs.query;
     const state = currentQuery.state;
-    const obsOptions = currentQuery.resolvedOptions;
+    const obsOptions = obs.resolvedOptions;
 
     // Snapshot the update counts at mount time so isFetchedAfterMount
     // reflects fetches that happened *after* this observer mounted.

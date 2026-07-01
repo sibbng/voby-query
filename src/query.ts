@@ -94,7 +94,6 @@ export type Query<
   reset: () => void;
   scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
   isCancelled: boolean;
-  prevEnabled?: boolean;
   inactiveCleanup?: () => void;
   fetchMachine: MachineInstance<FetchState, FetchEvent>;
 };
@@ -282,7 +281,6 @@ export const createQuery = <
     retryDisposer: () => {},
     fetchPromise: undefined,
     revertState: undefined,
-    prevEnabled: undefined as boolean | undefined,
     fetchMachine: undefined as any,
     isStaleByTime: (staleTime) => {
       if (query.state.data() === undefined) return true;
@@ -296,28 +294,7 @@ export const createQuery = <
       untrack(async () => {
         const isOnline = onlineManager.isOnline();
         const networkMode = query.resolvedOptions.networkMode;
-        const shouldSkipDueToNetworkMode = networkMode === 'online' && !isOnline;
 
-        if (query.resolvedOptions.enabled) {
-          const wasDisabled = query.prevEnabled === false;
-          query.prevEnabled = true;
-          const shouldRefetch = (() => {
-            if (wasDisabled) return true;
-            const refetchOnMount = query.resolvedOptions.refetchOnMount;
-            if (typeof refetchOnMount === 'function') {
-              return refetchOnMount(query);
-            }
-            if (refetchOnMount === 'always') return true;
-            if (refetchOnMount === false && !query.state.isPending()) return false;
-            if (query.state.isStale() || query.state.isPending()) return true;
-            return false;
-          })();
-          if (shouldRefetch && !shouldSkipDueToNetworkMode) {
-            await query.refetch();
-          }
-        } else {
-          query.prevEnabled = false;
-        }
         if (query.state.fetchStatus() !== 'fetching') {
           const shouldBePaused = networkMode === 'online' ? !isOnline : false;
           query.state.fetchStatus(shouldBePaused ? 'paused' : 'idle');
