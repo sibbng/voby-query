@@ -2421,7 +2421,9 @@ describe('useQuery', () => {
       return (
         <div>
           <button onClick={() => show(!show())}>{() => (show() ? 'hide' : 'show')}</button>
-          <button onClick={() => void queryClient.cancelQueries({ queryKey: key })}>cancel</button>
+          <button onClick={() => queryClient.cancelQueries({ queryKey: key }).catch(() => {})}>
+            cancel
+          </button>
           {() => (show() ? <Page /> : null)}
         </div>
       );
