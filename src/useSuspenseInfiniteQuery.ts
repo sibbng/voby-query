@@ -11,10 +11,12 @@ import { ensureSuspenseTimers } from './utils.ts';
 import type {
   InfiniteData,
   InfiniteQueryDirection,
+  InfiniteQueryFetchPageOptions,
   InfiniteQueryOptions,
   QueryClient as QC,
   QueryKey,
   UseSuspenseInfiniteQueryResult,
+  UseSuspenseInfiniteQueryResultValue,
 } from './types.ts';
 import { useQueryClient } from './queryClient.ts';
 
@@ -113,9 +115,9 @@ export function useSuspenseInfiniteQuery<
 
     const fetchPage = async (
       direction: InfiniteQueryDirection,
-      fetchOptions: { cancelRefetch?: boolean } = {},
+      fetchOptions?: InfiniteQueryFetchPageOptions,
     ) => {
-      const { cancelRefetch = true } = fetchOptions;
+      const { cancelRefetch = true } = fetchOptions ?? {};
       const data = state.data();
 
       if (direction === 'forward' && data && !hasNextPage(options, data)) return;
@@ -146,7 +148,10 @@ export function useSuspenseInfiniteQuery<
 
     const { isPlaceholderData: _isPlaceholderData, ...rest } = state;
 
-    return Object.freeze({
+    const result: UseSuspenseInfiniteQueryResultValue<
+      Awaited<InfiniteData<TQueryFnData, TPageParam>>,
+      TError
+    > = {
       ...rest,
       data: useMemo(() => {
         const currentData = state.data();
@@ -165,15 +170,14 @@ export function useSuspenseInfiniteQuery<
       isFetchingPreviousPage: useMemo(
         () => state.isFetching() && fetchingDirection() === 'backward',
       ),
-      fetchNextPage: (fetchOptions?: { cancelRefetch?: boolean }) =>
+      fetchNextPage: (fetchOptions?: InfiniteQueryFetchPageOptions) =>
         fetchPage('forward', fetchOptions),
-      fetchPreviousPage: (fetchOptions?: { cancelRefetch?: boolean }) =>
+      fetchPreviousPage: (fetchOptions?: InfiniteQueryFetchPageOptions) =>
         fetchPage('backward', fetchOptions),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
-    });
-  }) as unknown as UseSuspenseInfiniteQueryResult<
-    Awaited<InfiniteData<TQueryFnData, TPageParam>>,
-    TError
-  >;
+    };
+
+    return Object.freeze(result);
+  });
 }

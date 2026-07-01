@@ -7,6 +7,7 @@ import type {
   QueryOptions,
   UseSuspenseQueryOptions,
   UseSuspenseQueryResult,
+  UseSuspenseQueryResultValue,
 } from './types.ts';
 import { ensureSuspenseTimers } from './utils.ts';
 
@@ -75,7 +76,7 @@ export function useSuspenseQuery<
     resource().value;
     const { isPlaceholderData: _isPlaceholderData, ...rest } = stateObservable;
 
-    return Object.freeze({
+    const result: UseSuspenseQueryResultValue<Awaited<TData>, TError> = {
       ...rest,
       data: useMemo(() => {
         const currentData = stateObservable.data();
@@ -88,6 +89,8 @@ export function useSuspenseQuery<
       }),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
-    });
-  }) as unknown as UseSuspenseQueryResult<Awaited<TData>, TError>;
+    };
+
+    return Object.freeze(result);
+  });
 }

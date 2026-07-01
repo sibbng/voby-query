@@ -569,7 +569,7 @@ export type QueryClient = {
 type UseQueryResultMethods<TData = unknown> = {
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
   cancel: (options?: CancelOptions) => Promise<void>;
-  promise: () => Promise<TData>;
+  promise?: () => Promise<TData>;
 };
 
 export type UseQueriesOptions<T extends Array<any>, TCombinedResult = QueriesResults<T>> = {
@@ -590,7 +590,7 @@ export type QueriesResults<T extends Array<any>> = {
   [K in keyof T]: QueriesResultItem;
 };
 
-type UseQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
+export type UseQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
   UseQueryResultMethods<TData>;
 
 export type UseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
@@ -607,7 +607,7 @@ export type UseSuspenseQueryOptions<
   'enabled' | 'placeholderData' | 'throwOnError'
 >;
 
-type UseSuspenseQueryResultValue<TData, TError = Error> = Omit<
+export type UseSuspenseQueryResultValue<TData, TError = Error> = Omit<
   UseQueryResultValue<TData, TError>,
   'isPlaceholderData'
 >;
@@ -626,7 +626,7 @@ export type UseSuspenseInfiniteQueryOptions<
   'enabled' | 'placeholderData' | 'throwOnError'
 >;
 
-type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
+export type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
   UseInfiniteQueryResultValue<TData, TError>,
   'isPlaceholderData'
 >;
@@ -659,7 +659,7 @@ export type UsePrefetchInfiniteQueryOptions<
   queryFn?: (ctx: InfiniteQueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>;
 };
 
-type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
+export type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
 type UseInfiniteQueryResultMethods<TData = unknown> = UseQueryResultMethods<TData> & {
   fetchNextPage: (options?: InfiniteQueryFetchPageOptions) => Promise<void>;
@@ -670,7 +670,7 @@ type UseInfiniteQueryResultMethods<TData = unknown> = UseQueryResultMethods<TDat
   isFetchingPreviousPage: ObservableReadonly<boolean>;
 };
 
-type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
+export type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
   UseInfiniteQueryResultMethods<TData>;
 
 export type UseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
