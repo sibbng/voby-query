@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
 import { $, Suspense } from 'voby';
-import { createQueryClient, usePrefetchQuery, useSuspenseQuery } from '../src';
+import { QueryClient, usePrefetchQuery, useSuspenseQuery } from '../src';
 import { QueryClientProvider } from '../src/context';
 
 describe('usePrefetchQuery.browser.test', () => {
@@ -14,7 +14,7 @@ describe('usePrefetchQuery.browser.test', () => {
   });
 
   test('usePrefetchQuery populates the cache', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function PrefetchComponent() {
       usePrefetchQuery({
@@ -44,7 +44,7 @@ describe('usePrefetchQuery.browser.test', () => {
   });
 
   test('usePrefetchQuery does not re-fetch when data is already cached', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['prefetch-no-refetch'],
@@ -81,7 +81,7 @@ describe('usePrefetchQuery.browser.test', () => {
   });
 
   test('usePrefetchQuery before Suspense provides cached data on retry', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function PrefetchLayer() {
       usePrefetchQuery({
@@ -128,7 +128,7 @@ describe('usePrefetchQuery.browser.test', () => {
   });
 
   test('usePrefetchQuery re-fetches reactively when queryKey changes', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const id = $(1);
     const fetchLog: number[] = [];
 

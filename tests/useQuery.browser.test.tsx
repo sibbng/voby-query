@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
-import { createQueryClient, keepPreviousData } from '../src';
+import { QueryClient, keepPreviousData } from '../src';
 import { useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
 import { For, If, $, useMemo } from 'voby';
@@ -15,7 +15,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery with provider', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const query = useQuery({
@@ -53,7 +53,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery staleTime behavior', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     let fetchCount = 0;
     function TestComponent() {
@@ -104,7 +104,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery enabled option: starts disabled, then enabled', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       return 'Data when enabled';
     });
@@ -145,7 +145,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery enabled option: starts enabled, then disabled', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return 'Data initially enabled';
@@ -193,7 +193,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery initialData option', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return 'Fetched data';
@@ -239,7 +239,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery placeholderData option', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       return 'Actual fetched data';
@@ -277,7 +277,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery select option', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const originalData = { id: 1, name: 'Original Name', value: 100 };
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -313,7 +313,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery gcTime (garbage collection with component unmount)', async () => {
-    const queryClient = createQueryClient({
+    const queryClient = new QueryClient({
       defaultOptions: {
         queries: {
           gcTime: 50,
@@ -361,7 +361,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchOnWindowFocus: true (default)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return `Data fetched at ${Date.now()}`;
@@ -407,7 +407,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchOnWindowFocus: false', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return `Data fetched at ${Date.now()}`;
@@ -446,7 +446,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchOnMount honors observer settings for shared keys', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const sharedKey = ['refetch-mount-shared'];
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -494,7 +494,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchOnWindowFocus honors observer settings for shared keys', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const sharedKey = ['refetch-focus-shared'];
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -559,7 +559,7 @@ describe('useQuery.browser.test', () => {
     'useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true',
     { retry: 3 },
     async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       let fetchCount = 0;
       const abortedSignals: AbortSignal[] = [];
       const resolveFetches = new Map<number, (value: string) => void>();
@@ -650,7 +650,7 @@ describe('useQuery.browser.test', () => {
   );
 
   test('useQuery refetchInterval: data refetches periodically', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return `Interval data ${Date.now()}`;
@@ -691,7 +691,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchInterval: stops if component unmounts', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return `Interval unmount data ${Date.now()}`;
@@ -734,7 +734,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery refetchInterval honors observer settings for shared keys', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const sharedKey = ['refetch-interval-shared'];
     const queryFnMock = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -784,7 +784,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('gcTime cache: remount within and after gcTime', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
     const queryKey = ['gc-test'];
     const gcTime = 1000;
@@ -849,7 +849,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('multiple useQuery instances - unmounting one should not affect the other', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
 
     const sharedQueryKey = 'shared-query-key';
@@ -911,7 +911,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('useQuery dynamic queryKey with observable elements', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const id = $(1);
     const fetchHistory: number[] = [];
 
@@ -953,7 +953,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('Dependent Queries (enabled changes dynamically)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const userId = $(undefined as number | undefined);
 
     let userFetchCount = 0;
@@ -1017,7 +1017,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('Refetching transitions and previous data caching', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
     let resolvePromise: (value: string) => void = () => {};
 
@@ -1087,7 +1087,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('refetch reuses the active request by default', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
     let resolveFetch: (value: string) => void = () => {};
     let refetch: () => Promise<void> = async () => {};
@@ -1135,7 +1135,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('should keep the previous data when placeholderData is set and select fn transform is used', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = 'keep-previous-select-test';
     const idx = $(0);
 
@@ -1183,7 +1183,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('should show the correct data when switching keys with initialData, placeholderData & staleTime', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = 'initialdata-placeholder-staletime';
 
     const ALL_TODOS = [
@@ -1243,7 +1243,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test('should initialize state properly, when initialData is falsy', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = ['initial-data-falsy'];
 
     function Page() {

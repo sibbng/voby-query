@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, expectTypeOf, test, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { CancelledError } from '../src/useQuery';
 
 beforeEach(() => {
@@ -10,13 +10,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>
+const findQuery = (queryClient: QueryClient, key: string) =>
   [...queryClient.getQueryCache().values()].find(
     (q) => Array.isArray(q.resolvedOptions.queryKey) && q.resolvedOptions.queryKey[0] === key,
   );
 
 test('useQuery basic functionality', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const result = await queryClient.fetchQuery({
     queryKey: ['test'],
@@ -33,7 +33,7 @@ test('useQuery basic functionality', async () => {
 });
 
 test('useQuery error handling', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   try {
     await queryClient.fetchQuery({
@@ -51,7 +51,7 @@ test('useQuery error handling', async () => {
 });
 
 test('useQuery refetch', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   const result1 = await queryClient.fetchQuery({
@@ -86,7 +86,7 @@ test('useQuery refetch', async () => {
 });
 
 test('queryClient.prefetchQuery basic functionality', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const queryFnMock = vi.fn(async () => {
     await new Promise((resolve) => setTimeout(resolve, 10)); // Simulate async work
     return 'prefetched data';
@@ -141,7 +141,7 @@ test('queryClient.prefetchQuery basic functionality', async () => {
 });
 
 test('queryClient.removeQueries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const queryKey = ['remove-test'];
   const queryFn = async () => 'data to remove';
 
@@ -162,7 +162,7 @@ test('queryClient.removeQueries', async () => {
 });
 
 test('queryClient.removeQueries disposes detached query state memos', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['dispose-query-state'],
@@ -184,7 +184,7 @@ test('queryClient.removeQueries disposes detached query state memos', async () =
 });
 
 test('queryClient.clear', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const queryKey1 = ['clear-test-1'];
   const queryKey2 = ['clear-test-2'];
   const queryFn1 = async () => 'data 1';
@@ -207,7 +207,7 @@ test('queryClient.clear', async () => {
 });
 
 test('queryClient.clear destroys queries and aborts in-flight fetches', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let abortCount = 0;
 
   queryClient
@@ -235,7 +235,7 @@ test('queryClient.clear destroys queries and aborts in-flight fetches', async ()
 });
 
 test('queryClient.ensureQueryData fetches uncached queries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const queryFnMock = vi.fn(async () => 'ensured data');
 
   const data = await queryClient.ensureQueryData({
@@ -249,7 +249,7 @@ test('queryClient.ensureQueryData fetches uncached queries', async () => {
 });
 
 test('queryClient.fetchQuery deduplicates concurrent requests for the same key', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveFetch: (value: string) => void = () => {};
   const queryFnMock = vi.fn(
     async () =>
@@ -280,7 +280,7 @@ test('queryClient.fetchQuery deduplicates concurrent requests for the same key',
 });
 
 test('concurrent fetch calls preserve the abort controller for cancellation', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
   let rejectFetch: (error: Error) => void = () => {};
 
@@ -326,7 +326,7 @@ test('concurrent fetch calls preserve the abort controller for cancellation', as
 });
 
 test('queryClient.ensureQueryData deduplicates concurrent requests for the same key', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveFetch: (value: string) => void = () => {};
   const queryFnMock = vi.fn(
     async () =>
@@ -357,7 +357,7 @@ test('queryClient.ensureQueryData deduplicates concurrent requests for the same 
 });
 
 test('queryClient matches partial query keys for invalidate and refetch', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -376,7 +376,7 @@ test('queryClient matches partial query keys for invalidate and refetch', async 
 });
 
 test('queryClient matches partial object query keys', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['object-filter', { status: 'open', page: 1 }],
@@ -397,7 +397,7 @@ test('queryClient matches partial object query keys', async () => {
 });
 
 test('queryClient matches partial query keys for removeQueries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['todos', 1],
@@ -420,7 +420,7 @@ test('queryClient matches partial query keys for removeQueries', async () => {
 });
 
 test('queryClient.removeQueries supports type and predicate filters', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['posts', 'active'],
@@ -465,7 +465,7 @@ test('queryClient.removeQueries supports type and predicate filters', async () =
 });
 
 test('queryClient applies partial query defaults', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const queryFnMock = vi.fn(async () => 'defaulted data');
 
   queryClient.setQueryDefaults(['defaults'], { staleTime: 0 });
@@ -483,7 +483,7 @@ test('queryClient applies partial query defaults', async () => {
 });
 
 test('queryClient refetchQueries cancels an in-flight request before fetching again', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
   let abortCount = 0;
 
@@ -518,7 +518,7 @@ test('queryClient refetchQueries cancels an in-flight request before fetching ag
 });
 
 test('queryClient.cancelQueries reverts an in-flight refetch to the previous state', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
   let abortCount = 0;
   let resolveRefetch: (value: string) => void = () => {};
@@ -586,7 +586,7 @@ test('queryClient.cancelQueries reverts an in-flight refetch to the previous sta
 });
 
 test('queryClient.cancelQueries throws CancelledError for initial fetches unless silent', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const firstFetch = queryClient.fetchQuery({
     queryKey: ['cancel-initial'],
@@ -640,7 +640,7 @@ test('queryClient.cancelQueries throws CancelledError for initial fetches unless
 });
 
 test('queryClient isFetching uses partial and exact query-key filters', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveFetch: (value: string) => void = () => {};
 
   const fetchPromise = queryClient.fetchQuery({
@@ -662,7 +662,7 @@ test('queryClient isFetching uses partial and exact query-key filters', async ()
 });
 
 test('queryClient getQueryData and setQueryData expose safe types and direct values', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   expectTypeOf(queryClient.getQueryData<string>(['missing'])).toEqualTypeOf<string | undefined>();
   expect(queryClient.getQueryData<string>(['missing'])).toBeUndefined();
@@ -680,7 +680,7 @@ test('queryClient getQueryData and setQueryData expose safe types and direct val
 });
 
 test('queryClient.setQueryData marks manual writes as fresh successful data', async () => {
-  const queryClient = createQueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: { staleTime: 1000 },
     },
@@ -719,7 +719,7 @@ test('queryClient.setQueryData marks manual writes as fresh successful data', as
 });
 
 test('queryClient.setQueryData ignores undefined updater results', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   queryClient.setQueryData<string>(['missing-undefined'], () => undefined as never);
   expect(queryClient.getQueryData(['missing-undefined'])).toBeUndefined();
@@ -743,7 +743,7 @@ test('queryClient.setQueryData ignores undefined updater results', async () => {
 });
 
 test('failed fetches remain stale and background errors invalidate existing data', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.prefetchQuery({
     queryKey: ['initial-error-stale'],
@@ -787,7 +787,7 @@ test('failed fetches remain stale and background errors invalidate existing data
 // #region staleTime tests
 
 test('staleTime: 0 marks data as stale immediately after fetch', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   await queryClient.fetchQuery({
     queryKey: ['stale-0'],
     queryFn: async () => 'data',
@@ -797,7 +797,7 @@ test('staleTime: 0 marks data as stale immediately after fetch', async () => {
 });
 
 test('staleTime: static — data never goes stale', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   await queryClient.fetchQuery({
     queryKey: ['stale-static'],
     queryFn: async () => 'data',
@@ -807,7 +807,7 @@ test('staleTime: static — data never goes stale', async () => {
 });
 
 test('staleTime: Infinity — data never goes stale', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   await queryClient.fetchQuery({
     queryKey: ['stale-infinity'],
     queryFn: async () => 'data',
@@ -817,7 +817,7 @@ test('staleTime: Infinity — data never goes stale', async () => {
 });
 
 test('staleTime: function — computes staleTime and marks data as not stale when static returned', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const staleTimeFn = vi.fn(() => 'static' as const);
 
   await queryClient.fetchQuery({
@@ -831,7 +831,7 @@ test('staleTime: function — computes staleTime and marks data as not stale whe
 });
 
 test('staleTime: function — computes staleTime and marks data as stale when 0 returned', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   await queryClient.fetchQuery({
     queryKey: ['stale-fn-0'],
     queryFn: async () => 'data',
@@ -843,7 +843,7 @@ test('staleTime: function — computes staleTime and marks data as stale when 0 
 // #region gcTime tests
 
 test('gcTime: Infinity — scheduleDestroy does not destroy the cache entry', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   await queryClient.fetchQuery({
     queryKey: ['gc-infinity'],
     queryFn: async () => 'gc data',
@@ -868,7 +868,7 @@ test(
     },
   },
   async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let callCount = 0;
 
     const fetchPromise = queryClient.fetchQuery({
@@ -891,7 +891,7 @@ test(
 );
 
 test('retry: function — called with failureCount (0-based) and error', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const thrownError = new Error('fail');
   const retryFn = vi.fn((_failureCount: number, _error: unknown) => true);
 
@@ -913,7 +913,7 @@ test('retry: function — called with failureCount (0-based) and error', async (
 });
 
 test('retry: function — stops retrying when it returns false', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   const fetchPromise = queryClient.fetchQuery({
@@ -934,7 +934,7 @@ test('retry: function — stops retrying when it returns false', async () => {
 });
 
 test('retryDelay: function — called with attempt number and error', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const retryDelayFn = vi.fn((_attempt: number, _error: unknown) => 0);
 
   const fetchPromise = queryClient.fetchQuery({

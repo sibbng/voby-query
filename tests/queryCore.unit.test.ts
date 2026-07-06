@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { CancelledError } from '../src/useQuery';
 import { QueryCache } from '../src/queryCache';
 
@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: string) =>
+const findQuery = (queryClient: QueryClient, key: string) =>
   [...queryClient.getQueryCache().values()].find(
     (q) => Array.isArray(q.resolvedOptions.queryKey) && q.resolvedOptions.queryKey[0] === key,
   );
@@ -21,7 +21,7 @@ const findQuery = (queryClient: ReturnType<typeof createQueryClient>, key: strin
 // ──────────────────────────────────────
 
 test('initialData sets initial state to success with data', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['initial-data-success'],
@@ -37,7 +37,7 @@ test('initialData sets initial state to success with data', async () => {
 });
 
 test('initialDataUpdatedAt: 0 makes initial data stale', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['initial-data-stale'],
@@ -51,7 +51,7 @@ test('initialDataUpdatedAt: 0 makes initial data stale', async () => {
 });
 
 test('isPlaceholderData is true while query is pending with placeholderData set', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveFetch: (value: string) => void = () => {};
 
   const query = queryClient.cache.build(queryClient, {
@@ -76,7 +76,7 @@ test('isPlaceholderData is true while query is pending with placeholderData set'
 });
 
 test('isPlaceholderData is false when placeholderData is not set', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const query = queryClient.cache.build(queryClient, {
     queryKey: ['no-placeholder'],
@@ -91,7 +91,7 @@ test('isPlaceholderData is false when placeholderData is not set', async () => {
 // ──────────────────────────────────────
 
 test('invalidateQueries with refetchType: none marks stale but does not refetch', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -114,7 +114,7 @@ test('invalidateQueries with refetchType: none marks stale but does not refetch'
 });
 
 test('invalidateQueries with refetchType: inactive refetches inactive queries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -139,7 +139,7 @@ test('invalidateQueries with refetchType: inactive refetches inactive queries', 
 });
 
 test('invalidateQueries with refetchType: active does not refetch inactive queries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -165,7 +165,7 @@ test('invalidateQueries with refetchType: active does not refetch inactive queri
 });
 
 test('invalidateQueries with refetchType: all refetches inactive queries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -190,7 +190,7 @@ test('invalidateQueries with refetchType: all refetches inactive queries', async
 // ──────────────────────────────────────
 
 test('cancel with silent: true does not throw CancelledError', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let rejectFetch: (error: Error) => void = () => {};
 
   const query = queryClient.cache.build(queryClient, {
@@ -209,7 +209,7 @@ test('cancel with silent: true does not throw CancelledError', async () => {
 });
 
 test('cancel with revert: true restores previous data state', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveRefetch: (value: string) => void = () => {};
 
   await queryClient.fetchQuery({
@@ -238,7 +238,7 @@ test('cancel with revert: true restores previous data state', async () => {
 });
 
 test('cancel with revert: false does not revert state', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const query = queryClient.cache.build(queryClient, {
     queryKey: ['cancel-no-revert'],
@@ -259,7 +259,7 @@ test('cancel with revert: false does not revert state', async () => {
 });
 
 test('cancelQueries with revert: true on initial fetch throws CancelledError', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const firstFetch = queryClient.fetchQuery({
     queryKey: ['cancel-initial-revert'],
@@ -288,7 +288,7 @@ test('cancelQueries with revert: true on initial fetch throws CancelledError', a
 // ──────────────────────────────────────
 
 test('reset from success returns to pending state', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['reset-success'],
@@ -307,7 +307,7 @@ test('reset from success returns to pending state', async () => {
 });
 
 test('reset from error clears error and returns to pending', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.prefetchQuery({
     queryKey: ['reset-error'],
@@ -327,7 +327,7 @@ test('reset from error clears error and returns to pending', async () => {
 });
 
 test('reset clears isInvalidated flag', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['reset-invalidated'],
@@ -352,7 +352,7 @@ test('reset clears isInvalidated flag', async () => {
 // ──────────────────────────────────────
 
 test('setQueryData with updater function', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['set-data-updater'],
@@ -364,7 +364,7 @@ test('setQueryData with updater function', async () => {
 });
 
 test('setQueryData with undefined updater result is a no-op', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['set-data-undefined'],
@@ -376,7 +376,7 @@ test('setQueryData with undefined updater result is a no-op', async () => {
 });
 
 test('setQueryData with structuralSharing: false returns fresh reference', async () => {
-  const queryClient = createQueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: { structuralSharing: false },
     },
@@ -398,7 +398,7 @@ test('setQueryData with structuralSharing: false returns fresh reference', async
 
 test('setQueryData with custom structuralSharing function', async () => {
   const customFn = vi.fn((_oldData: unknown, newData: unknown) => newData);
-  const queryClient = createQueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: { structuralSharing: customFn as any },
     },
@@ -418,7 +418,7 @@ test('setQueryData with custom structuralSharing function', async () => {
 // ──────────────────────────────────────
 
 test('isLoading is true only when status is pending and fetchStatus is fetching', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const query = queryClient.cache.build(queryClient, {
     queryKey: ['is-loading'],
@@ -441,7 +441,7 @@ test('isLoading is true only when status is pending and fetchStatus is fetching'
 });
 
 test('isRefetching is true when fetching and status is success', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let resolveRefetch: (value: string) => void = () => {};
 
   await queryClient.fetchQuery({
@@ -472,7 +472,7 @@ test('isRefetching is true when fetching and status is success', async () => {
 });
 
 test('isFetched is true after first success', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   const query = queryClient.cache.build(queryClient, {
     queryKey: ['is-fetched'],
@@ -486,7 +486,7 @@ test('isFetched is true after first success', async () => {
 });
 
 test('isLoadingError is true when initial fetch fails', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.prefetchQuery({
     queryKey: ['loading-error'],
@@ -503,7 +503,7 @@ test('isLoadingError is true when initial fetch fails', async () => {
 });
 
 test('isRefetchError is true when refetch fails after previous success', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['refetch-error'],
@@ -528,7 +528,7 @@ test('isRefetchError is true when refetch fails after previous success', async (
 // ──────────────────────────────────────
 
 test('cache.subscribe fires added when a new query is built', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const events: string[] = [];
 
   queryClient.getQueryCache().subscribe((event) => {
@@ -544,7 +544,7 @@ test('cache.subscribe fires added when a new query is built', async () => {
 });
 
 test('cache.subscribe fires updated on setQueryData', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const events: string[] = [];
 
   await queryClient.fetchQuery({
@@ -561,7 +561,7 @@ test('cache.subscribe fires updated on setQueryData', async () => {
 });
 
 test('cache.subscribe fires removed on removeQueries', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   const events: string[] = [];
 
   await queryClient.fetchQuery({
@@ -581,7 +581,7 @@ test('cache.config.onSuccess callback fires on successful fetch', async () => {
   const onSuccess = vi.fn();
   const cache = new QueryCache({ onSuccess });
 
-  const queryClient = createQueryClient({ queryCache: cache as any });
+  const queryClient = new QueryClient({ queryCache: cache as any });
 
   await queryClient.fetchQuery({
     queryKey: ['on-success-cb'],
@@ -593,7 +593,7 @@ test('cache.config.onSuccess callback fires on successful fetch', async () => {
 });
 
 test('cache.findAll filters by stale option', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['filter-stale-yes'],
@@ -624,7 +624,7 @@ test('cache.findAll filters by stale option', async () => {
 // ──────────────────────────────────────
 
 test('refetch with throwOnError: true rethrows fetch error', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['throw-on-refetch'],
@@ -641,7 +641,7 @@ test('refetch with throwOnError: true rethrows fetch error', async () => {
 });
 
 test('staleTime: static — invalidateQueries does not refetch', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
   let callCount = 0;
 
   await queryClient.fetchQuery({
@@ -659,7 +659,7 @@ test('staleTime: static — invalidateQueries does not refetch', async () => {
 });
 
 test('staleTime: Infinity — data never goes stale', async () => {
-  const queryClient = createQueryClient();
+  const queryClient = new QueryClient();
 
   await queryClient.fetchQuery({
     queryKey: ['stale-infinity'],

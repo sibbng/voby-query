@@ -6,6 +6,7 @@ import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
 import type { Mutation } from './mutation.ts';
 import type {
+  CancelOptions,
   InferDataFromTag,
   InferErrorFromTag,
   InfiniteData,
@@ -15,7 +16,6 @@ import type {
   MutationKey,
   MutationOptions,
   QueryCache,
-  QueryClient,
   QueryFilters,
   QueryKey,
   QueryOptions,
@@ -28,7 +28,7 @@ import { functionalUpdate, hashFn, noop, partialMatchKey } from './utils.ts';
 
 type QueryLike = Query<any, any, any, any>;
 
-export type CreateQueryClientOptions = {
+export type QueryClientConfig = {
   queryCache?: QueryCache | Map<string, QueryLike>;
   mutationCache?: MutationCache | Map<string, Mutation<any, any, any, any>>;
   jobQueue?: Map<string, number[]>;
@@ -38,7 +38,7 @@ export type CreateQueryClientOptions = {
   };
 };
 
-export const createQueryClient = (options?: CreateQueryClientOptions): QueryClient => {
+const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   const queryDefaults = {
     queryKeyHashFn: hashFn,
     enabled: true,
@@ -530,7 +530,7 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     mutationCache.clear();
   };
 
-  const queryClient: QueryClient = {
+  const queryClient = {
     setDefaultOptions,
     getDefaultOptions,
     setQueryDefaults,
@@ -563,10 +563,119 @@ export const createQueryClient = (options?: CreateQueryClientOptions): QueryClie
     jobQueue,
     startQueueJob,
     finishQueueJob,
-  };
+  } as QueryClient;
 
   return queryClient;
 };
+
+export class QueryClient {
+  declare cache: QueryCache;
+  declare mutationCache: MutationCache;
+  declare jobQueue: Map<string, number[]>;
+  declare startQueueJob: (queueKey: string) => void;
+  declare finishQueueJob: (queueKey: string) => void;
+  declare getQueryData: <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => TInferredQueryFnData | undefined;
+  declare setQueryData: <
+    TQueryFnData = unknown,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+    data:
+      | TInferredQueryFnData
+      | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
+  ) => void;
+  declare getQueryState: <
+    TQueryFnData = unknown,
+    TError = Error,
+    TTaggedQueryKey extends QueryKey = QueryKey,
+    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
+    TInferredError = InferErrorFromTag<TError, TTaggedQueryKey>,
+  >(
+    queryKey: TTaggedQueryKey,
+  ) => QueryState<TInferredQueryFnData, TInferredError> | undefined;
+  declare invalidateQueries: (
+    filters?: QueryFilters & {
+      refetchType?: 'active' | 'inactive' | 'all' | 'none';
+    },
+    options?: QueryRefetchOptions,
+  ) => Promise<void>;
+  declare ensureQueryData: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
+  ) => Promise<TData>;
+  declare ensureInfiniteQueryData: <
+    TQueryFnData,
+    TError = Error,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
+  declare fetchQuery: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
+  ) => Promise<TData>;
+  declare fetchInfiniteQuery: <
+    TQueryFnData,
+    TError = Error,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
+  declare prefetchQuery: <TQueryFnData, TData = TQueryFnData>(
+    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
+  ) => Promise<void>;
+  declare prefetchInfiniteQuery: <
+    TQueryFnData,
+    TError = Error,
+    TQueryKey extends QueryKey = QueryKey,
+    TPageParam = unknown,
+  >(
+    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+  ) => Promise<void>;
+  declare getQueriesData: <TQueryFnData = unknown>(
+    filters: QueryFilters,
+  ) => Array<[QueryKey, TQueryFnData | undefined]>;
+  declare setQueriesData: <TQueryFnData>(
+    filters: QueryFilters,
+    updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
+    options?: SetDataOptions,
+  ) => void;
+  declare refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
+  declare cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
+  declare removeQueries: (filters?: QueryFilters) => void;
+  declare resetQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
+  declare isFetching: (filters?: QueryFilters) => number;
+  declare isMutating: (filters?: MutationFilters) => number;
+  declare getQueryCache: () => QueryCache;
+  declare getMutationCache: () => MutationCache;
+  declare clear: () => void;
+  declare getDefaultOptions: () => {
+    queries: Omit<QueryOptions, 'queryKey'>;
+    mutations: MutationOptions;
+  };
+  declare setDefaultOptions: (options: {
+    queries?: Partial<Omit<QueryOptions, 'queryKey'>>;
+    mutations?: Partial<MutationOptions>;
+  }) => void;
+  declare getQueryDefaults: (queryKey: QueryKey) => Partial<QueryOptions>;
+  declare setQueryDefaults: (queryKey: QueryKey, defaults: Partial<QueryOptions>) => void;
+  declare getMutationDefaults: (mutationKey?: MutationKey) => Partial<MutationOptions>;
+  declare setMutationDefaults: (
+    mutationKey: MutationKey,
+    defaults: Partial<MutationOptions>,
+  ) => void;
+
+  constructor(options: QueryClientConfig = {}) {
+    Object.assign(this, buildQueryClient(options));
+  }
+}
 
 export function useQueryClient(queryClient?: QueryClient) {
   const client = queryClient ?? useContext(QueryClientContext);

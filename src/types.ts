@@ -1,9 +1,11 @@
 import type { FunctionMaybe, Observable, ObservableMaybe, ObservableReadonly } from 'voby';
 import type { MutationCache as GenericMutationCache } from './mutationCache.ts';
+import type { QueryClient } from './queryClient.ts';
 import type { QueryCache as GenericQueryCache } from './queryCache.ts';
 
 export type QueryCache = GenericQueryCache;
 export type MutationCache = GenericMutationCache;
+export type { QueryClient } from './queryClient.ts';
 
 export type CancelOptions = {
   silent?: boolean;
@@ -462,108 +464,6 @@ export type MutateOptions<
     variables: TVariables,
     context: TContext | undefined,
   ) => void;
-};
-
-export type QueryClient = {
-  cache: QueryCache;
-  mutationCache: MutationCache;
-  jobQueue: Map<string, number[]>;
-  startQueueJob: (queueKey: string) => void;
-  finishQueueJob: (queueKey: string) => void;
-  getQueryData: <
-    TQueryFnData = unknown,
-    TTaggedQueryKey extends QueryKey = QueryKey,
-    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
-  >(
-    queryKey: TTaggedQueryKey,
-  ) => TInferredQueryFnData | undefined;
-  setQueryData: <
-    TQueryFnData = unknown,
-    TTaggedQueryKey extends QueryKey = QueryKey,
-    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
-  >(
-    queryKey: TTaggedQueryKey,
-    data:
-      | TInferredQueryFnData
-      | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
-  ) => void;
-  getQueryState: <
-    TQueryFnData = unknown,
-    TError = Error,
-    TTaggedQueryKey extends QueryKey = QueryKey,
-    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
-    TInferredError = InferErrorFromTag<TError, TTaggedQueryKey>,
-  >(
-    queryKey: TTaggedQueryKey,
-  ) => QueryState<TInferredQueryFnData, TInferredError> | undefined;
-  invalidateQueries: (
-    filters?: QueryFilters & {
-      refetchType?: 'active' | 'inactive' | 'all' | 'none';
-    },
-    options?: QueryRefetchOptions,
-  ) => Promise<void>;
-  ensureQueryData: <TQueryFnData, TData = TQueryFnData>(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
-  ) => Promise<TData>;
-  ensureInfiniteQueryData: <
-    TQueryFnData,
-    TError = Error,
-    TQueryKey extends QueryKey = QueryKey,
-    TPageParam = unknown,
-  >(
-    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
-  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
-  fetchQuery: <TQueryFnData, TData = TQueryFnData>(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
-  ) => Promise<TData>;
-  fetchInfiniteQuery: <
-    TQueryFnData,
-    TError = Error,
-    TQueryKey extends QueryKey = QueryKey,
-    TPageParam = unknown,
-  >(
-    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
-  ) => Promise<InfiniteData<TQueryFnData, TPageParam>>;
-  prefetchQuery: <TQueryFnData, TData = TQueryFnData>(
-    options: QueryOptions<TQueryFnData, unknown, TData, QueryKey>,
-  ) => Promise<void>;
-  prefetchInfiniteQuery: <
-    TQueryFnData,
-    TError = Error,
-    TQueryKey extends QueryKey = QueryKey,
-    TPageParam = unknown,
-  >(
-    options: InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
-  ) => Promise<void>;
-  getQueriesData: <TQueryFnData = unknown>(
-    filters: QueryFilters,
-  ) => Array<[QueryKey, TQueryFnData | undefined]>;
-  setQueriesData: <TQueryFnData>(
-    filters: QueryFilters,
-    updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
-    options?: SetDataOptions,
-  ) => void;
-  refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
-  cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
-  removeQueries: (filters?: QueryFilters) => void;
-  resetQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
-  isFetching: (filters?: QueryFilters) => number;
-  isMutating: (filters?: MutationFilters) => number;
-  getQueryCache: () => QueryCache;
-  getMutationCache: () => MutationCache;
-  clear: () => void;
-  getDefaultOptions: () => {
-    queries: Omit<QueryOptions, 'queryKey'>;
-    mutations: MutationOptions;
-  };
-  setDefaultOptions: (options: {
-    queries?: Partial<Omit<QueryOptions, 'queryKey'>>;
-    mutations?: Partial<MutationOptions>;
-  }) => void;
-  getQueryDefaults: (queryKey: QueryKey) => Partial<QueryOptions>;
-  setQueryDefaults: (queryKey: QueryKey, defaults: Partial<QueryOptions>) => void;
-  getMutationDefaults: (mutationKey?: MutationKey) => Partial<MutationOptions>;
-  setMutationDefaults: (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => void;
 };
 
 type UseQueryResultMethods<TData = unknown> = {

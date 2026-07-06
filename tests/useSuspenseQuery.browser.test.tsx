@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
 import { $, ErrorBoundary, Suspense } from 'voby';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { useSuspenseQuery } from '../src/useSuspenseQuery';
 import { QueryClientProvider } from '../src/context';
 
@@ -22,7 +22,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - suspends when no data, renders after fetch', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
 
     function Suspendable() {
@@ -55,7 +55,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - data is always defined when rendered', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -92,7 +92,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - uses cached data without suspending', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['suspend-cached'],
@@ -125,7 +125,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - error thrown on fetch failure', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -166,7 +166,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - status is success when rendered', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -195,7 +195,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - refetch after mount updates data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
 
     function Suspendable() {
@@ -237,7 +237,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - select transforms data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -267,7 +267,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - no isPlaceholderData property on result', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -299,7 +299,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - staleTime and gcTime are clamped to minimum 1000ms', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -332,7 +332,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - staleTime 0 should not mark query stale immediately (clamped to 1000)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -363,7 +363,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - preserves default gcTime when not provided', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseQuery({
@@ -393,7 +393,7 @@ describe('useSuspenseQuery', () => {
   });
 
   test('useSuspenseQuery - wraps function staleTime to clamp return value', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const staleTimeFn = vi.fn(() => 0);
 
     function Suspendable() {

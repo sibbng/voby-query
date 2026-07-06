@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
 import { $, For, If } from 'voby';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { useQueries } from '../src/useQueries';
 import { QueryClientProvider } from '../src/context';
 
@@ -15,7 +15,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries fetches multiple queries in parallel', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function TestComponent() {
@@ -64,7 +64,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries returns reactive observable objects per query', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function TestComponent() {
@@ -117,7 +117,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries combine transforms the result', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let tickCount = 0;
 
     function TestComponent() {
@@ -172,7 +172,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries select option transforms individual query data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const queries = useQueries({
@@ -221,7 +221,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries placeholderData shown while loading', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const queries = useQueries({
@@ -270,7 +270,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries with one error and one success', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const queries = useQueries({
@@ -323,7 +323,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries reactive query keys trigger re-fetch', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const id = $(1);
     const fetchHistory: number[] = [];
 
@@ -371,7 +371,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries subscribed: false returns initial snapshot only', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let renderCount = 0;
 
     function TestComponent() {
@@ -419,7 +419,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries cache updates propagate to all results', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const queries = useQueries({
@@ -472,7 +472,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries combine receives reactive properties', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const combined = useQueries({
@@ -515,7 +515,7 @@ describe('useQueries.browser.test', () => {
   });
 
   test('useQueries unmount cleanup removes instances', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const show = $(true);
     let fetchCount = 0;
 

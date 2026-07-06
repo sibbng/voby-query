@@ -134,12 +134,12 @@ return (
 );
 ```
 
-### createQueryClient
+### QueryClient
 
 ```ts
-import { createQueryClient, QueryClientProvider } from 'voby-query';
+import { QueryClient, QueryClientProvider } from 'voby-query';
 
-const queryClient = createQueryClient();
+const queryClient = new QueryClient();
 
 // Provide to the component tree
 <QueryClientProvider value={queryClient}>

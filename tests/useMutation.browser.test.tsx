@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render } from './utils';
 import { useMutation, useMutationState } from '../src/useMutation';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { QueryClientProvider } from '../src/context';
 import { $, If } from 'voby';
 
@@ -14,7 +14,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation basic functionality', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
 
     function TestComponent() {
@@ -53,7 +53,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation error handling', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
 
     function TestComponent() {
@@ -93,7 +93,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation reset', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
 
     function TestComponent() {
@@ -130,7 +130,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation onSuccess callback', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onSuccessMock = vi.fn();
     let mutationResult: any;
 
@@ -166,7 +166,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation onError callback', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onErrorMock = vi.fn();
     const testError = new Error('Mutation failed');
     let mutationResult: any;
@@ -206,7 +206,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation onSettled callback (on success)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onSettledMock = vi.fn();
     let mutationResult: any;
 
@@ -243,7 +243,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation onSettled callback (on error)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onSettledMock = vi.fn();
     const testError = new Error('Settled error');
     let mutationResult: any;
@@ -283,7 +283,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation refreshes retry options for an existing mutationKey', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const useRetry = $(false);
     let attempts = 0;
     let mutationResult: any;
@@ -350,7 +350,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation onMutate and context passing', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onMutateMock = vi.fn(async (variables: string) => {
       await new Promise((res) => setTimeout(res, 5)); // Simulate async work in onMutate
       return `Context from ${variables}`;
@@ -453,7 +453,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation concurrent mutate calls behavior', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
     const mutationFnExecutionLog: string[] = [];
 
@@ -542,7 +542,7 @@ describe('useMutation', () => {
   });
 
   test('useMutationState filters by partial observable mutation keys', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const keyPart = $('create');
     const showList = $(false);
     let mutationResult: any;
@@ -597,7 +597,7 @@ describe('useMutation', () => {
   });
 
   test('useMutationState and isMutating support predicate filters', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let createTodoMutation: any;
     let updateTodoMutation: any;
 
@@ -652,7 +652,7 @@ describe('useMutation', () => {
   });
 
   test('useMutationState reactively shows pending count during in-flight mutation', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
 
     function Mutator() {
@@ -695,7 +695,7 @@ describe('useMutation', () => {
   });
 
   test('useMutation stays functional after queryClient.clear()', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const mutation = useMutation<string, Error, string>({
@@ -736,7 +736,7 @@ describe('useMutation', () => {
   });
 
   test('Optimistic Updates with error rollback', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     // Seed the query cache with initial todos
     queryClient.setQueryData<string[]>(['todos'], ['Todo 1', 'Todo 2']);
@@ -835,7 +835,7 @@ describe('useMutation', () => {
   });
 
   test('useMutationState shows pending count for mutation started after queryClient.clear()', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let mutationResult: any;
 
     function Mutator() {

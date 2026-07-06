@@ -63,6 +63,9 @@ export const SuspenseDemo = () => {
   const queryClient = useQueryClient();
   const showPosts = $(false);
   const showFail = $(false);
+  const resetFailingQuery = () => {
+    queryClient.removeQueries({ queryKey: ['suspense-fail'] });
+  };
 
   return (
     <Card>
@@ -94,7 +97,12 @@ export const SuspenseDemo = () => {
             </Btn>
           )
         }
-        <Btn onClick={() => showFail((v) => !v)}>
+        <Btn
+          onClick={() => {
+            resetFailingQuery();
+            showFail((v) => !v);
+          }}
+        >
           {() => (showFail() ? 'Hide error demo' : 'Error demo')}
         </Btn>
       </div>
@@ -118,6 +126,7 @@ export const SuspenseDemo = () => {
                   <p class="text-sm text-red-400/80">{props.error.message}</p>
                   <Btn
                     onClick={() => {
+                      resetFailingQuery();
                       showFail(false);
                       props.reset();
                     }}

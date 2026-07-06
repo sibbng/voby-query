@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src/index.ts';
+import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -12,11 +12,7 @@ afterEach(() => {
 let keyCounter = 0;
 const mutationKey = () => [`mutation_${keyCounter++}`];
 
-const executeMutation = (
-  queryClient: ReturnType<typeof createQueryClient>,
-  options: any,
-  variables: any,
-) => {
+const executeMutation = (queryClient: QueryClient, options: any, variables: any) => {
   const mutation = queryClient.getMutationCache().build(queryClient, {
     throwOnError: true,
     ...options,
@@ -27,7 +23,7 @@ const executeMutation = (
 describe('mutations', () => {
   it('mutate should accept null values', async () => {
     let variables: any;
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     const mutation = queryClient.getMutationCache().build(queryClient, {
       mutationFn: (vars: unknown) => {
@@ -43,7 +39,7 @@ describe('mutations', () => {
   it('setMutationDefaults should be able to set defaults', async () => {
     const key = mutationKey();
     const fn = vi.fn();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     queryClient.setMutationDefaults(key, {
       mutationFn: fn,
@@ -56,7 +52,7 @@ describe('mutations', () => {
   });
 
   it('mutate should throw an error if no mutationFn found', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const mutation = queryClient.getMutationCache().build(queryClient, {
       mutationFn: undefined as any,
       throwOnError: true,
@@ -72,7 +68,7 @@ describe('mutations', () => {
   });
 
   it('mutate should return the result data on success', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     const result = await executeMutation(
       queryClient,
@@ -88,7 +84,7 @@ describe('mutations', () => {
   it('mutations should run and resolve in parallel by default', async () => {
     const key1 = mutationKey();
     const key2 = mutationKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const results: string[] = [];
 
     const p1 = executeMutation(
@@ -127,7 +123,7 @@ describe('mutations', () => {
   describe('callback return types', () => {
     it('should handle all sync callback patterns', async () => {
       const key = mutationKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const results: string[] = [];
 
       await executeMutation(
@@ -163,7 +159,7 @@ describe('mutations', () => {
 
     it('should handle all async callback patterns', async () => {
       const key = mutationKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const results: string[] = [];
 
       await executeMutation(
@@ -198,7 +194,7 @@ describe('mutations', () => {
 
     it('should handle mixed sync/async patterns and return value isolation', async () => {
       const key = mutationKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const results: string[] = [];
 
       const mutationResult = await executeMutation(
@@ -229,7 +225,7 @@ describe('mutations', () => {
 
     it('should handle error cases with all callback patterns', async () => {
       const key = mutationKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const results: string[] = [];
       const newMutationError = new Error('mutation-error');
 

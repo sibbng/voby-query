@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
-import { createQueryClient, keepPreviousData, onlineManager, focusManager } from '../../src';
+import { QueryClient, keepPreviousData, onlineManager, focusManager } from '../../src';
 import { useQuery, CancelledError } from '../../src/useQuery';
 import { QueryClientProvider } from '../../src/context';
 import { $, ErrorBoundary, For, useEffect, tick } from 'voby';
@@ -53,7 +53,7 @@ describe('useQuery', () => {
   });
 
   test('should allow to set default data value', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -78,7 +78,7 @@ describe('useQuery', () => {
   });
 
   test('should return the correct states for a successful query', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -155,7 +155,7 @@ describe('useQuery', () => {
   });
 
   test('should return the correct states for an unsuccessful query', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     const states: Array<any> = [];
@@ -234,7 +234,7 @@ describe('useQuery', () => {
   });
 
   test('should set isFetchedAfterMount to true after a query has been fetched', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     await queryClient.prefetchQuery({ queryKey: key, queryFn: () => 'prefetched' });
@@ -269,7 +269,7 @@ describe('useQuery', () => {
   });
 
   test('should be able to watch a query without providing a query function', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -299,7 +299,7 @@ describe('useQuery', () => {
   });
 
   test('should fetch when refetchOnMount is false and nothing has been fetched yet', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -331,7 +331,7 @@ describe('useQuery', () => {
   });
 
   test('should not fetch when refetchOnMount is false and data has been fetched already', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -363,7 +363,7 @@ describe('useQuery', () => {
   });
 
   test('should refetch fresh query when refetchOnMount is always', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -409,7 +409,7 @@ describe('useQuery', () => {
   });
 
   test('should refetch stale query when refetchOnMount is true', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -461,7 +461,7 @@ describe('useQuery', () => {
   // #region select / placeholderData / initialData
 
   test('should be able to select a part of the data with select', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -494,7 +494,7 @@ describe('useQuery', () => {
   });
 
   test('should use placeholderData when the query is in pending status', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -526,7 +526,7 @@ describe('useQuery', () => {
   });
 
   test('should keep the previous data when placeholderData is set', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -590,7 +590,7 @@ describe('useQuery', () => {
   });
 
   test('placeholder data should run through select', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -642,7 +642,7 @@ describe('useQuery', () => {
   });
 
   test('should transition to error state when placeholderData is set', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -745,7 +745,7 @@ describe('useQuery', () => {
   });
 
   test('placeholder data function result should run through select', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     let placeholderFunctionRunCount = 0;
@@ -804,7 +804,7 @@ describe('useQuery', () => {
   });
 
   test('should keep the previous data on disabled query when placeholderData is set', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -905,7 +905,7 @@ describe('useQuery', () => {
   });
 
   test('should handle initialData', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
 
@@ -936,7 +936,7 @@ describe('useQuery', () => {
   });
 
   test('initialData should set the query to success status and refetch should preserve data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     let fetchCount = 0;
@@ -1006,7 +1006,7 @@ describe('useQuery', () => {
   });
 
   test('should keep the previous data when placeholderData is set and select fn transform is used', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -1074,7 +1074,7 @@ describe('useQuery', () => {
   });
 
   test('should not show initial data from next query if placeholderData is set', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -1150,7 +1150,7 @@ describe('useQuery', () => {
   });
 
   test('select should only run when dependencies change if memoized', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key1 = queryKey();
     let selectRun = 0;
     const count = $(2);
@@ -1194,7 +1194,7 @@ describe('useQuery', () => {
   });
 
   test('select should always return the correct state', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key1 = queryKey();
     const count = $(2);
     const forceValue = $(1);
@@ -1247,7 +1247,7 @@ describe('useQuery', () => {
   });
 
   test('select should structurally share data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key1 = queryKey();
     const states: Array<any> = [];
     const forceValue = $(1);
@@ -1298,7 +1298,7 @@ describe('useQuery', () => {
   // #region enabled
 
   test('should start with status pending, fetchStatus idle if enabled is false', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key1 = queryKey();
     const key2 = queryKey();
 
@@ -1336,7 +1336,7 @@ describe('useQuery', () => {
   });
 
   test('should wait for the query to become enabled before fetching', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const enabled = $(false);
@@ -1386,7 +1386,7 @@ describe('useQuery', () => {
   });
 
   test('should not fetch when switching to a disabled query', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     const count = $(0);
@@ -1432,7 +1432,7 @@ describe('useQuery', () => {
   });
 
   test('should not update disabled query when refetching with refetchQueries', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     let count = 0;
@@ -1476,7 +1476,7 @@ describe('useQuery', () => {
   });
 
   test('should refetch when changed enabled to true in error state', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const queryFn = vi.fn<(...args: Array<unknown>) => unknown>();
     queryFn.mockImplementation(() =>
@@ -1543,7 +1543,7 @@ describe('useQuery', () => {
   // #region staleTime
 
   test('should handle staleTime', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1572,7 +1572,7 @@ describe('useQuery', () => {
   });
 
   test('should update query state and refetch when invalidated with invalidateQueries', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let count = 0;
 
@@ -1627,7 +1627,7 @@ describe('useQuery', () => {
   // #region gcTime
 
   test('should handle gcTime', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -1655,7 +1655,7 @@ describe('useQuery', () => {
   // #region retry
 
   test('should handle retry option', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1693,7 +1693,7 @@ describe('useQuery', () => {
   // #region refetchOnMount / refetchOnReconnect / refetchOnWindowFocus
 
   test('should handle refetchOnReconnect when the network comes back online', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1737,7 +1737,7 @@ describe('useQuery', () => {
   });
 
   test('should handle refetchOnWindowFocus', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1779,7 +1779,7 @@ describe('useQuery', () => {
   });
 
   test('should not refetch on window focus when the query is disabled', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1815,7 +1815,7 @@ describe('useQuery', () => {
   });
 
   test('should not refetch on window focus when refetchOnWindowFocus is false', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1853,7 +1853,7 @@ describe('useQuery', () => {
   });
 
   test('should not refetch on window focus when refetchOnWindowFocus returns false', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1891,7 +1891,7 @@ describe('useQuery', () => {
   });
 
   test('should not refetch fresh query on window focus when refetchOnWindowFocus is true', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1929,7 +1929,7 @@ describe('useQuery', () => {
   });
 
   test('should refetch fresh query on window focus when refetchOnWindowFocus is always', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -1971,7 +1971,7 @@ describe('useQuery', () => {
   });
 
   test('should calculate window focus refetch behavior from a callback', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2011,7 +2011,7 @@ describe('useQuery', () => {
   });
 
   test('should refetch periodically with refetchInterval', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2043,7 +2043,7 @@ describe('useQuery', () => {
   // #region network mode
 
   test('should handle network mode: online (paused when offline)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2086,7 +2086,7 @@ describe('useQuery', () => {
   });
 
   test('should handle network mode: always (fetch even when offline)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2129,7 +2129,7 @@ describe('useQuery', () => {
   // #region throwOnError / CancelledError
 
   test('should throw an error when throwOnError is true', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -2164,7 +2164,7 @@ describe('useQuery', () => {
   });
 
   test('should throw synchronously with throwOnError when query has cached error', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     const options = {
@@ -2213,7 +2213,7 @@ describe('useQuery', () => {
   });
 
   test('should set status to error instead of throwing when throwOnError returns false', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -2253,7 +2253,7 @@ describe('useQuery', () => {
   });
 
   test('should throw to the error boundary when throwOnError returns true', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -2292,7 +2292,7 @@ describe('useQuery', () => {
   });
 
   test('should handle CancelledError when a query is cancelled', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -2329,7 +2329,7 @@ describe('useQuery', () => {
   });
 
   test('should continue retries when observers unmount and remount while waiting for a retry', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let count = 0;
 
@@ -2390,7 +2390,7 @@ describe('useQuery', () => {
   });
 
   test('should restart retries when observers remount after the query was cancelled', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let count = 0;
 
@@ -2460,7 +2460,7 @@ describe('useQuery', () => {
   });
 
   test('should pass the query to retryOnMount callback', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const queryFn = vi.fn().mockRejectedValue(new Error('oops'));
     const retryOnMount = vi.fn((query: any) => query.state.status() !== 'error');
@@ -2502,7 +2502,7 @@ describe('useQuery', () => {
   });
 
   test('should not call retryOnMount callback when the query already has data', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let count = 0;
     const retryOnMount = vi.fn(() => false);
@@ -2569,7 +2569,7 @@ describe('useQuery', () => {
   // #region refetch behavior
 
   test('should refetch when enabled false and refetch is called directly', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2609,7 +2609,7 @@ describe('useQuery', () => {
   });
 
   test('should not cancel an ongoing fetch when refetch is called with cancelRefetch=false if we have data already', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2652,7 +2652,7 @@ describe('useQuery', () => {
   });
 
   test('should cancel an ongoing fetch when refetch is called (cancelRefetch=true) if we have data already', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2695,7 +2695,7 @@ describe('useQuery', () => {
   });
 
   test('should not cancel an ongoing fetch when refetch is called (cancelRefetch=true) if we do not have data yet', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     let fetchCount = 0;
 
@@ -2737,7 +2737,7 @@ describe('useQuery', () => {
   });
 
   test('should update query state and refetch when reset with resetQueries', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const states: Array<any> = [];
     let count = 0;
@@ -2815,7 +2815,7 @@ describe('useQuery', () => {
   // #region query key reactivity
 
   test('should create a new query when the query key changes', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
     const index = $(1);
 
@@ -2859,7 +2859,7 @@ describe('useQuery', () => {
   // #region dependent queries
 
   test('should work with dependent queries', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key1 = queryKey();
     const key2 = queryKey();
 
@@ -2900,7 +2900,7 @@ describe('useQuery', () => {
   // #region For component
 
   test('should work with For component (list rendering)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Item({ id }: { id: number }) {
@@ -2938,7 +2938,7 @@ describe('useQuery', () => {
   // #region queryKeyHashFn
 
   test('should handle queryKeyHashFn option', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const key = queryKey();
 
     function Page() {
@@ -2966,7 +2966,7 @@ describe('useQuery', () => {
   // #region structuralSharing (default)
 
   test('should handle structural sharing of query results', async () => {
-    const queryClient = createQueryClient({
+    const queryClient = new QueryClient({
       defaultOptions: { queries: { structuralSharing: true } as any },
     });
     const key = queryKey();

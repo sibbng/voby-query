@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render } from './utils';
-import { createQueryClient, useIsMutating } from '../src';
+import { QueryClient, useIsMutating } from '../src';
 import { useMutation } from '../src/useMutation';
 import { QueryClientProvider } from '../src/context';
 
@@ -14,7 +14,7 @@ describe('useIsMutating.browser.test', () => {
   });
 
   test('returns 0 when no mutations are pending', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const isMutating = useIsMutating();
@@ -33,7 +33,7 @@ describe('useIsMutating.browser.test', () => {
   });
 
   test('tracks pending mutations reactively', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolveMutate: (value: string) => void = () => {};
     let mutationApi: any;
 
@@ -78,7 +78,7 @@ describe('useIsMutating.browser.test', () => {
   });
 
   test('filters by mutationKey', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolveA: (value: string) => void = () => {};
     let mutationApi: any;
 
@@ -136,8 +136,8 @@ describe('useIsMutating.browser.test', () => {
   });
 
   test('accepts override queryClient', async () => {
-    const queryClient = createQueryClient();
-    const overrideClient = createQueryClient();
+    const queryClient = new QueryClient();
+    const overrideClient = new QueryClient();
 
     function TestComponent() {
       const isMutating = useIsMutating({ queryClient: overrideClient });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src/index.ts';
+import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -12,11 +12,7 @@ afterEach(() => {
 let keyCounter = 0;
 const mutationKey = () => [`mutation_${keyCounter++}`];
 
-const executeMutation = (
-  queryClient: ReturnType<typeof createQueryClient>,
-  options: any,
-  variables: any,
-) => {
+const executeMutation = (queryClient: QueryClient, options: any, variables: any) => {
   const mutation = queryClient.getMutationCache().build(queryClient, {
     throwOnError: true,
     ...options,
@@ -30,7 +26,7 @@ describe('mutationCache', () => {
       const key = mutationKey();
       const onError = vi.fn();
 
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const cache = queryClient.getMutationCache();
 
       await expect(
@@ -55,7 +51,7 @@ describe('mutationCache', () => {
       const key = mutationKey();
       const onSuccess = vi.fn();
 
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await executeMutation(
         queryClient,
@@ -74,7 +70,7 @@ describe('mutationCache', () => {
       const key = mutationKey();
       const onSettled = vi.fn();
 
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await expect(
         executeMutation(
@@ -97,7 +93,7 @@ describe('mutationCache', () => {
       const key = mutationKey();
       const onSettled = vi.fn();
 
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await executeMutation(
         queryClient,
@@ -115,8 +111,8 @@ describe('mutationCache', () => {
 
   describe('find', () => {
     it('should filter correctly', async () => {
-      const testCache = createQueryClient().getMutationCache() as any;
-      const queryClient = createQueryClient();
+      const testCache = new QueryClient().getMutationCache() as any;
+      const queryClient = new QueryClient();
       const key = ['mutation', 'vars'];
 
       await executeMutation(
@@ -138,7 +134,7 @@ describe('mutationCache', () => {
 
   describe('findAll', () => {
     it('should filter correctly', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const testCache = queryClient.getMutationCache() as any;
 
       await executeMutation(
@@ -175,7 +171,7 @@ describe('mutationCache', () => {
 
   describe('remove', () => {
     it('should remove only the target mutation', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const testCache = queryClient.getMutationCache() as any;
 
       const mutation1 = testCache.build(queryClient, {
@@ -196,7 +192,7 @@ describe('mutationCache', () => {
     });
 
     it('should not throw when removing a non-existent mutation', () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const testCache = queryClient.getMutationCache() as any;
 
       const mutation = testCache.build(queryClient, {

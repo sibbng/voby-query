@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
 import { ErrorBoundary, Suspense } from 'voby';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { useSuspenseQueries } from '../src/useSuspenseQueries';
 import { QueryClientProvider } from '../src/context';
 
@@ -22,7 +22,7 @@ describe('useSuspenseQueries', () => {
   });
 
   test('useSuspenseQueries suspends when no data, renders after all resolve', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCountA = 0;
     let fetchCountB = 0;
 
@@ -75,7 +75,7 @@ describe('useSuspenseQueries', () => {
   });
 
   test('useSuspenseQueries uses cached data without suspending', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['susp-cached-a'],
@@ -128,7 +128,7 @@ describe('useSuspenseQueries', () => {
   });
 
   test('useSuspenseQueries error thrown on fetch failure', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const queries = useSuspenseQueries({
@@ -177,7 +177,7 @@ describe('useSuspenseQueries', () => {
   });
 
   test('useSuspenseQueries mixed cached and uncached queries', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['susp-mix-cached'],
@@ -228,7 +228,7 @@ describe('useSuspenseQueries', () => {
   });
 
   test('useSuspenseQueries with combine works after suspension', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const combined = useSuspenseQueries({

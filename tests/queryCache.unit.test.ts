@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryCache } from '../src/queryCache.ts';
-import { createQueryClient } from '../src/index.ts';
+import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -16,7 +16,7 @@ const queryKey = () => [`query_${queryKeyCounter++}`];
 describe('queryCache', () => {
   describe('subscribe', () => {
     it('should pass the correct query', () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       const subscriber = vi.fn();
@@ -28,7 +28,7 @@ describe('queryCache', () => {
     });
 
     it('should include the queryCache and query when notifying listeners', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       const callback = vi.fn();
@@ -42,7 +42,7 @@ describe('queryCache', () => {
     });
 
     it('should notify subscribers when new query with initialData is added', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       const callback = vi.fn();
@@ -56,7 +56,7 @@ describe('queryCache', () => {
     });
 
     it('should fire updated on setQueryData', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       await queryClient.fetchQuery({
@@ -72,7 +72,7 @@ describe('queryCache', () => {
     });
 
     it('should fire removed on removeQueries', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       await queryClient.fetchQuery({
@@ -90,7 +90,7 @@ describe('queryCache', () => {
 
   describe('build', () => {
     it('should compute queryHash from queryKey when queryHash is not provided', () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       const query = queryCache.build(queryClient, { queryKey: key });
@@ -100,7 +100,7 @@ describe('queryCache', () => {
 
   describe('find', () => {
     it('find should filter correctly', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key = queryKey();
       await queryClient.prefetchQuery({
@@ -114,7 +114,7 @@ describe('queryCache', () => {
 
   describe('findAll', () => {
     it('should return all the queries when no filters are defined', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       const key1 = queryKey();
       const key2 = queryKey();
@@ -124,7 +124,7 @@ describe('queryCache', () => {
     });
 
     it('should filter by stale status', async () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
       await queryClient.fetchQuery({
         queryKey: queryKey(),
@@ -148,7 +148,7 @@ describe('queryCache', () => {
       const onSuccess = vi.fn();
       const onSettled = vi.fn();
       const cache = new QueryCache({ onSuccess, onSettled });
-      const queryClient = createQueryClient({ queryCache: cache as any });
+      const queryClient = new QueryClient({ queryCache: cache as any });
       const key = queryKey();
       await queryClient.prefetchQuery({
         queryKey: key,

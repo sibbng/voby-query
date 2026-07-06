@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render } from './utils';
-import { createQueryClient, useIsFetching } from '../src';
+import { QueryClient, useIsFetching } from '../src';
 import { useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
 
@@ -14,7 +14,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('returns 0 when no queries are fetching', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function TestComponent() {
       const isFetching = useIsFetching();
@@ -33,7 +33,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('tracks fetching queries reactively', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolveFetch: (value: string) => void = () => {};
 
     function TestComponent() {
@@ -70,7 +70,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('filters by queryKey prefix', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolvePosts: (value: string) => void = () => {};
     let resolveTodos: (value: string) => void = () => {};
 
@@ -125,7 +125,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('filters by exact queryKey', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolveFetch: (value: string) => void = () => {};
 
     function TestComponent() {
@@ -163,7 +163,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('filter key must match query key prefix (demo bug: fetch-slow filter does not match slow query key)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolveFetch: (value: string) => void = () => {};
 
     function TestComponent() {
@@ -203,7 +203,7 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('prefix filter matches nested keys (demo scenario: fetch-slow includes fetch-slow/*)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let resolve800: (value: string) => void = () => {};
     let resolveSlow: (value: string) => void = () => {};
 
@@ -259,8 +259,8 @@ describe('useIsFetching.browser.test', () => {
   });
 
   test('accepts override queryClient', async () => {
-    const queryClient = createQueryClient();
-    const overrideClient = createQueryClient();
+    const queryClient = new QueryClient();
+    const overrideClient = new QueryClient();
     let _resolveFetch: (value: string) => void = () => {};
 
     function TestComponent() {

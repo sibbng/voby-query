@@ -1,7 +1,7 @@
 import { If } from 'voby';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { QueryClientProvider } from '../src/context';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { useInfiniteQuery } from '../src/useInfiniteQuery';
 import { render } from './utils';
 
@@ -21,7 +21,7 @@ describe('useInfiniteQuery.browser.test', () => {
   });
 
   test('useInfiniteQuery fetches the initial page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function TestComponent() {
@@ -68,7 +68,7 @@ describe('useInfiniteQuery.browser.test', () => {
   });
 
   test('fetchNextPage appends the next page and exposes fetching state', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
     let resolveNextPage!: () => void;
 
@@ -129,7 +129,7 @@ describe('useInfiniteQuery.browser.test', () => {
   });
 
   test('fetchPreviousPage prepends a previous page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function TestComponent() {
@@ -178,7 +178,7 @@ describe('useInfiniteQuery.browser.test', () => {
   });
 
   test('fetchNextPage does not call queryFn when there is no next page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
     let calls = 0;
 
@@ -226,7 +226,7 @@ describe('useInfiniteQuery.browser.test', () => {
   });
 
   test('refetch reloads the loaded page count from the first page param', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
     let generation = 0;
     const seenPageParams: number[] = [];

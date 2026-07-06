@@ -1,7 +1,7 @@
 import { Suspense } from 'voby';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { QueryClientProvider } from '../src/context';
-import { createQueryClient, usePrefetchInfiniteQuery, useSuspenseInfiniteQuery } from '../src';
+import { QueryClient, usePrefetchInfiniteQuery, useSuspenseInfiniteQuery } from '../src';
 import { render, sleep } from './utils';
 
 type Page = {
@@ -19,7 +19,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
   });
 
   test('usePrefetchInfiniteQuery populates the cache with first page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function PrefetchComponent() {
       usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf'], number>({
@@ -52,7 +52,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
   });
 
   test('usePrefetchInfiniteQuery does not re-fetch when already cached', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['prefetch-inf-no-refetch'],
@@ -97,7 +97,7 @@ describe('usePrefetchInfiniteQuery.browser.test', () => {
   });
 
   test('usePrefetchInfiniteQuery before Suspense eliminates waterfall', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function PrefetchLayer() {
       usePrefetchInfiniteQuery<Page, Error, ['prefetch-inf-suspense'], number>({

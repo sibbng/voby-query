@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { ErrorBoundary, Suspense } from 'voby';
 import { QueryClientProvider } from '../src/context';
-import { createQueryClient } from '../src';
+import { QueryClient } from '../src';
 import { useSuspenseInfiniteQuery } from '../src/useSuspenseInfiniteQuery';
 import { render, sleep } from './utils';
 
@@ -20,7 +20,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - suspends when no data, renders after fetch', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let fetchCount = 0;
 
     function Suspendable() {
@@ -65,7 +65,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - data is always defined when rendered', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-defined'], number>({
@@ -96,7 +96,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - uses cached data without suspending', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.fetchQuery({
       queryKey: ['suspend-inf-cached'],
@@ -145,7 +145,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - error thrown on fetch failure', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-error'], number>({
@@ -184,7 +184,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - status is success when rendered', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-status'], number>({
@@ -215,7 +215,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - fetchNextPage appends next page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function Suspendable() {
@@ -268,7 +268,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - fetchPreviousPage prepends a previous page', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
 
     function Suspendable() {
@@ -322,7 +322,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - refetch reloads from first page param', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let result: any;
     let generation = 0;
 
@@ -380,7 +380,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - no isPlaceholderData property on result', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-no-placeholder'], number>({
@@ -423,7 +423,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - staleTime and gcTime are clamped to minimum 1000ms', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-clamp'], number>({
@@ -467,7 +467,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - staleTime 0 should not mark query stale immediately (clamped to 1000)', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-not-stale'], number>({
@@ -511,7 +511,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - preserves default gcTime when not provided', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     function Suspendable() {
       const query = useSuspenseInfiniteQuery<Page, Error, ['suspend-inf-default-gc'], number>({
@@ -554,7 +554,7 @@ describe('useSuspenseInfiniteQuery', () => {
   });
 
   test('useSuspenseInfiniteQuery - wraps function staleTime to clamp return value', async () => {
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const staleTimeFn = vi.fn(() => 0);
 
     function Suspendable() {

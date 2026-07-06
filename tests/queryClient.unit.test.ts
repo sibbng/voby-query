@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src/index.ts';
+import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -18,7 +18,7 @@ describe('queryClient', () => {
       const key = queryKey();
 
       const queryFn = () => Promise.resolve('data');
-      const testClient = createQueryClient({
+      const testClient = new QueryClient({
         defaultOptions: { queries: { queryFn } },
       });
 
@@ -28,14 +28,14 @@ describe('queryClient', () => {
     it('should get defaultOptions', () => {
       const queryFn = () => Promise.resolve('data');
       const defaultOptions = { queries: { queryFn } };
-      const testClient = createQueryClient({ defaultOptions });
+      const testClient = new QueryClient({ defaultOptions });
       expect(testClient.getDefaultOptions()).toMatchObject(defaultOptions);
     });
   });
 
   describe('setDefaultOptions', () => {
     it('should accept queries options without queryKey', () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setDefaultOptions({
         queries: {
           staleTime: 5000,
@@ -49,7 +49,7 @@ describe('queryClient', () => {
     });
 
     it('should accept mutations options', () => {
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const mutationFn = () => Promise.resolve('data');
       queryClient.setDefaultOptions({
         mutations: {
@@ -66,7 +66,7 @@ describe('queryClient', () => {
   describe('setQueryDefaults', () => {
     it('should not trigger a fetch', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryDefaults(key, { queryFn: () => Promise.resolve('data') });
       const data = queryClient.getQueryData(key);
       expect(data).toBeUndefined();
@@ -74,7 +74,7 @@ describe('queryClient', () => {
 
     it('should update existing query defaults', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryOptions1 = { queryFn: () => Promise.resolve('data') };
       const queryOptions2 = { retry: false };
       queryClient.setQueryDefaults(key, { ...queryOptions1 });
@@ -86,7 +86,7 @@ describe('queryClient', () => {
   describe('setQueryData', () => {
     it('should not crash if query could not be found', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const user = { userId: 1 };
       expect(() => {
         queryClient.setQueryData([key, user], (prevUser?: typeof user) => ({
@@ -98,7 +98,7 @@ describe('queryClient', () => {
 
     it('should not crash when variable is null', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData([key, { userId: null }], 'Old Data');
       expect(() => {
         queryClient.setQueryData([key, { userId: null }], 'New Data');
@@ -107,21 +107,21 @@ describe('queryClient', () => {
 
     it('should create a new query if query was not found 1', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData(key, 'bar');
       expect(queryClient.getQueryData(key)).toBe('bar');
     });
 
     it('should create a new query if query was not found 2', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData(key, 'qux');
       expect(queryClient.getQueryData(key)).toBe('qux');
     });
 
     it('should not create a new query if query was not found and data is undefined', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       expect(queryClient.getQueryCache().find({ queryKey: key })).toBe(undefined);
       queryClient.setQueryData(key, undefined);
       expect(queryClient.getQueryCache().find({ queryKey: key })).toBe(undefined);
@@ -129,7 +129,7 @@ describe('queryClient', () => {
 
     it('should not create a new query if query was not found and updater returns undefined', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       expect(queryClient.getQueryCache().find({ queryKey: key })).toBe(undefined);
       queryClient.setQueryData(key, () => undefined);
       expect(queryClient.getQueryCache().find({ queryKey: key })).toBe(undefined);
@@ -137,7 +137,7 @@ describe('queryClient', () => {
 
     it('should not update query data if data is undefined', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData(key, 'qux');
       queryClient.setQueryData(key, undefined);
       expect(queryClient.getQueryData(key)).toBe('qux');
@@ -145,7 +145,7 @@ describe('queryClient', () => {
 
     it('should not update query data if updater returns undefined', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData<string>(key, 'qux');
       queryClient.setQueryData<string>(key, () => undefined);
       expect(queryClient.getQueryData(key)).toBe('qux');
@@ -153,7 +153,7 @@ describe('queryClient', () => {
 
     it('should accept an update function', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const updater = vi.fn((oldData) => `new data + ${oldData}`);
 
@@ -166,7 +166,7 @@ describe('queryClient', () => {
 
     it('should set the new data without comparison if structuralSharing is set to false', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       queryClient.setDefaultOptions({
         queries: {
@@ -186,20 +186,20 @@ describe('queryClient', () => {
   describe('getQueryData', () => {
     it('should return the query data if the query is found', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData([key, 'id'], 'bar');
       expect(queryClient.getQueryData([key, 'id'])).toBe('bar');
     });
 
     it('should return undefined if the query is not found', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       expect(queryClient.getQueryData(key)).toBeUndefined();
     });
 
     it('should match exact by default', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       queryClient.setQueryData([key, 'id'], 'bar');
       expect(queryClient.getQueryData([key])).toBeUndefined();
     });
@@ -208,7 +208,7 @@ describe('queryClient', () => {
   describe('ensureQueryData', () => {
     it('should return the cached query data if the query is found', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = () => Promise.resolve('data');
 
       queryClient.setQueryData([key, 'id'], 'bar');
@@ -220,7 +220,7 @@ describe('queryClient', () => {
 
     it('should return the cached query data if the query is found and cached query data is falsy', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = () => Promise.resolve(0);
 
       queryClient.setQueryData([key, 'id'], null);
@@ -232,7 +232,7 @@ describe('queryClient', () => {
 
     it('should call fetchQuery and return its results if the query is not found', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = () => Promise.resolve('data');
 
       await expect(queryClient.ensureQueryData({ queryKey: [key], queryFn })).resolves.toEqual(
@@ -242,7 +242,7 @@ describe('queryClient', () => {
 
     it('should not fetch with initialData', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn().mockImplementation(() => Promise.resolve('data'));
 
       await expect(
@@ -260,7 +260,7 @@ describe('queryClient', () => {
   describe('removeQueries', () => {
     it('should not crash when exact is provided', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const fetchFn = () => Promise.resolve('data');
 
@@ -276,7 +276,7 @@ describe('queryClient', () => {
   describe('fetchInfiniteQuery', () => {
     it('should fetch initial infinite data when not cached', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
         return { items: [`page ${pageParam}`], next: pageParam + 1 };
       });
@@ -297,7 +297,7 @@ describe('queryClient', () => {
 
     it('should return cached data on cache hit when still fresh', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
         return { items: [`page ${pageParam}`], next: pageParam + 1 };
       });
@@ -324,7 +324,7 @@ describe('queryClient', () => {
 
     it('should refetch when stale', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
         return { items: [`page ${pageParam}`] };
       });
@@ -350,7 +350,7 @@ describe('queryClient', () => {
 
     it('should not retry by default', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = () => Promise.reject(new Error('fail'));
 
       await expect(
@@ -367,7 +367,7 @@ describe('queryClient', () => {
   describe('ensureInfiniteQueryData', () => {
     it('should return cached infinite data if the query exists', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn();
 
       queryClient.setQueryData(key, {
@@ -388,7 +388,7 @@ describe('queryClient', () => {
 
     it('should fetch and return initial data if not cached', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn().mockImplementation(async ({ pageParam }: { pageParam: number }) => {
         return { value: `fetched ${pageParam}`, next: pageParam + 1 };
       });
@@ -409,7 +409,7 @@ describe('queryClient', () => {
 
     it('should respect initialData', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const queryFn = vi.fn();
 
       const data = await queryClient.ensureInfiniteQueryData({
@@ -428,7 +428,7 @@ describe('queryClient', () => {
   describe('fetchQuery', () => {
     it('should not retry by default', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await expect(
         queryClient.fetchQuery({
@@ -442,7 +442,7 @@ describe('queryClient', () => {
 
     it('should return the cached data on cache hit', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const fetchFn = () => Promise.resolve('data');
       const first = await queryClient.fetchQuery({
@@ -459,7 +459,7 @@ describe('queryClient', () => {
 
     it('should allow new meta', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const first = await queryClient.fetchQuery({
         queryKey: key,
@@ -482,7 +482,7 @@ describe('queryClient', () => {
 
     it('should not force fetch if cached data is within staleTime', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       queryClient.setQueryData(key, 'og');
       const fetchFn = () => Promise.resolve('new');
@@ -498,7 +498,7 @@ describe('queryClient', () => {
   describe('prefetchQuery', () => {
     it('should return undefined when an error is thrown', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const result = await queryClient.prefetchQuery({
         queryKey: key,
@@ -515,7 +515,7 @@ describe('queryClient', () => {
   describe('setMutationDefaults', () => {
     it('should update existing mutation defaults', () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const mutationOptions1 = { mutationFn: () => Promise.resolve('data') };
       const mutationOptions2 = { retry: false };
       queryClient.setMutationDefaults(key, mutationOptions1);
@@ -526,7 +526,7 @@ describe('queryClient', () => {
     it('should return only matching defaults when multiple mutation defaults are set', () => {
       const key1 = queryKey();
       const key2 = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
       const mutationOptions1 = { retry: 1 };
       const mutationOptions2 = { retry: 2 };
       queryClient.setMutationDefaults(key1, mutationOptions1);
@@ -540,7 +540,7 @@ describe('queryClient', () => {
   describe('resetQueries', () => {
     it('should notify listeners when a query is reset', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       const callback = vi.fn();
 
@@ -555,7 +555,7 @@ describe('queryClient', () => {
 
     it('should reset query', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await queryClient.prefetchQuery({ queryKey: key, queryFn: () => Promise.resolve('data') });
 
@@ -572,7 +572,7 @@ describe('queryClient', () => {
 
     it('should reset query data to initial data if set', async () => {
       const key = queryKey();
-      const queryClient = createQueryClient();
+      const queryClient = new QueryClient();
 
       await queryClient.prefetchQuery({
         queryKey: key,

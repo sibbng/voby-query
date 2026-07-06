@@ -9,7 +9,7 @@ import {
   unsetMarker,
   queryOptions,
   infiniteQueryOptions,
-  createQueryClient,
+  QueryClient,
 } from '../src/index.ts';
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ describe('DataTag', () => {
   });
 
   it('getQueryData should work with tagged keys', () => {
-    const client = createQueryClient();
+    const client = new QueryClient();
     const options = queryOptions({
       queryKey: ['test-key'],
       queryFn: async () => 'data',
@@ -93,13 +93,13 @@ describe('DataTag', () => {
   });
 
   it('getQueryData should return undefined for missing key', () => {
-    const client = createQueryClient();
+    const client = new QueryClient();
     const data = client.getQueryData(['nonexistent']);
     expect(data).toBeUndefined();
   });
 
   it('getQueryState should work with tagged keys', () => {
-    const client = createQueryClient();
+    const client = new QueryClient();
     const options = queryOptions({
       queryKey: ['state-test'],
       queryFn: async () => 'data',
@@ -111,7 +111,7 @@ describe('DataTag', () => {
   });
 
   it('setQueryData should work with tagged keys', () => {
-    const client = createQueryClient();
+    const client = new QueryClient();
     const options = queryOptions({
       queryKey: ['set-test'],
       queryFn: async () => 'old',

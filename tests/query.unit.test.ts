@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createQueryClient } from '../src/index.ts';
+import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -15,7 +15,7 @@ const queryKey = () => [`query_${keyCounter++}`];
 describe('query', () => {
   it('should provide context to queryFn', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFn = vi.fn().mockResolvedValue('data');
 
     await queryClient.prefetchQuery({
@@ -32,7 +32,7 @@ describe('query', () => {
 
   it('cancelling a resolved query should not have any effect', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.prefetchQuery({
       queryKey: key,
@@ -46,7 +46,7 @@ describe('query', () => {
 
   it('cancelling a rejected query should not have any effect', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const error = new Error('error');
 
     await queryClient.prefetchQuery({
@@ -64,7 +64,7 @@ describe('query', () => {
   it('stores meta object in query options', async () => {
     const meta = { it: 'works' };
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.prefetchQuery({
       queryKey: key,
@@ -79,7 +79,7 @@ describe('query', () => {
   it('updates meta object on change', async () => {
     const meta = { it: 'works' };
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFn = async () => 'data';
 
     await queryClient.prefetchQuery({ queryKey: key, queryFn, meta });
@@ -92,7 +92,7 @@ describe('query', () => {
 
   it('should not change state on invalidate() if already invalidated', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.prefetchQuery({ queryKey: key, queryFn: async () => 'data' });
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
@@ -106,7 +106,7 @@ describe('query', () => {
 
   it('should error if reset while pending', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFn = vi.fn().mockImplementation(async () => {
       await new Promise((_resolve) => {});
       throw new Error();
@@ -133,7 +133,7 @@ describe('query', () => {
 
   it('initialDataUpdatedAt: 0 sets dataUpdatedAt to 0', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const cache = queryClient.getQueryCache();
 
     cache.build(queryClient, {
@@ -152,7 +152,7 @@ describe('query', () => {
 
   it('the previous query status should be kept when refetching', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient.prefetchQuery({ queryKey: key, queryFn: async () => 'data' });
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
@@ -176,7 +176,7 @@ describe('query', () => {
 
   it('should be able to refetch a cancelled query', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFn = vi.fn().mockImplementation(async () => {
       await new Promise((r) => setTimeout(r, 50));
       return 'data';
@@ -198,7 +198,7 @@ describe('query', () => {
 
   it('should not retry on the server', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     let count = 0;
 
     await queryClient.prefetchQuery({
@@ -215,7 +215,7 @@ describe('query', () => {
 
   it('should provide an AbortSignal that gets aborted on cancel', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const onAbort = vi.fn();
 
     const queryFn = vi.fn().mockImplementation(async ({ signal }) => {
@@ -246,7 +246,7 @@ describe('query', () => {
   it('can use default meta', async () => {
     const meta = { it: 'works' };
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     queryClient.setQueryDefaults(key, { meta } as any);
 
@@ -266,7 +266,7 @@ describe('query', () => {
     };
 
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient
       .fetchQuery({
@@ -283,7 +283,7 @@ describe('query', () => {
 
   it('should have an error status when structuralSharing throws', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
 
     await queryClient
       .fetchQuery({
@@ -302,7 +302,7 @@ describe('query', () => {
 
   it('fetch should not dispatch duplicate events when already fetching', async () => {
     const key = queryKey();
-    const queryClient = createQueryClient();
+    const queryClient = new QueryClient();
     const queryFn = vi
       .fn()
       .mockImplementation(() => new Promise((r) => setTimeout(r, 100)).then(() => 'data'));

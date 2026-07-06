@@ -1,13 +1,13 @@
 export { QueryClientContext, QueryClientProvider } from './context.ts';
 
-export { createQueryClient, useQueryClient } from './queryClient.ts';
+export { QueryClient, useQueryClient } from './queryClient.ts';
+export type { QueryClientConfig } from './queryClient.ts';
 export { CancelledError, useQuery } from './useQuery.ts';
 export type {
   MutationCache,
   QueryCache,
   CancelOptions,
   QueryRefetchOptions,
-  QueryClient,
   QueryKey,
   QueryOptions,
   QueryStatus,
