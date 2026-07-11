@@ -207,7 +207,7 @@ describe('useQuery', () => {
 
     expect(states[1]).toMatchObject({
       data: undefined,
-      error: expect.any(Error),
+      error: null,
       failureCount: 1,
       failureReason: expect.any(Error),
       isFetching: true,

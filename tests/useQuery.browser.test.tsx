@@ -1319,4 +1319,86 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('failureCount 0');
     expect(document.body.textContent).toContain('failureReason null');
   });
+
+  test('intermediate failures should not set error or errorUpdateCount', async () => {
+    const queryClient = new QueryClient();
+    const key = ['intermediate-failure-test'];
+
+    let counter = 0;
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          if (counter < 2) {
+            counter++;
+            throw new Error('error');
+          }
+          return 'data';
+        },
+        retry: 2,
+        retryDelay: 10,
+      });
+
+      return (
+        <>
+          <div>status {() => query().status()}</div>
+          <div>error {() => query().error()?.message ?? 'null'}</div>
+          <div>errorUpdateCount {() => query().errorUpdateCount()}</div>
+          <div>data {() => query().data() ?? 'none'}</div>
+        </>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(document.body.textContent).toContain('status success');
+    expect(document.body.textContent).toContain('data data');
+    expect(document.body.textContent).toContain('error null');
+    expect(document.body.textContent).toContain('errorUpdateCount 0');
+  });
+
+  test('final error after retries exhaust should set full error state', async () => {
+    const queryClient = new QueryClient();
+    const key = ['final-error-test'];
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          throw new Error('error');
+        },
+        retry: 2,
+        retryDelay: 10,
+      });
+
+      return (
+        <>
+          <div>status {() => query().status()}</div>
+          <div>error {() => query().error()?.message ?? 'null'}</div>
+          <div>errorUpdateCount {() => query().errorUpdateCount()}</div>
+          <div>failureCount {() => query().failureCount()}</div>
+        </>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(document.body.textContent).toContain('status error');
+    expect(document.body.textContent).toContain('error error');
+    expect(document.body.textContent).toContain('errorUpdateCount 1');
+    expect(document.body.textContent).toContain('failureCount 3');
+  });
 });

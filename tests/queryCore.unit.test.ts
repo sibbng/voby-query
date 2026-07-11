@@ -515,6 +515,7 @@ test('isRefetchError is true when refetch fails after previous success', async (
   query.resolvedOptions.queryFn = async () => {
     throw new Error('refetch fail');
   };
+  query.resolvedOptions.retry = false;
 
   await query.refetch();
 
@@ -636,6 +637,7 @@ test('refetch with throwOnError: true rethrows fetch error', async () => {
   query.resolvedOptions.queryFn = async () => {
     throw new Error('refetch err');
   };
+  query.resolvedOptions.retry = false;
 
   await expect(query.refetch({ throwOnError: true })).rejects.toThrow('refetch err');
 });

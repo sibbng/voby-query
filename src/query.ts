@@ -457,36 +457,35 @@ export const createQuery = <
 
           if (!signal.aborted && !isCancelledError) {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
-            query.state.error(error);
             query.state.failureCount((prev) => prev + 1);
             query.state.failureReason(error);
-            query.state.errorUpdatedAt(Date.now());
-            query.state.errorUpdateCount((previous) => previous + 1);
-            query.state.isInvalidated(query.state.data() !== undefined);
-            query.staleDisposer();
-            query.staleDisposer = () => {};
-            query.state.isStale(true);
-            // useQuery relies on synchronous throw via Proxy in useMemo.
-            // When throwOnError comes from query defaults (isDefaultThrowOnError),
-            // we only set status to 'error' and let useQuery throw synchronously.
-            // When throwOnError is explicitly passed to refetch()/fetch() (direct API),
-            // we also throw to reject the promise for backward compatibility.
-            const isDefaultThrowOnError = throwOnError === query.resolvedOptions.throwOnError;
-            if (shouldThrowError(throwOnError, [error, query])) {
-              query.state.status('error');
-              if (!isDefaultThrowOnError) {
-                throw error;
-              }
-            }
 
             const willRetry = query.scheduleRetry(retryAttempt + 1, error, fetchFn);
             query.fetchMachine.send(willRetry ? 'RETRYING' : 'FAIL');
-            cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
-            cache.config.onSettled?.(
-              query.state.data(),
-              error as unknown,
-              query as Query<any, any, any, any>,
-            );
+
+            if (!willRetry) {
+              query.state.error(error);
+              query.state.errorUpdatedAt(Date.now());
+              query.state.errorUpdateCount((previous) => previous + 1);
+              query.state.isInvalidated(query.state.data() !== undefined);
+              query.staleDisposer();
+              query.staleDisposer = () => {};
+              query.state.isStale(true);
+              const isDefaultThrowOnError = throwOnError === query.resolvedOptions.throwOnError;
+              if (shouldThrowError(throwOnError, [error, query])) {
+                query.state.status('error');
+                if (!isDefaultThrowOnError) {
+                  throw error;
+                }
+              }
+              cache.config.onError?.(error as unknown, query as Query<any, any, any, any>);
+              cache.config.onSettled?.(
+                query.state.data(),
+                error as unknown,
+                query as Query<any, any, any, any>,
+              );
+            }
+
             cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
           } else if (isCancelledError) {
             query.state.error(err as unknown as TError);
