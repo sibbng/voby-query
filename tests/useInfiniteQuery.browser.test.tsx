@@ -283,4 +283,46 @@ describe('useInfiniteQuery.browser.test', () => {
     expect(document.body.textContent).toBe('gen 1 page 1|gen 1 page 2');
     expect(seenPageParams).toEqual([1, 2, 1, 2]);
   });
+
+  test('isFetchedAfterMount should be false when data is cached before mount', async () => {
+    const queryClient = new QueryClient();
+
+    await queryClient.prefetchInfiniteQuery({
+      queryKey: ['cached-infinite'],
+      initialPageParam: 1,
+      getNextPageParam: () => undefined,
+      queryFn: async () => ({ value: 'cached', next: 2 }),
+    });
+
+    let isFetchedAfterMount: boolean | undefined;
+
+    function TestComponent() {
+      const query = useInfiniteQuery({
+        queryKey: ['cached-infinite'],
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        queryFn: async () => ({ value: 'fresh', next: 2 }),
+      });
+
+      isFetchedAfterMount = query().isFetchedAfterMount();
+
+      return (
+        <div>
+          <span>status: {() => query().status()}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(document.body.textContent).toContain('status: success');
+    expect(isFetchedAfterMount).toBe(false);
+  });
 });

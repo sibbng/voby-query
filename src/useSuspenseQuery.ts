@@ -1,4 +1,4 @@
-import { $, useCleanup, useMemo, useResource } from 'voby';
+import { $, useCleanup, useMemo, untrack, useResource } from 'voby';
 import { useQueryClient } from './queryClient.ts';
 import { QueryObserver } from './queryObserver.ts';
 import type {
@@ -67,6 +67,11 @@ export function useSuspenseQuery<
     const stateObservable = currentQuery.state;
     const obsOptions = obs.resolvedOptions;
 
+    const mountedAtCounts = {
+      dataUpdateCount: untrack(() => stateObservable.dataUpdateCount()),
+      errorUpdateCount: untrack(() => stateObservable.errorUpdateCount()),
+    };
+
     if (stateObservable.status() === 'error') {
       throw stateObservable.error()!;
     }
@@ -78,6 +83,11 @@ export function useSuspenseQuery<
 
     const result: UseSuspenseQueryResultValue<Awaited<TData>, TError> = {
       ...rest,
+      isFetchedAfterMount: useMemo(
+        (): boolean =>
+          stateObservable.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
+          stateObservable.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+      ),
       data: useMemo(() => {
         const currentData = stateObservable.data();
 

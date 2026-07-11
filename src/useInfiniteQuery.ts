@@ -1,4 +1,4 @@
-import { $, useCleanup, useMemo } from 'voby';
+import { $, useCleanup, useMemo, untrack } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
@@ -81,6 +81,11 @@ export function useInfiniteQuery<
       const resolvedOptions = currentQuery.resolvedOptions;
       const infiniteOptions = options;
 
+      const mountedAtCounts = {
+        dataUpdateCount: untrack(() => state.dataUpdateCount()),
+        errorUpdateCount: untrack(() => state.errorUpdateCount()),
+      };
+
       const fetchPage = async (
         direction: InfiniteQueryDirection,
         fetchOptions?: InfiniteQueryFetchPageOptions,
@@ -119,6 +124,11 @@ export function useInfiniteQuery<
 
       return Object.freeze({
         ...state,
+        isFetchedAfterMount: useMemo(
+          (): boolean =>
+            state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
+            state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+        ),
         data: useMemo(() => {
           const data = state.data();
 

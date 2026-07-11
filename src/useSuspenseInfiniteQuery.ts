@@ -1,4 +1,4 @@
-import { $, useCleanup, useMemo, useResource } from 'voby';
+import { $, useCleanup, useMemo, untrack, useResource } from 'voby';
 import {
   fetchInfiniteDataPage,
   hasNextPage,
@@ -105,6 +105,11 @@ export function useSuspenseInfiniteQuery<
     const state = currentQuery.state;
     const resolvedOptions = currentQuery.resolvedOptions;
 
+    const mountedAtCounts = {
+      dataUpdateCount: untrack(() => state.dataUpdateCount()),
+      errorUpdateCount: untrack(() => state.errorUpdateCount()),
+    };
+
     if (state.status() === 'error') {
       throw state.error()!;
     }
@@ -153,6 +158,11 @@ export function useSuspenseInfiniteQuery<
       TError
     > = {
       ...rest,
+      isFetchedAfterMount: useMemo(
+        (): boolean =>
+          state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
+          state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+      ),
       data: useMemo(() => {
         const currentData = state.data();
 

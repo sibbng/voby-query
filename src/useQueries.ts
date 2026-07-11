@@ -1,4 +1,4 @@
-import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
+import { $, type ObservableReadonly, useCleanup, useMemo, untrack } from 'voby';
 import { noop } from './utils.ts';
 import { useQueryClient } from './queryClient.ts';
 import { QueryObserver } from './queryObserver.ts';
@@ -18,6 +18,7 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
   useCleanup(shouldSubscribe ? client.cache.subscribe(() => tick((v) => v + 1)) : noop);
 
   const lastDataMap = new Map<string, unknown>();
+  const mountedCountsMap = new Map<string, { dataUpdateCount: number; errorUpdateCount: number }>();
 
   const observers = useMemo(
     () => {
@@ -27,6 +28,12 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
         const obs = new QueryObserver(query, opts as any);
         useCleanup(obs.subscribe(() => tick((v) => v + 1)));
         useCleanup(() => obs.destroy());
+        if (!mountedCountsMap.has(query.queryHash)) {
+          mountedCountsMap.set(query.queryHash, {
+            dataUpdateCount: untrack(() => query.state.dataUpdateCount()),
+            errorUpdateCount: untrack(() => query.state.errorUpdateCount()),
+          });
+        }
         return obs;
       });
     },
@@ -74,8 +81,14 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
     const dataMemos = queryDataMemos();
     const results = observers().map((obs: any, i: number) => {
       const q = obs.query;
+      const counts = mountedCountsMap.get(q.queryHash);
       return Object.freeze({
         ...q.state,
+        isFetchedAfterMount: useMemo(
+          (): boolean =>
+            q.state.dataUpdateCount() > (counts?.dataUpdateCount ?? 0) ||
+            q.state.errorUpdateCount() > (counts?.errorUpdateCount ?? 0),
+        ),
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,
