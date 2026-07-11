@@ -241,7 +241,8 @@ export class QueryObserver<
       return !!refetchOnReconnect(this.#query);
     }
     if (refetchOnReconnect === 'always') return true;
-    return !!refetchOnReconnect;
+    if (refetchOnReconnect && this.#query.state.isStale()) return true;
+    return false;
   }
 
   isEnabled(): boolean {

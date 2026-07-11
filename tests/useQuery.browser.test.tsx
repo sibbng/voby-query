@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
 import { render, sleep } from './utils';
-import { QueryClient, keepPreviousData } from '../src';
+import { QueryClient, keepPreviousData, onlineManager } from '../src';
 import { useQuery } from '../src/useQuery';
 import { QueryClientProvider } from '../src/context';
 import { For, If, $, useMemo } from 'voby';
@@ -1400,5 +1400,93 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('error error');
     expect(document.body.textContent).toContain('errorUpdateCount 1');
     expect(document.body.textContent).toContain('failureCount 3');
+  });
+
+  test('refetchOnReconnect should not refetch when data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const key = ['reconnect-stale-test'];
+    let fetchCount = 0;
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          fetchCount++;
+          return 'data';
+        },
+        staleTime: Infinity,
+      });
+
+      return (
+        <div>
+          <span>data: {() => query().data() ?? 'none'}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchCount).toBe(1);
+    expect(document.body.textContent).toContain('data: data');
+
+    onlineManager.setOnline(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    onlineManager.setOnline(true);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(fetchCount).toBe(1);
+    onlineManager.setOnline(true);
+  });
+
+  test('refetchOnReconnect should refetch when data is stale', async () => {
+    const queryClient = new QueryClient();
+    const key = ['reconnect-stale-true-test'];
+    let fetchCount = 0;
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          fetchCount++;
+          return 'data';
+        },
+        staleTime: 0,
+      });
+
+      return (
+        <div>
+          <span>data: {() => query().data() ?? 'none'}</span>
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchCount).toBe(1);
+    expect(document.body.textContent).toContain('data: data');
+
+    onlineManager.setOnline(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    onlineManager.setOnline(true);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(fetchCount).toBe(2);
+    onlineManager.setOnline(true);
   });
 });
