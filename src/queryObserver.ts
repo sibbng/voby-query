@@ -1,6 +1,5 @@
 import { $$, untrack } from 'voby';
 import { focusManager } from './focusManager.ts';
-import { onlineManager } from './onlineManager.ts';
 import type { Query } from './query.ts';
 import type { QueryKey } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
@@ -17,8 +16,6 @@ export class QueryObserver<
   #listeners: Set<() => void> = new Set();
   #staleTimeoutId?: ManagedTimerId;
   #refetchIntervalId?: ManagedTimerId;
-  #focusCleanup?: () => void;
-  #onlineCleanup?: () => void;
   constructor(
     query: Query<TQueryFnData, TError, TData, TQueryKey>,
     options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
@@ -61,7 +58,6 @@ export class QueryObserver<
 
     if (this.#listeners.size === 1) {
       this.#query.addObserver(this);
-      this.#subscribeToManagers();
 
       const shouldFetchOnSubscribe = untrack(() => {
         if (!this.#resolvedOptions.enabled) return false;
@@ -86,41 +82,19 @@ export class QueryObserver<
       if (this.#listeners.size === 0) {
         this.#query.removeObserver(this);
         this.#clearTimers();
-        this.#clearManagerSubscriptions();
       }
     };
-  }
-
-  #subscribeToManagers(): void {
-    this.#clearManagerSubscriptions();
-
-    this.#focusCleanup = focusManager.subscribe(async () => {
-      if (focusManager.isFocused() && this.shouldFetchOnWindowFocus()) {
-        await this.#refetchObserverQuery();
-      }
-    });
-
-    this.#onlineCleanup = onlineManager.subscribe(async () => {
-      if (
-        onlineManager.isOnline() &&
-        this.#query.fetchMachine.getState() !== 'paused' &&
-        this.shouldFetchOnReconnect()
-      ) {
-        await this.#refetchObserverQuery();
-      }
-    });
-  }
-
-  #clearManagerSubscriptions(): void {
-    this.#focusCleanup?.();
-    this.#focusCleanup = undefined;
-    this.#onlineCleanup?.();
-    this.#onlineCleanup = undefined;
   }
 
   #refetchObserverQuery(): Promise<void> {
     return this.#query.refetch({
       cancelRefetch: this.#query.resolvedOptions.cancelRefetch ?? true,
+    });
+  }
+
+  refetch(options?: { cancelRefetch?: boolean }): Promise<void> {
+    return this.#query.refetch({
+      cancelRefetch: options?.cancelRefetch ?? true,
     });
   }
 
@@ -306,7 +280,6 @@ export class QueryObserver<
 
   destroy(): void {
     this.#clearTimers();
-    this.#clearManagerSubscriptions();
     this.#listeners.clear();
   }
 }

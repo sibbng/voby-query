@@ -140,6 +140,18 @@ export class QueryCache<
       this.remove(query);
     }
   }
+
+  onOnline(): void {
+    for (const query of this.getAll()) {
+      (query as Query<any, any, any, any>).onOnline();
+    }
+  }
+
+  onFocus(): void {
+    for (const query of this.getAll()) {
+      (query as Query<any, any, any, any>).onFocus();
+    }
+  }
 }
 
 export const createQueryCache = <TQuery extends Query<any, any, any, any>>(

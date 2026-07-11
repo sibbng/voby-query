@@ -1,7 +1,9 @@
-import { useContext } from 'voby';
+import { useCleanup, useContext } from 'voby';
 import { QueryClientContext } from './context.ts';
 import { fetchInitialInfiniteData } from './infiniteQuery.ts';
 import { createMutationCache } from './mutationCache.ts';
+import { focusManager } from './focusManager.ts';
+import { onlineManager } from './onlineManager.ts';
 import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
 import type { Mutation } from './mutation.ts';
@@ -131,6 +133,37 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   const mutationCache = createMutationCache(options?.mutationCache) as MutationCache;
   const jobQueue = options?.jobQueue ?? new Map<string, number[]>();
   const queueResolvers = new Map<string, () => void>();
+
+  let mountCount = 0;
+  let unsubscribeFocus: (() => void) | undefined;
+  let unsubscribeOnline: (() => void) | undefined;
+
+  const mount = () => {
+    mountCount++;
+    if (mountCount !== 1) return;
+
+    unsubscribeFocus = focusManager.subscribe(async () => {
+      if (focusManager.isFocused()) {
+        cache.onFocus();
+      }
+    });
+
+    unsubscribeOnline = onlineManager.subscribe(async () => {
+      if (onlineManager.isOnline()) {
+        cache.onOnline();
+      }
+    });
+  };
+
+  const unmount = () => {
+    mountCount--;
+    if (mountCount !== 0) return;
+
+    unsubscribeFocus?.();
+    unsubscribeFocus = undefined;
+    unsubscribeOnline?.();
+    unsubscribeOnline = undefined;
+  };
 
   const startQueueJob = async (queueKey: string) => {
     const queue = jobQueue.get(queueKey) ?? [];
@@ -563,6 +596,8 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     jobQueue,
     startQueueJob,
     finishQueueJob,
+    mount,
+    unmount,
   } as QueryClient;
 
   return queryClient;
@@ -671,6 +706,8 @@ export class QueryClient {
     mutationKey: MutationKey,
     defaults: Partial<MutationOptions>,
   ) => void;
+  declare mount: () => void;
+  declare unmount: () => void;
 
   constructor(options: QueryClientConfig = {}) {
     Object.assign(this, buildQueryClient(options));
@@ -682,5 +719,7 @@ export function useQueryClient(queryClient?: QueryClient) {
   if (!client) {
     throw new Error('No QueryClient set, use QueryClientProvider to set one');
   }
+  client.mount();
+  useCleanup(() => client.unmount());
   return client;
 }

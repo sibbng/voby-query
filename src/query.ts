@@ -90,11 +90,12 @@ export type Query<
   isStaleByTime: (staleTime: number | 'static') => boolean;
   addInstance: () => () => void;
   removeInstance: () => void;
+  onOnline: () => void;
+  onFocus: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
   scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
   isCancelled: boolean;
-  inactiveCleanup?: () => void;
   fetchMachine: MachineInstance<FetchState, FetchEvent>;
 };
 
@@ -303,28 +304,6 @@ export const createQuery = <
           const shouldBePaused = networkMode === 'online' ? !isOnline : false;
           query.state.fetchStatus(shouldBePaused ? 'paused' : 'idle');
         }
-        if (query.instances === 1) {
-          const cleanups: (() => void)[] = [];
-
-          if (query.resolvedOptions.networkMode === 'online') {
-            const unsubOnline = onlineManager.subscribe(async () => {
-              if (onlineManager.isOnline()) {
-                if (query.fetchMachine.getState() === 'paused') {
-                  await query.refetch({ cancelRefetch: false });
-                }
-              } else {
-                await query.cancel({ revert: false, silent: true });
-                query.fetchMachine.send('PAUSE');
-              }
-            });
-            cleanups.push(unsubOnline);
-          }
-
-          query.inactiveCleanup = () => {
-            cleanups.forEach((cleanup) => cleanup());
-            query.inactiveCleanup = undefined;
-          };
-        }
       });
       return query.removeInstance;
     },
@@ -332,8 +311,22 @@ export const createQuery = <
       query.instances--;
       if (query.instances === 0) {
         query.isActive = false;
-        query.inactiveCleanup?.();
         query.scheduleDestroy();
+      }
+    },
+    onOnline: () => {
+      const observer = [...query.observers].find((o) => o.shouldFetchOnReconnect());
+      if (observer) {
+        observer.refetch();
+      }
+      if (query.fetchMachine.getState() === 'paused') {
+        query.fetchMachine.send('FETCH', true);
+      }
+    },
+    onFocus: () => {
+      const observer = [...query.observers].find((o) => o.shouldFetchOnWindowFocus());
+      if (observer) {
+        observer.refetch();
       }
     },
     cancel: async ({ revert = true, silent = false } = {}) => {
@@ -382,7 +375,6 @@ export const createQuery = <
     destroy: () => {
       void query.cancel({ revert: false, silent: true });
       query.destroyDisposer();
-      query.inactiveCleanup?.();
       query.staleDisposer();
       query.retryDisposer();
       query.stateDisposer();
