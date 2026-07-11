@@ -1276,4 +1276,47 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('Data: 1');
     expect(document.body.textContent).toContain('Fetching: false');
   });
+
+  test('should reset failureCount and failureReason on successful fetch', async () => {
+    const queryClient = new QueryClient();
+    const key = ['failure-count-reset'];
+
+    let counter = 0;
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: key,
+        queryFn: async () => {
+          if (counter < 2) {
+            counter++;
+            throw new Error('error');
+          }
+          return 'data';
+        },
+        retryDelay: 10,
+      });
+
+      return (
+        <>
+          <div>failureCount {() => query().failureCount()}</div>
+          <div>failureReason {() => query().failureReason()?.message ?? 'null'}</div>
+        </>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('failureCount 2');
+    expect(document.body.textContent).toContain('failureReason error');
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('failureCount 0');
+    expect(document.body.textContent).toContain('failureReason null');
+  });
 });

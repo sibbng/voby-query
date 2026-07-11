@@ -231,6 +231,8 @@ export const setQuerySuccessData = (
   query.state.dataUpdatedAt(dataUpdatedAt);
   query.state.dataUpdateCount((previous) => previous + 1);
   query.state.error(null);
+  query.state.failureCount(0);
+  query.state.failureReason(null);
   query.state.isInvalidated(false);
   query.state.status('success');
   if (scheduleStale) scheduleQueryStale(query);
