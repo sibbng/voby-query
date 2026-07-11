@@ -50,7 +50,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     retry: 3,
     retryOnMount: true,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
-    cancelRefetch: false,
+    cancelRefetch: true,
     refetchOnWindowFocus: true,
     structuralSharing: true,
     refetchOnReconnect: options?.defaultOptions?.queries?.networkMode

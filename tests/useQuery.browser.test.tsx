@@ -1489,4 +1489,81 @@ describe('useQuery.browser.test', () => {
     expect(fetchCount).toBe(2);
     onlineManager.setOnline(true);
   });
+
+  test('default cancelRefetch: true cancels in-flight refetch', async () => {
+    const queryClient = new QueryClient();
+    let fetchCount = 0;
+    const abortedSignals: AbortSignal[] = [];
+    const resolveFetches = new Map<number, (value: string) => void>();
+    let refetch: () => Promise<void> = async () => {};
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: ['cancel-refetch-default'],
+        queryFn: async ({ signal }) => {
+          fetchCount++;
+          const requestId = fetchCount;
+
+          signal.addEventListener(
+            'abort',
+            () => {
+              abortedSignals.push(signal);
+            },
+            { once: true },
+          );
+
+          return new Promise<string>((resolve, reject) => {
+            const onAbort = () => {
+              signal.removeEventListener('abort', onAbort);
+              reject(new DOMException('Aborted', 'AbortError'));
+            };
+            signal.addEventListener('abort', onAbort, { once: true });
+            resolveFetches.set(requestId, (value) => {
+              signal.removeEventListener('abort', onAbort);
+              resolve(value);
+            });
+          });
+        },
+        staleTime: 0,
+      });
+
+      refetch = () => query().refetch();
+
+      return <div>{() => query().data() ?? 'Loading...'}</div>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchCount).toBe(1);
+
+    resolveFetches.get(1)?.('Initial');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.body.textContent).toBe('Initial');
+
+    const refetchPromise = refetch();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchCount).toBe(2);
+
+    refetch();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(fetchCount).toBe(3);
+    expect(abortedSignals).toHaveLength(1);
+    expect(abortedSignals[0]?.aborted).toBe(true);
+
+    resolveFetches.get(2)?.('Second');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toBe('Initial');
+
+    resolveFetches.get(3)?.('Third');
+    await refetchPromise;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.body.textContent).toBe('Third');
+  });
 });
