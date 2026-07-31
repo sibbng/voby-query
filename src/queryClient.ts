@@ -63,7 +63,6 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   };
   const mutationDefaults = {
     retry: 0,
-    retryDelay: 0,
     gcTime: 5 * 60 * 1000,
     networkMode: 'online' as const,
     throwOnError: false,

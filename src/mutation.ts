@@ -95,9 +95,9 @@ export const createMutation = <
 
     if (!retry) return false;
     if (typeof retry === 'function') {
-      return retry(failureCount, error);
+      return retry(failureCount - 1, error);
     }
-    return typeof retry === 'boolean' ? retry : retry > failureCount;
+    return typeof retry === 'boolean' ? retry : retry >= failureCount;
   };
 
   let state!: MutationState<TData, TError, TVariables, TContext>;
@@ -273,15 +273,15 @@ export const createMutation = <
             state.failureCount(failureCount);
             state.failureReason(error as TError);
 
+            const retryDelay = mutation.resolvedOptions.retryDelay;
+            const resolvedRetryDelay =
+              typeof retryDelay === 'function'
+                ? retryDelay(failureCount - 1, error as TError)
+                : (retryDelay ?? Math.min(1000 * 2 ** (failureCount - 1), 30000));
+
             if (!shouldRetry(failureCount, error as TError)) {
               throw error;
             }
-
-            const retryDelay = mutation.resolvedOptions.retryDelay ?? 1000;
-            const resolvedRetryDelay =
-              typeof retryDelay === 'function'
-                ? retryDelay(failureCount, error as TError)
-                : retryDelay * 2 ** (failureCount - 1);
 
             await new Promise((resolve) => timeoutManager.setTimeout(resolve, resolvedRetryDelay));
           }

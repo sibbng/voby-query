@@ -309,7 +309,7 @@ describe('useMutation', () => {
           attempts++;
           throw new Error('retry once');
         },
-        retry: (failureCount) => failureCount < 2,
+        retry: (failureCount) => failureCount < 1,
         retryDelay: 0,
       });
       mutationResult = mutation;

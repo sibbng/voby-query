@@ -950,6 +950,6 @@ test('retryDelay: function — called with attempt number and error', async () =
   await vi.advanceTimersByTimeAsync(1);
 
   expect(retryDelayFn).toHaveBeenCalled();
-  expect(retryDelayFn.mock.calls[0][0]).toBe(1); // attempt starts at 1
+  expect(retryDelayFn.mock.calls[0][0]).toBe(0); // attempt starts at 0
   expect(retryDelayFn.mock.calls[0][1]).toBeInstanceOf(Error);
 });

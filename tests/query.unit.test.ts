@@ -326,6 +326,43 @@ describe('query', () => {
     consoleMock.mockRestore();
   });
 
+  it('should use exponential backoff starting at 1s for the first retry', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockRejectedValue(new Error('err'));
+
+    const promise = queryClient.fetchQuery({ queryKey: key, queryFn, retry: 2 }).catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(queryFn).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(30000);
+    await promise;
+  });
+
+  it('should pass a 0-based attempt count to retryDelay', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockRejectedValue(new Error('err'));
+    const retryDelay = vi.fn().mockReturnValue(10);
+
+    const promise = queryClient
+      .fetchQuery({ queryKey: key, queryFn, retry: 2, retryDelay })
+      .catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(30);
+    await promise;
+
+    expect(queryFn).toHaveBeenCalledTimes(3);
+    expect(retryDelay.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
+  });
+
   it('fetch should not dispatch duplicate events when already fetching', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();

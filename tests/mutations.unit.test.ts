@@ -130,6 +130,43 @@ describe('mutations', () => {
     expect(results).toStrictEqual(['start-A', 'start-B', 'finish-A', 'finish-B']);
   });
 
+  it('should retry once with retry: 1 and expose the final failureCount', async () => {
+    const queryClient = new QueryClient();
+    const mutationFn = vi.fn().mockRejectedValue(new Error('err'));
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn,
+      retry: 1,
+      retryDelay: 10,
+    });
+
+    const promise = (mutation as any).mutate('vars').catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    await promise;
+
+    expect(mutationFn).toHaveBeenCalledTimes(2);
+    expect(mutation.state.failureCount()).toBe(2);
+  });
+
+  it('should pass a 0-based failureCount to retry and retryDelay functions', async () => {
+    const queryClient = new QueryClient();
+    const mutationFn = vi.fn().mockRejectedValue(new Error('err'));
+    const retry = vi.fn((failureCount: number) => failureCount < 2);
+    const retryDelay = vi.fn().mockReturnValue(10);
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn,
+      retry,
+      retryDelay,
+    });
+
+    const promise = (mutation as any).mutate('vars').catch(() => {});
+    await vi.advanceTimersByTimeAsync(30);
+    await promise;
+
+    expect(mutationFn).toHaveBeenCalledTimes(3);
+    expect(retry.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
+    expect(retryDelay.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
+  });
+
   describe('callback return types', () => {
     it('should handle all sync callback patterns', async () => {
       const key = mutationKey();

@@ -523,7 +523,7 @@ export const createQuery = <
         return false;
       }
       const delay =
-        typeof retryDelay === 'function' ? retryDelay(attempt, error as TError) : retryDelay;
+        typeof retryDelay === 'function' ? retryDelay(attempt - 1, error as TError) : retryDelay;
       if (
         isBrowser &&
         query.resolvedOptions.networkMode === 'online' &&
