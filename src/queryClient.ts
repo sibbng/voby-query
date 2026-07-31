@@ -469,15 +469,15 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       const originalRetry = (query as any).resolvedOptions.retry;
       (query as any).resolvedOptions.retry = false;
       try {
-        await query.fetch({ force: true });
+        await query.fetch({ force: true, awaitChain: true });
       } finally {
         (query as any).resolvedOptions.retry = originalRetry;
       }
-      if (query.state.error()) {
-        throw query.state.error();
-      }
     } else {
-      await query.fetch({ force: true });
+      await query.fetch({ force: true, awaitChain: true });
+    }
+    if (query.state.error()) {
+      throw query.state.error();
     }
     return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
   };
@@ -516,16 +516,16 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       const originalRetry = query.resolvedOptions.retry;
       query.resolvedOptions.retry = false;
       try {
-        await query.fetch({ force: true });
+        await query.fetch({ force: true, awaitChain: true });
       } finally {
         query.resolvedOptions.retry = originalRetry;
       }
-      // Propagate error when fetchQuery forced retry=false (TanStack behavior)
-      if (query.state.error()) {
-        throw query.state.error();
-      }
     } else {
-      await query.fetch({ force: true });
+      await query.fetch({ force: true, awaitChain: true });
+    }
+    // Propagate error when fetchQuery forced retry=false (TanStack behavior)
+    if (query.state.error()) {
+      throw query.state.error();
     }
     return query.state.data() as TData;
   };

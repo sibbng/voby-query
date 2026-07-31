@@ -56,6 +56,7 @@ type QueryFetchOptions = {
   throwOnError?: QueryOptions<any, any, any, any>['throwOnError'];
   force?: boolean;
   fetchFn?: QueryFetchFn;
+  awaitChain?: boolean;
 };
 
 type FetchState = 'idle' | 'fetching' | 'success' | 'error' | 'retrying' | 'cancelled' | 'paused';
@@ -95,7 +96,12 @@ export type Query<
   onFocus: () => void;
   scheduleDestroy: () => void;
   reset: () => void;
-  scheduleRetry: (retryAttempt: number, error: TError, fetchFn?: QueryFetchFn) => boolean;
+  scheduleRetry: (
+    retryAttempt: number,
+    error: TError,
+    fetchFn?: QueryFetchFn,
+    awaitChain?: boolean,
+  ) => boolean;
   isCancelled: boolean;
   fetchMachine: MachineInstance<FetchState, FetchEvent>;
 };
@@ -254,6 +260,21 @@ export const createQuery = <
   queryHash: string;
   resolvedOptions: ResolvedQueryOptions<TQueryFnData, TError, TData>;
 }): Query<TQueryFnData, TError, TData, TQueryKey> => {
+  // Callers that await the whole retry chain (e.g. fetchQuery) register a
+  // waiter here; the chain settles when the final attempt resolves/rejects
+  // (flushed from the retry timer or the cancelled state).
+  let chainWaiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+  const resolveChain = () => {
+    const waiters = chainWaiters;
+    chainWaiters = [];
+    waiters.forEach((waiter) => waiter.resolve());
+  };
+  const rejectChain = (error: unknown) => {
+    const waiters = chainWaiters;
+    chainWaiters = [];
+    waiters.forEach((waiter) => waiter.reject(error));
+  };
+
   const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
     queryKey: resolvedOptions.queryKey,
@@ -396,6 +417,7 @@ export const createQuery = <
       throwOnError = query.resolvedOptions.throwOnError,
       force = false,
       fetchFn,
+      awaitChain = false,
     } = {}) => {
       const currentState = query.fetchMachine.getState();
 
@@ -476,7 +498,7 @@ export const createQuery = <
             query.state.failureCount((prev) => prev + 1);
             query.state.failureReason(error);
 
-            const willRetry = query.scheduleRetry(retryAttempt + 1, error, fetchFn);
+            const willRetry = query.scheduleRetry(retryAttempt + 1, error, fetchFn, awaitChain);
             query.fetchMachine.send(willRetry ? 'RETRYING' : 'FAIL');
 
             if (!willRetry) {
@@ -500,6 +522,14 @@ export const createQuery = <
                 error as unknown,
                 query as Query<any, any, any, any>,
               );
+              // the retry chain is done — release any callers awaiting it
+              resolveChain();
+            } else if (awaitChain) {
+              // Keep the fetch promise pending until the whole retry chain
+              // settles (flush happens in scheduleRetry / on cancel)
+              await new Promise<void>((resolve, reject) => {
+                chainWaiters.push({ resolve, reject });
+              });
             }
 
             cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
@@ -526,7 +556,12 @@ export const createQuery = <
       query.fetchPromise = fetchPromise;
       return fetchPromise;
     },
-    scheduleRetry: (attempt: number, error: TError, fetchFn?: QueryFetchFn): boolean => {
+    scheduleRetry: (
+      attempt: number,
+      error: TError,
+      fetchFn?: QueryFetchFn,
+      awaitChain?: boolean,
+    ): boolean => {
       const { retry, retryDelay } = query.resolvedOptions;
       if (retry === false) {
         query.state.status('error');
@@ -547,7 +582,12 @@ export const createQuery = <
           window,
           'online',
           async () => {
-            await query.fetch({ retryAttempt: attempt, fetchFn, force: true });
+            try {
+              await query.fetch({ retryAttempt: attempt, fetchFn, force: true, awaitChain });
+              resolveChain();
+            } catch (error) {
+              rejectChain(error);
+            }
           },
           { once: true },
         );
@@ -556,7 +596,12 @@ export const createQuery = <
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
         const id = timeoutManager.setTimeout(async () => {
           query.retryDisposer = () => {};
-          await query.fetch({ retryAttempt: attempt, fetchFn, force: true });
+          try {
+            await query.fetch({ retryAttempt: attempt, fetchFn, force: true, awaitChain });
+            resolveChain();
+          } catch (error) {
+            rejectChain(error);
+          }
         }, delay ?? 0);
         query.retryDisposer = () => timeoutManager.clearTimeout(id);
         return true;
@@ -679,6 +724,7 @@ export const createQuery = <
             query.isFetching = false;
             query.fetchPromise = undefined;
             query.revertState = undefined;
+            resolveChain();
           },
           transitions: {
             FETCH: {

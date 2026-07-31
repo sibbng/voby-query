@@ -202,14 +202,17 @@ describe('query', () => {
     const queryClient = new QueryClient();
     let count = 0;
 
-    await queryClient.prefetchQuery({
+    const query = queryClient.getQueryCache().build(queryClient, {
       queryKey: key,
-      queryFn: async () => {
+      queryFn: () => {
         count++;
-        throw new Error('error');
+        return Promise.reject(new Error('error'));
       },
       retry: 3,
     });
+    const observer = new QueryObserver(query as any, {});
+
+    await observer.refetch();
 
     expect(count).toBe(1);
   });

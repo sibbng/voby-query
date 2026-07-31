@@ -362,6 +362,31 @@ describe('queryClient', () => {
         }),
       ).rejects.toThrow('fail');
     });
+
+    it('should reject when retries are exhausted with an explicit retry option', async () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+      let callCount = 0;
+
+      const promise = queryClient.fetchInfiniteQuery({
+        queryKey: key,
+        queryFn: (() => {
+          callCount++;
+          return Promise.reject(new Error('fail'));
+        }) as any,
+        initialPageParam: 1,
+        getNextPageParam: () => undefined,
+        retry: 1,
+        retryDelay: 0,
+      });
+      const assertion = expect(promise).rejects.toThrow('fail');
+
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await assertion;
+      expect(callCount).toBe(2);
+    });
   });
 
   describe('ensureInfiniteQueryData', () => {
@@ -478,6 +503,29 @@ describe('queryClient', () => {
         },
       });
       expect(second).toStrictEqual({ foo: false });
+    });
+
+    it('should reject when retries are exhausted with an explicit retry option', async () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+      let callCount = 0;
+
+      const promise = queryClient.fetchQuery({
+        queryKey: key,
+        queryFn: () => {
+          callCount++;
+          throw new Error('error');
+        },
+        retry: 1,
+        retryDelay: 0,
+      });
+      const assertion = expect(promise).rejects.toEqual(new Error('error'));
+
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await assertion;
+      expect(callCount).toBe(2);
     });
 
     it('should not force fetch if cached data is within staleTime', async () => {

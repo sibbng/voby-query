@@ -880,12 +880,13 @@ test(
       retry: 3,
       retryDelay: 0,
     });
+    const assertion = expect(fetchPromise).rejects.toThrow('fail');
 
-    await fetchPromise;
     await vi.advanceTimersByTimeAsync(1);
     await vi.advanceTimersByTimeAsync(1);
     await vi.advanceTimersByTimeAsync(1);
 
+    await assertion;
     expect(callCount).toBe(4); // 1 initial + 3 retries
   },
 );
@@ -903,8 +904,8 @@ test('retry: function — called with failureCount (0-based) and error', async (
     retry: retryFn,
     retryDelay: 0,
   });
+  void fetchPromise.catch(() => {});
 
-  await fetchPromise;
   await vi.advanceTimersByTimeAsync(1);
 
   expect(retryFn).toHaveBeenCalled();
@@ -925,11 +926,12 @@ test('retry: function — stops retrying when it returns false', async () => {
     retry: (failureCount) => failureCount < 2, // allow 2 retries
     retryDelay: 0,
   });
+  const assertion = expect(fetchPromise).rejects.toThrow('fail');
 
-  await fetchPromise;
   await vi.advanceTimersByTimeAsync(1);
   await vi.advanceTimersByTimeAsync(1);
 
+  await assertion;
   expect(callCount).toBe(3); // 1 initial + 2 retries
 });
 
@@ -945,10 +947,11 @@ test('retryDelay: function — called with attempt number and error', async () =
     retry: 1,
     retryDelay: retryDelayFn,
   });
+  const assertion = expect(fetchPromise).rejects.toThrow('fail');
 
-  await fetchPromise;
   await vi.advanceTimersByTimeAsync(1);
 
+  await assertion;
   expect(retryDelayFn).toHaveBeenCalled();
   expect(retryDelayFn.mock.calls[0][0]).toBe(0); // attempt starts at 0
   expect(retryDelayFn.mock.calls[0][1]).toBeInstanceOf(Error);
