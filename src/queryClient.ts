@@ -388,8 +388,12 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       return currentData as TData;
     }
 
-    await query.fetch({ force: true });
-    return query.state.data() as TData;
+    return fetchQuery({ queryKey, ...restOptions } as QueryOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryKey
+    >);
   };
 
   const ensureInfiniteQueryData = async <
@@ -424,8 +428,9 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       return currentData;
     }
 
-    await query.fetch({ force: true });
-    return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
+    return fetchInfiniteQuery(
+      restOptions as InfiniteQueryOptions<TQueryFnData, TError, TQueryKey, TPageParam>,
+    );
   };
 
   const getQueryState: QueryClient['getQueryState'] = <

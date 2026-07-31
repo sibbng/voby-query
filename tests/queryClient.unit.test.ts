@@ -255,6 +255,31 @@ describe('queryClient', () => {
 
       expect(queryFn).toHaveBeenCalledTimes(0);
     });
+
+    it('should reject when the queryFn fails', async () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+      const queryFn = () => Promise.reject(new Error('fail'));
+
+      await expect(queryClient.ensureQueryData({ queryKey: [key], queryFn })).rejects.toThrow(
+        'fail',
+      );
+    });
+
+    it('should reject when the infinite queryFn fails', async () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+      const queryFn = () => Promise.reject(new Error('fail'));
+
+      await expect(
+        queryClient.ensureInfiniteQueryData({
+          queryKey: [key],
+          queryFn: queryFn as any,
+          initialPageParam: 0,
+          getNextPageParam: () => undefined,
+        }),
+      ).rejects.toThrow('fail');
+    });
   });
 
   describe('removeQueries', () => {
