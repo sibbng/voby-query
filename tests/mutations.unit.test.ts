@@ -81,6 +81,16 @@ describe('mutations', () => {
     expect(result).toBe('success-data');
   });
 
+  it('mutateAsync should reject when the mutation fails even without throwOnError', async () => {
+    const queryClient = new QueryClient();
+    const newMutationError = new Error('mutation-error');
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: () => Promise.reject(newMutationError),
+    });
+
+    await expect((mutation as any).mutateAsync('vars')).rejects.toBe(newMutationError);
+  });
+
   it('mutations should run and resolve in parallel by default', async () => {
     const key1 = mutationKey();
     const key2 = mutationKey();

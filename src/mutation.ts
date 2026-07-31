@@ -1,5 +1,5 @@
 import { $, $$, useMemo, useRoot } from 'voby';
-import { hashFn, resolveKey, shouldThrowError } from './utils.ts';
+import { hashFn, resolveKey } from './utils.ts';
 import { timeoutManager } from './timeoutManager.ts';
 import type {
   MutateOptions,
@@ -322,9 +322,7 @@ export const createMutation = <
         await mutation.resolvedOptions.onSettled?.(undefined, error as TError, variables, context);
         mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
 
-        if (shouldThrowError(mutation.resolvedOptions.throwOnError, [error as TError])) {
-          throw error;
-        }
+        throw error;
       }
 
       return state.data();
