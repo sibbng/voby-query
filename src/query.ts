@@ -411,6 +411,18 @@ export const createQuery = <
         query.fetchMachine.send('FETCH');
       }
 
+      // Use the queryFn of the first observer with one if the query itself
+      // has none (e.g. the query was created via setQueryData or hydration)
+      if (fetchFn === undefined && query.resolvedOptions.queryFn === undefined) {
+        const observer = Array.from(query.observers).find((o) => o.resolvedOptions.queryFn);
+        if (observer) {
+          query.resolvedOptions = {
+            ...query.resolvedOptions,
+            queryFn: observer.resolvedOptions.queryFn,
+          } as ResolvedQueryOptions<TQueryFnData, TError, TData>;
+        }
+      }
+
       const signal = query.controller.signal;
       let fetchPromise!: Promise<void>;
 

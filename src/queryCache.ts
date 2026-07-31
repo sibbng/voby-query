@@ -112,7 +112,7 @@ export class QueryCache<
       return existingQuery;
     }
 
-    const query = createQuery({
+    const query = createQuery<TQueryFnData, TError, TData, TQueryKey>({
       cache: this as unknown as QueryCacheType,
       queryHash,
       resolvedOptions,

@@ -320,6 +320,7 @@ export type ObserverOptions<
         query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
       ) => boolean);
   select?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  queryFn?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['queryFn'];
   structuralSharing?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['structuralSharing'];
   placeholderData?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
   notifyOnChangeProps?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps'];
@@ -373,6 +374,7 @@ export type ResolvedObserverOptions<
     ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['throwOnError']
   >;
   select: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  queryFn: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['queryFn'];
   structuralSharing: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['structuralSharing'];
   placeholderData: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
   notifyOnChangeProps: NonNullable<

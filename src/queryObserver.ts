@@ -46,6 +46,7 @@ export class QueryObserver<
       retryOnMount: options.retryOnMount ?? true,
       throwOnError: options.throwOnError ?? false,
       select: options.select,
+      queryFn: options.queryFn,
       structuralSharing: options.structuralSharing,
       placeholderData: options.placeholderData,
       notifyOnChangeProps: options.notifyOnChangeProps ?? 'all',

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryClient } from '../src/index.ts';
+import { QueryObserver } from '../src/queryObserver.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -387,5 +388,23 @@ describe('query', () => {
 
     expect(updates).toContain('updated');
     unsubscribe();
+  });
+
+  it('should use queryFn from observer if not provided in options', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockResolvedValue('data');
+
+    const query = queryClient.getQueryCache().build(queryClient, { queryKey: key });
+    const observer = new QueryObserver(query as any, {
+      queryFn,
+    });
+
+    (query as any).addObserver(observer);
+
+    await query.fetch();
+
+    expect(queryClient.getQueryData(key)).toBe('data');
+    expect(query.resolvedOptions.queryFn).toBe(queryFn);
   });
 });
