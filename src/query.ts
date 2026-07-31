@@ -68,6 +68,7 @@ export type Query<
   TQueryKey extends QueryKey = QueryKey,
 > = {
   queryHash: string;
+  queryKey: unknown[];
   isActive: boolean;
   state: QueryState<TData, TError>;
   cancel: (options?: CancelOptions) => Promise<void>;
@@ -255,6 +256,7 @@ export const createQuery = <
 }): Query<TQueryFnData, TError, TData, TQueryKey> => {
   const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
+    queryKey: resolvedOptions.queryKey,
     isActive: false,
     resolvedOptions,
     instances: 0,

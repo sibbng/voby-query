@@ -1182,6 +1182,134 @@ describe('useQuery.browser.test', () => {
     expect(document.body.textContent).toContain('isPlaceholderData: false');
   });
 
+  test('should pass the correct previous queryKey (from prevQuery) to placeholderData function params with select', async () => {
+    const queryClient = new QueryClient();
+    const key = 'placeholder-prev-query-key';
+    const idx = $(0);
+    const keys: Array<ReadonlyArray<unknown> | null> = [];
+
+    function TestComponent() {
+      const query = useQuery<{ value: string }, Error, string>({
+        queryKey: [key, idx],
+        queryFn: async () => {
+          await sleep(10);
+          return { value: `data${idx()}` };
+        },
+        placeholderData: (prev, prevQuery) => {
+          keys.push((prevQuery as any)?.queryKey ?? null);
+          return prev;
+        },
+        select: (data) => data.value,
+      });
+
+      return <p>Data: {() => String(query().data() ?? 'none')}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: data0');
+
+    idx(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toContain('Data: data0');
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: data1');
+
+    expect(keys.length).toBeGreaterThanOrEqual(2);
+    expect(keys[0]).toBe(null);
+    expect(keys[keys.length - 1]).toEqual([key, 0]);
+  });
+
+  test('should keep the same placeholder data reference while pending across query key changes', async () => {
+    const queryClient = new QueryClient();
+    const key = 'placeholder-ref';
+    const idx = $(0);
+    const refs: Array<unknown> = [];
+
+    function TestComponent() {
+      const query = useQuery<{ count: number }, Error, { count: number }>({
+        queryKey: [key, idx],
+        queryFn: async () => {
+          await sleep(10);
+          return { count: 99 };
+        },
+        placeholderData: () => ({ count: 1 }),
+      });
+
+      return (
+        <p>
+          Data:{' '}
+          {() => {
+            const d = query().data();
+            refs.push(d);
+            return String(d?.count ?? 'none');
+          }}
+        </p>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    expect(document.body.textContent).toContain('Data: 1');
+
+    idx(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toContain('Data: 1');
+    expect(refs[refs.length - 1]).toBe(refs[0]);
+  });
+
+  test('should use cached selectResult when switching between queries and placeholderData returns previousData', async () => {
+    const queryClient = new QueryClient();
+    const key = 'placeholder-select-cache';
+    const idx = $(0);
+    const stableSelect = vi.fn((data: { count: number }) => data.count);
+
+    function TestComponent() {
+      const query = useQuery<{ count: number }, Error, number>({
+        queryKey: [key, idx],
+        queryFn: async () => {
+          await sleep(10);
+          return { count: idx() };
+        },
+        placeholderData: (prev) => prev,
+        select: stableSelect,
+      });
+
+      return <p>Data: {() => String(query().data() ?? 'none')}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: 0');
+
+    idx(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(document.body.textContent).toContain('Data: 0');
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toContain('Data: 1');
+
+    expect(stableSelect).toHaveBeenCalledTimes(2);
+  });
+
   test('should show the correct data when switching keys with initialData, placeholderData & staleTime', async () => {
     const queryClient = new QueryClient();
     const key = 'initialdata-placeholder-staletime';

@@ -218,7 +218,12 @@ export type QueryOptions<
   initialDataUpdatedAt?: number;
   placeholderData?:
     | TQueryFnData
-    | ((previousData: TQueryFnData | undefined) => TQueryFnData | undefined);
+    | ((
+        previousData: TQueryFnData | undefined,
+        previousQuery:
+          | import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>
+          | undefined,
+      ) => TQueryFnData | undefined);
   enabled?: FunctionMaybe<boolean>;
   staleTime?:
     | number
@@ -315,6 +320,7 @@ export type ObserverOptions<
         query: import('./query.ts').Query<TQueryFnData, TError, TData, TQueryKey>,
       ) => boolean);
   select?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  structuralSharing?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['structuralSharing'];
   placeholderData?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
   notifyOnChangeProps?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps'];
   subscribed?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['subscribed'];
@@ -367,6 +373,7 @@ export type ResolvedObserverOptions<
     ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['throwOnError']
   >;
   select: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['select'];
+  structuralSharing: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['structuralSharing'];
   placeholderData: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
   notifyOnChangeProps: NonNullable<
     ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps']

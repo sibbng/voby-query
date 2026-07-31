@@ -2,8 +2,8 @@ import { $, useCleanup, useEffect, useMemo, untrack } from 'voby';
 import { useQueryClient } from './queryClient.ts';
 import { QueryObserver } from './queryObserver.ts';
 import type { QueryClient as QC, QueryKey, QueryOptions, UseQueryResult } from './types.ts';
-import { CancelledError } from './query.ts';
-import { hashQueryKeyByOptions, shouldThrowError } from './utils.ts';
+import { CancelledError, type Query } from './query.ts';
+import { hashQueryKeyByOptions, replaceData, shouldThrowError } from './utils.ts';
 
 export { CancelledError } from './query.ts';
 export type {
@@ -32,6 +32,16 @@ export function useQuery<
 ): UseQueryResult<Awaited<TData>, TError> {
   const client = useQueryClient(queryClient ?? options.queryClient);
   const lastData = $<TQueryFnData | undefined>();
+  let lastQueryWithDefinedData: Query<TQueryFnData, TError, TData, TQueryKey> | undefined;
+  let pinnedPlaceholder:
+    | {
+        option: QueryOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
+        value: unknown;
+      }
+    | undefined;
+  let lastResultData: unknown;
+  let lastResultStateData: unknown;
+  let selectCache: { fn: unknown; result: unknown } = { fn: undefined, result: undefined };
   const observerQueryHash = useMemo(() => {
     const queryDefaults = client.getQueryDefaults(options.queryKey) as QueryOptions<
       TQueryFnData,
@@ -80,13 +90,54 @@ export function useQuery<
     };
 
     const placeholderValue = useMemo(() => {
-      if (!state.isPending()) return undefined;
-      if (typeof obsOptions.placeholderData === 'function') {
-        return (
-          obsOptions.placeholderData as (prev: TQueryFnData | undefined) => TQueryFnData | undefined
-        )(lastData());
+      if (!state.isPending()) {
+        pinnedPlaceholder = undefined;
+        return undefined;
       }
-      return obsOptions.placeholderData;
+
+      const option = obsOptions.placeholderData;
+
+      // Memoize placeholder data: reuse the previous result while the same
+      // placeholderData option is active, skipping the function and select
+      if (
+        option !== undefined &&
+        pinnedPlaceholder !== undefined &&
+        pinnedPlaceholder.option === option
+      ) {
+        return pinnedPlaceholder.value;
+      }
+
+      let placeholder: unknown;
+      if (typeof option === 'function') {
+        placeholder = (
+          option as unknown as (
+            prev: TQueryFnData | undefined,
+            prevQuery: Query<TQueryFnData, TError, TData, TQueryKey> | undefined,
+          ) => TQueryFnData | undefined
+        )(lastData(), lastQueryWithDefinedData);
+      } else {
+        placeholder = option;
+      }
+
+      if (placeholder === undefined) return undefined;
+
+      placeholder = replaceData(lastResultData, placeholder, {
+        structuralSharing: obsOptions.structuralSharing,
+      });
+
+      if (obsOptions.select) {
+        const select = obsOptions.select as unknown as (data: unknown) => unknown;
+        if (placeholder === lastResultStateData && selectCache.fn === obsOptions.select) {
+          placeholder = selectCache.result;
+        } else {
+          placeholder = select(placeholder);
+          selectCache = { fn: obsOptions.select, result: placeholder };
+        }
+        lastResultStateData = state.data();
+      }
+
+      pinnedPlaceholder = { option, value: placeholder };
+      return placeholder;
     });
 
     const hasPlaceholderValue = useMemo(() => placeholderValue() !== undefined);
@@ -120,9 +171,7 @@ export function useQuery<
       data: useMemo(() => {
         const pv = placeholderValue();
         if (pv !== undefined) {
-          if (obsOptions.select) {
-            return obsOptions.select(pv as any) as Awaited<TData>;
-          }
+          lastResultData = pv;
           return pv as Awaited<TData>;
         }
 
@@ -130,12 +179,20 @@ export function useQuery<
 
         if (state.isSuccess() && data !== undefined) {
           lastData(data as TQueryFnData);
+          lastQueryWithDefinedData = currentQuery;
         }
 
         if (obsOptions.select && data !== undefined) {
-          return obsOptions.select(data as any) as Awaited<TData>;
+          const selected = (obsOptions.select as unknown as (d: unknown) => unknown)(
+            data as unknown,
+          ) as Awaited<TData>;
+          selectCache = { fn: obsOptions.select, result: selected };
+          lastResultStateData = data;
+          lastResultData = selected;
+          return selected;
         }
 
+        lastResultData = data;
         return data as Awaited<TData>;
       }),
       refetch: currentQuery.refetch,
