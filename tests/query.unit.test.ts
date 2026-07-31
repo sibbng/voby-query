@@ -300,6 +300,32 @@ describe('query', () => {
     expect(query.state.status()).toBe('error');
   });
 
+  it('fetch should dispatch an error if the queryFn returns undefined', async () => {
+    const consoleMock = vi.spyOn(console, 'error');
+    consoleMock.mockImplementation(() => undefined);
+    const key = queryKey();
+    const queryClient = new QueryClient();
+
+    await queryClient
+      .fetchQuery({
+        queryKey: key,
+        queryFn: () => undefined,
+        retry: false,
+      })
+      .catch(() => {});
+
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+    const error = new Error(`${JSON.stringify(key)} data is undefined`);
+
+    expect(query.state.status()).toBe('error');
+    expect(query.state.error()).toEqual(error);
+
+    expect(consoleMock).toHaveBeenCalledWith(
+      `Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["${key}"]`,
+    );
+    consoleMock.mockRestore();
+  });
+
   it('fetch should not dispatch duplicate events when already fetching', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();

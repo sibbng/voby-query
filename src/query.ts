@@ -1,4 +1,4 @@
-import { isDevelopment } from 'std-env';
+import { isDevelopment, isProduction } from 'std-env';
 import { $, $$, untrack, useEventListener, useMemo, useRoot } from 'voby';
 import type {
   CancelOptions,
@@ -424,10 +424,20 @@ export const createQuery = <
           );
           if (query.isCancelled || signal.aborted) return;
 
+          if (result === undefined) {
+            if (!isProduction) {
+              console.error(
+                `Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ${queryHash}`,
+              );
+            }
+            throw new Error(`${queryHash} data is undefined`);
+          }
+
+          const resultData: unknown = result;
           let newData: TData;
           if (isDevelopment) {
             try {
-              newData = replaceData(query.state.data(), result, query.resolvedOptions) as TData;
+              newData = replaceData(query.state.data(), resultData, query.resolvedOptions) as TData;
             } catch (error) {
               console.error(
                 `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${String(error)}`,
@@ -435,7 +445,7 @@ export const createQuery = <
               throw error;
             }
           } else {
-            newData = replaceData(query.state.data(), result, query.resolvedOptions) as TData;
+            newData = replaceData(query.state.data(), resultData, query.resolvedOptions) as TData;
           }
 
           setQuerySuccessData(query, newData, Date.now(), true);
