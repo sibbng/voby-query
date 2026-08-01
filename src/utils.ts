@@ -3,8 +3,6 @@ import type { Mutation } from './mutation.ts';
 import type { Query } from './query.ts';
 import type { FetchStatus, MutationKey, QueryKey } from './types.ts';
 
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
 // #region Utils
 
 export function noop(): undefined {
@@ -33,7 +31,6 @@ export const hashFn = (queryKey: QueryKey | MutationKey): string => {
           .sort()
           .reduce(
             (result, key) => {
-              if (DANGEROUS_KEYS.has(key)) return result;
               result[key] = (val as Record<string, unknown>)[key];
               return result;
             },
