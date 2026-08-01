@@ -248,7 +248,6 @@ export function replaceEqualDeep(a: any, b: any, depth = 0): any {
 
     for (let i = 0; i < bSize; i++) {
       const key = array ? i : bItems[i];
-      if (!array && DANGEROUS_KEYS.has(key as string)) continue;
       if (
         ((!array && aItems.includes(key)) || array) &&
         a[key] === undefined &&
