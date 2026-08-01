@@ -13,7 +13,7 @@ import type {
   ResolvedQueryOptions,
 } from './types.ts';
 import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
-import { ensureQueryFn, replaceData, resolveKey, shouldThrowError } from './utils.ts';
+import { ensureQueryFn, replaceData, resolveKey, shouldThrowError, skipToken } from './utils.ts';
 import { onlineManager } from './onlineManager.ts';
 import { timeoutManager } from './timeoutManager.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
@@ -91,6 +91,8 @@ export type Query<
   staleDisposer: () => void;
   retryDisposer: () => void;
   isStaleByTime: (staleTime: number | 'static') => boolean;
+  isDisabled: () => boolean;
+  isStatic: () => boolean;
   addInstance: () => () => void;
   removeInstance: () => void;
   onOnline: () => void;
@@ -328,6 +330,26 @@ export const createQuery = <
       if (staleTime === 'static') return false;
       if (query.state.isInvalidated()) return true;
       return Date.now() - query.state.dataUpdatedAt() >= staleTime;
+    },
+    // Upstream query.ts:281-302 — used by refetchQueries / invalidate-refetch.
+    isDisabled: () => {
+      const observers = Array.from(query.observers);
+      if (observers.length > 0) {
+        return !observers.some((observer) => observer.isEnabled());
+      }
+      // No observers: disabled if the query never fetched or uses skipToken.
+      return (
+        (query.resolvedOptions.queryFn as unknown) === skipToken ||
+        query.state.dataUpdateCount() + query.state.errorUpdateCount() === 0
+      );
+    },
+    isStatic: () => {
+      if (query.observers.size > 0) {
+        return Array.from(query.observers).some(
+          (observer) => observer.getResolvedStaleTime() === 'static',
+        );
+      }
+      return false;
     },
     addInstance: () => {
       query.destroyDisposer();

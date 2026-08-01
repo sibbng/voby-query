@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryClient } from '../src/index.ts';
+import { QueryObserver } from '../src/queryObserver';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -705,6 +706,95 @@ describe('queryClient', () => {
       void queryClient.resetQueries({ queryKey: key });
 
       expect(query.state.data()).toEqual('initial');
+    });
+  });
+
+  describe('refetchQueries', () => {
+    it('should not refetch static queries', async () => {
+      const queryClient = new QueryClient();
+      const key = queryKey();
+
+      const queryFn = vi.fn(async () => 'data');
+      await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 'static' });
+
+      const query = queryClient.getQueryCache().find({ queryKey: key })!;
+      const observer = new QueryObserver(query, { staleTime: 'static' });
+      const unsubscribe = observer.subscribe(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      await queryClient.refetchQueries({ queryKey: key });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+      observer.destroy();
+    });
+
+    it('should refetch queries with an enabled observer even if the query was built disabled', async () => {
+      const queryClient = new QueryClient();
+      const key = queryKey();
+
+      const queryFn = vi.fn(async () => 'data');
+      const query = queryClient.getQueryCache().build(queryClient, {
+        queryKey: key,
+        queryFn,
+        enabled: false,
+      });
+      const observer = new QueryObserver(query, { enabled: true });
+      const unsubscribe = observer.subscribe(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      await queryClient.refetchQueries({ queryKey: key });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(queryFn).toHaveBeenCalledTimes(2);
+
+      unsubscribe();
+      observer.destroy();
+    });
+
+    it('should not refetch queries that were never fetched and have no observers', async () => {
+      const queryClient = new QueryClient();
+      const key = queryKey();
+
+      const queryFn = vi.fn(async () => 'data');
+      queryClient.getQueryCache().build(queryClient, { queryKey: key, queryFn });
+
+      await queryClient.refetchQueries({ queryKey: key });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(queryFn).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('invalidateQueries', () => {
+    it('should not refetch static queries', async () => {
+      const queryClient = new QueryClient();
+      const key = queryKey();
+
+      const queryFn = vi.fn(async () => 'data');
+      await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 'static' });
+
+      const query = queryClient.getQueryCache().find({ queryKey: key })!;
+      const observer = new QueryObserver(query, { staleTime: 'static' });
+      const unsubscribe = observer.subscribe(() => {});
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      await queryClient.invalidateQueries({ queryKey: key });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      expect(query.state.isInvalidated()).toBe(true);
+
+      unsubscribe();
+      observer.destroy();
     });
   });
 });

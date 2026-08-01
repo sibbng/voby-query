@@ -481,39 +481,41 @@ test('queryClient applies partial query defaults', async () => {
   expect(queryFnMock).toHaveBeenCalledTimes(2);
 });
 
-test('queryClient refetchQueries cancels an in-flight request before fetching again', async () => {
+test('queryClient refetchQueries does not cancel an in-flight request of a query that has never fetched data', async () => {
   const queryClient = new QueryClient();
   let callCount = 0;
   let abortCount = 0;
+  let resolveFirst: (value: string) => void = () => {};
 
   const firstFetch = queryClient.fetchQuery({
     queryKey: ['cancel-before-refetch'],
     queryFn: async ({ signal }) => {
       callCount++;
-      if (callCount === 1) {
-        return new Promise<string>((resolve, reject) => {
-          signal.addEventListener(
-            'abort',
-            () => {
-              abortCount++;
-              reject(new Error('aborted'));
-            },
-            { once: true },
-          );
-        });
-      }
-      return `data ${callCount}`;
+      return new Promise<string>((resolve, reject) => {
+        resolveFirst = resolve;
+        signal.addEventListener(
+          'abort',
+          () => {
+            abortCount++;
+            reject(new Error('aborted'));
+          },
+          { once: true },
+        );
+      });
     },
     staleTime: 0,
   });
 
   await Promise.resolve();
   await queryClient.refetchQueries({ queryKey: ['cancel-before-refetch'] });
+  resolveFirst('data 1');
   await firstFetch;
 
-  expect(abortCount).toBe(1);
-  expect(callCount).toBe(2);
-  expect(queryClient.getQueryData(['cancel-before-refetch'])).toBe('data 2');
+  // A query with no observers that never fetched is disabled (upstream
+  // query.ts:281-287), so refetchQueries skips it entirely.
+  expect(abortCount).toBe(0);
+  expect(callCount).toBe(1);
+  expect(queryClient.getQueryData(['cancel-before-refetch'])).toBe('data 1');
 });
 
 test('queryClient.cancelQueries reverts an in-flight refetch to the previous state', async () => {

@@ -279,30 +279,15 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
     if (effectiveRefetchType === 'none') return;
 
-    const queriesToRefetch = queriesToInvalidate.filter((query) => {
-      if (!query.resolvedOptions.enabled) return false;
-      if (effectiveRefetchType === 'active' && !query.isActive) return false;
-      if (effectiveRefetchType === 'inactive' && query.isActive) return false;
-      return true;
-    });
-
-    if (cancelRefetch) {
-      await Promise.all(
-        queriesToRefetch.map((query) => query.cancel({ revert: false, silent: true })),
-      );
-    }
-
-    const refetchPromises = queriesToRefetch.map((query) =>
-      query.fetch({ throwOnError, force: true }),
+    // Upstream queryClient.ts:295-310: the refetch itself goes through
+    // refetchQueries (filtering out disabled/static/paused queries).
+    await refetchQueries(
+      {
+        ...queryFilters,
+        type: effectiveRefetchType,
+      },
+      { throwOnError, cancelRefetch },
     );
-
-    try {
-      await Promise.all(refetchPromises);
-    } catch (error) {
-      if (throwOnError) {
-        throw error;
-      }
-    }
   };
 
   const refetchQueries = async (
@@ -311,9 +296,12 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   ): Promise<void> => {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
+    // Upstream queryClient.ts:313-337: skip disabled, static, and paused
+    // queries (isDisabled/isStatic per query.ts:281-302).
     const queriesToRefetch = cache
       .findAll(filters)
-      .filter((query) => Boolean(query.resolvedOptions.enabled));
+      .filter((query) => !query.isDisabled() && !query.isStatic())
+      .filter((query) => query.state.fetchStatus() !== 'paused');
 
     if (cancelRefetch) {
       await Promise.all(

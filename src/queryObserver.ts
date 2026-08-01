@@ -329,6 +329,12 @@ export class QueryObserver<
     return this.#resolvedOptions.enabled;
   }
 
+  // Public resolver so the query can compute isStatic() per observer
+  // (upstream query.ts:293-302).
+  getResolvedStaleTime(): number | 'static' {
+    return this.#resolveStaleTime();
+  }
+
   isStale(): boolean {
     if (!this.#resolvedOptions.enabled) return false;
     const staleTime = this.#resolveStaleTime();
