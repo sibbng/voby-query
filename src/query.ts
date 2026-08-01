@@ -37,6 +37,9 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   error: TError | null;
   errorUpdateCount: number;
   errorUpdatedAt: number;
+  failureCount: number;
+  failureReason: TError | null;
+  meta: null;
   isInvalidated: boolean;
   status: QueryStatus;
   fetchStatus: FetchStatus;
@@ -118,6 +121,9 @@ const createQueryStateSnapshot = <D, TError>(
   error: state.error(),
   errorUpdateCount: state.errorUpdateCount(),
   errorUpdatedAt: state.errorUpdatedAt(),
+  failureCount: state.failureCount(),
+  failureReason: state.failureReason(),
+  meta: state.meta(),
   isInvalidated: state.isInvalidated(),
   status: state.status(),
   fetchStatus: state.fetchStatus(),
@@ -134,6 +140,9 @@ const restoreQueryStateSnapshot = <D, TError>(
   state.error(snapshot.error);
   state.errorUpdateCount(snapshot.errorUpdateCount);
   state.errorUpdatedAt(snapshot.errorUpdatedAt);
+  state.failureCount(snapshot.failureCount);
+  state.failureReason(snapshot.failureReason);
+  state.meta(snapshot.meta);
   state.isInvalidated(snapshot.isInvalidated);
   state.status(snapshot.status);
   state.fetchStatus(snapshot.fetchStatus);
@@ -283,6 +292,7 @@ export const createQuery = <
 
   let networkPause!: NetworkPause;
   let pausedController: AbortController | undefined;
+  let initialState: QueryStateSnapshot<TData, TError> | undefined;
 
   const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
@@ -412,14 +422,15 @@ export const createQuery = <
       query.fetchMachine.send('CANCEL');
     },
     reset: () => {
-      query.state.data(query.resolvedOptions.initialData as TData);
-      query.state.dataUpdatedAt(query.resolvedOptions.initialDataUpdatedAt ?? 0);
-      query.state.error(null);
-      query.state.errorUpdatedAt(0);
-      query.state.status('pending');
-      query.state.fetchStatus('idle');
-      query.state.isInvalidated(false);
-      query.state.isStale(true);
+      void query.cancel({ revert: false, silent: true });
+      query.staleDisposer();
+      query.staleDisposer = () => {};
+      query.isCancelled = false;
+
+      if (initialState) {
+        restoreQueryStateSnapshot(query.state, initialState);
+        untrack(() => scheduleQueryStale(query));
+      }
     },
     scheduleDestroy: () => {
       if (query.resolvedOptions.gcTime === Infinity) return;
@@ -886,6 +897,8 @@ export const createQuery = <
   if (query.resolvedOptions.initialData !== undefined) {
     untrack(() => scheduleQueryStale(query));
   }
+
+  initialState = untrack(() => createQueryStateSnapshot(query.state));
 
   return query;
 };

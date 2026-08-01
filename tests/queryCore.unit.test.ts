@@ -419,6 +419,80 @@ test('reset clears isInvalidated flag', async () => {
   expect(query.state.isInvalidated()).toBe(false);
 });
 
+test('reset clears error and fetch counters', async () => {
+  const queryClient = new QueryClient();
+
+  await queryClient.prefetchQuery({
+    queryKey: ['reset-counters'],
+    queryFn: async () => {
+      throw new Error('fail');
+    },
+    retry: false,
+  });
+
+  const query = findQuery(queryClient, 'reset-counters')!;
+  expect(query.state.errorUpdateCount()).toBe(1);
+  expect(query.state.failureCount()).toBe(1);
+  expect(query.state.failureReason()).toBeInstanceOf(Error);
+
+  query.reset();
+
+  expect(query.state.error()).toBeNull();
+  expect(query.state.errorUpdateCount()).toBe(0);
+  expect(query.state.errorUpdatedAt()).toBe(0);
+  expect(query.state.failureCount()).toBe(0);
+  expect(query.state.failureReason()).toBeNull();
+  expect(query.state.status()).toBe('pending');
+  expect(query.state.fetchStatus()).toBe('idle');
+});
+
+test('reset restores initial data and success state', async () => {
+  const queryClient = new QueryClient();
+  const query = queryClient.getQueryCache().build(queryClient, {
+    queryKey: ['reset-initial-data'],
+    queryFn: async () => 'new data',
+    initialData: 'initial data',
+    initialDataUpdatedAt: 123,
+  });
+
+  query.state.data('changed data');
+  query.state.dataUpdateCount(2);
+  query.state.status('error');
+  query.state.fetchStatus('fetching');
+
+  query.reset();
+
+  expect(query.state.data()).toBe('initial data');
+  expect(query.state.dataUpdateCount()).toBe(0);
+  expect(query.state.dataUpdatedAt()).toBe(123);
+  expect(query.state.status()).toBe('success');
+  expect(query.state.fetchStatus()).toBe('idle');
+});
+
+test('reset cancels an in-flight fetch before restoring state', async () => {
+  const queryClient = new QueryClient();
+  let resolveFetch: (value: string) => void = () => {};
+  const query = queryClient.getQueryCache().build(queryClient, {
+    queryKey: ['reset-in-flight'],
+    queryFn: () =>
+      new Promise<string>((resolve) => {
+        resolveFetch = resolve;
+      }),
+  });
+
+  const fetchPromise = query.fetch({ force: true });
+  await Promise.resolve();
+
+  query.reset();
+  resolveFetch('late data');
+  await fetchPromise;
+
+  expect(query.state.data()).toBeUndefined();
+  expect(query.state.dataUpdateCount()).toBe(0);
+  expect(query.state.status()).toBe('pending');
+  expect(query.state.fetchStatus()).toBe('idle');
+});
+
 // ──────────────────────────────────────
 // Section E — setQueryData & structuralSharing
 // ──────────────────────────────────────
