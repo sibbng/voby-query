@@ -125,7 +125,6 @@ export function useInfiniteQuery<
           fetchOptions ?? {};
         const data = state.data();
 
-        if (!resolvedOptions.enabled) return;
         if (direction === 'forward' && data && !hasNextPage(infiniteOptions, data)) return;
         if (direction === 'backward' && data && !hasPreviousPage(infiniteOptions, data)) return;
 

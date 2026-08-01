@@ -67,6 +67,54 @@ describe('useInfiniteQuery.browser.test', () => {
     expect(result().hasPreviousPage()).toBe(false);
   });
 
+  test('fetchNextPage works when the query is disabled', async () => {
+    const queryClient = new QueryClient();
+    let result: any;
+    let calls = 0;
+
+    function TestComponent() {
+      const query = useInfiniteQuery<Page, Error, ['disabled-pages'], number>({
+        queryKey: ['disabled-pages'],
+        enabled: false,
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          calls++;
+          return { value: `page ${pageParam}` };
+        },
+        getNextPageParam: () => undefined,
+      });
+      result = query;
+
+      return (
+        <div>
+          {() =>
+            query()
+              .data()
+              ?.pages.map((page) => page.value)
+              .join('|') ?? 'idle'
+          }
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toBe(0);
+    expect(document.body.textContent).toBe('idle');
+
+    await result().fetchNextPage();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(calls).toBe(1);
+    expect(document.body.textContent).toBe('page 1');
+  });
+
   test('fetchNextPage appends the next page and exposes fetching state', async () => {
     const queryClient = new QueryClient();
     let result: any;
