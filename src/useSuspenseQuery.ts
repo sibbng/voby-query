@@ -23,12 +23,10 @@ export function useSuspenseQuery<
   const client = useQueryClient(queryClient ?? options.queryClient);
 
   // Suspense queries use staleTime: Infinity to prevent re-fetching on re-render
-  const suspenseOptions = ensureSuspenseTimers(options) as QueryOptions<
-    TQueryFnData,
-    TError,
-    TData,
-    TQueryKey
-  >;
+  const suspenseOptions = ensureSuspenseTimers({
+    ...options,
+    enabled: true,
+  }) as QueryOptions<TQueryFnData, TError, TData, TQueryKey>;
 
   const tick = $(0);
 

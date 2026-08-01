@@ -54,6 +54,42 @@ describe('useSuspenseQuery', () => {
     expect(fetchCount).toBe(1);
   });
 
+  test('useSuspenseQuery - fetches when disabled is passed', async () => {
+    const queryClient = new QueryClient();
+    let fetchCount = 0;
+
+    const options = {
+      queryKey: ['suspend-enabled-override'],
+      enabled: false,
+      queryFn: async () => {
+        fetchCount++;
+        return fetchOk(5, 'forced suspense data');
+      },
+    };
+
+    function Suspendable() {
+      const query = useSuspenseQuery(options);
+
+      return <p>{() => query().data()}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <Suspense fallback={<p>Loading...</p>}>
+          <Suspendable />
+        </Suspense>
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    expect(document.body.textContent).toBe('Loading...');
+
+    await vi.advanceTimersByTimeAsync(11);
+
+    expect(document.body.textContent).toBe('forced suspense data');
+    expect(fetchCount).toBe(1);
+  });
+
   test('useSuspenseQuery - data is always defined when rendered', async () => {
     const queryClient = new QueryClient();
 
