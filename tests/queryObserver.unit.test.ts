@@ -440,6 +440,32 @@ describe('queryObserver stale timers', () => {
     observer.destroy();
   });
 
+  it('should not refetch on reconnect by default for networkMode always', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+    const queryFn = vi.fn(async () => 'data');
+
+    const query = queryCache.build(queryClient, {
+      queryKey: key,
+      queryFn,
+      networkMode: 'always',
+    });
+    const observer = new QueryObserver(query, {});
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
   it('should not refetch on mount when refetchOnMount is "always" and staleTime is "static"', async () => {
     const queryClient = new QueryClient();
     const queryCache = queryClient.getQueryCache() as any;

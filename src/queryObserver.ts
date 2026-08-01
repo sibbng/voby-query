@@ -54,7 +54,12 @@ export class QueryObserver<
       refetchInterval: options.refetchInterval ?? false,
       refetchIntervalInBackground: options.refetchIntervalInBackground ?? false,
       refetchOnWindowFocus: options.refetchOnWindowFocus ?? true,
-      refetchOnReconnect: options.refetchOnReconnect ?? true,
+      refetchOnReconnect:
+        options.refetchOnReconnect ??
+        (this.#query.resolvedOptions.refetchOnReconnect as
+          | ResolvedObserverOptions<TQueryFnData, TError, TData, TQueryKey>['refetchOnReconnect']
+          | undefined) ??
+        true,
       refetchOnMount: options.refetchOnMount ?? true,
       retryOnMount: options.retryOnMount ?? true,
       throwOnError: options.throwOnError ?? false,

@@ -158,7 +158,7 @@ export const resolveQueryOptions = <
   queryClient: QueryClient,
   options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
 ): ResolvedQueryOptions<TQueryFnData, TError, TData> => {
-  return {
+  const resolvedOptions = {
     ...(queryClient.getDefaultOptions().queries as QueryOptions<
       TQueryFnData,
       TError,
@@ -180,6 +180,12 @@ export const resolveQueryOptions = <
         ? (options.initialData as () => TData | undefined)()
         : options.initialData,
   } as ResolvedQueryOptions<TQueryFnData, TError, TData>;
+
+  if (resolvedOptions.refetchOnReconnect === undefined) {
+    resolvedOptions.refetchOnReconnect = resolvedOptions.networkMode !== 'always';
+  }
+
+  return resolvedOptions;
 };
 
 export const resolveStaleTime = (query: Query<any, any, any, any>): number | 'static' => {

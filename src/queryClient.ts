@@ -60,9 +60,6 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       cancelRefetch: true,
       refetchOnWindowFocus: true,
       structuralSharing: true,
-      refetchOnReconnect: options?.defaultOptions?.queries?.networkMode
-        ? options.defaultOptions.queries.networkMode === 'online'
-        : true,
       refetchOnMount: true,
       ...options?.defaultOptions?.queries,
     },
