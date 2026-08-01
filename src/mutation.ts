@@ -235,6 +235,10 @@ export const createMutation = <
       mutation.destroyDisposer();
       const id = timeoutManager.setTimeout(
         () => {
+          if (mutation.state.isPending()) {
+            mutation.scheduleDestroy();
+            return;
+          }
           mutationCache.remove(mutation);
         },
         mutation.resolvedOptions.gcTime ?? 5 * 60 * 1000,

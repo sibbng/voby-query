@@ -396,4 +396,31 @@ describe('mutationCache', () => {
       expect(() => testCache.remove(mutation)).not.toThrow();
     });
   });
+
+  it('should retain an unused mutation while it is pending', async () => {
+    const queryClient = new QueryClient();
+    const cache = queryClient.getMutationCache();
+    let resolveMutation!: (value: string) => void;
+    const pendingResult = new Promise<string>((resolve) => {
+      resolveMutation = resolve;
+    });
+    const mutation = cache.build(queryClient, {
+      gcTime: 10,
+      mutationFn: () => pendingResult,
+    });
+    const removeInstance = mutation.addInstance();
+    const promise = mutation.mutate('vars');
+
+    removeInstance();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cache.getAll()).toContain(mutation);
+
+    resolveMutation('data');
+    await expect(promise).resolves.toBe('data');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cache.getAll()).not.toContain(mutation);
+  });
 });
