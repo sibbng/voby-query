@@ -11,6 +11,14 @@ export function noop(): undefined {
   return undefined;
 }
 
+export const isValidTimeout = (value: unknown): boolean => {
+  return typeof value === 'number' && value >= 0 && value !== Infinity;
+};
+
+export const timeUntilStale = (updatedAt: number, staleTime: number): number => {
+  return Math.max(updatedAt + (staleTime || 0) - Date.now(), 0);
+};
+
 export function functionalUpdate<TInput, TOutput>(
   updater: TOutput | ((input: TInput) => TOutput),
   input: TInput,

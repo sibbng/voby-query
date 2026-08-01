@@ -4,7 +4,7 @@ import type { Query } from './query.ts';
 import type { QueryKey } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import type { ObserverOptions, ResolvedObserverOptions } from './types.ts';
-import { shallowEqualObjects } from './utils.ts';
+import { isValidTimeout, shallowEqualObjects, timeUntilStale } from './utils.ts';
 
 export class QueryObserver<
   TQueryFnData = unknown,
@@ -136,19 +136,14 @@ export class QueryObserver<
         this.#staleTimeoutId = undefined;
       }
 
-      const query = this.#query;
-      const state = query.state;
-      if (state.data() === undefined) return;
-      if (state.isInvalidated()) return;
-
       const staleTime = this.#resolveStaleTime();
-      if (staleTime === 'static' || staleTime === Infinity || staleTime <= 0) return;
-      if (this.isStale()) return;
+      if (this.isStale() || !isValidTimeout(staleTime)) return;
 
+      const time = timeUntilStale(this.#query.state.dataUpdatedAt(), staleTime as number);
       this.#staleTimeoutId = timeoutManager.setTimeout(() => {
         this.#staleTimeoutId = undefined;
         this.#notify();
-      }, staleTime + 1);
+      }, time + 1);
     });
   }
 
