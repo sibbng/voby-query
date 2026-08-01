@@ -279,6 +279,7 @@ export const createQuery = <
   // waiter here; the chain settles when the final attempt resolves/rejects
   // (flushed from the retry timer or the cancelled state).
   let chainWaiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+  let retryScheduled = false;
   const resolveChain = () => {
     const waiters = chainWaiters;
     chainWaiters = [];
@@ -324,6 +325,7 @@ export const createQuery = <
         } else {
           query.retryDisposer();
           query.retryDisposer = () => {};
+          retryScheduled = false;
         }
         query.isActive = false;
         query.scheduleDestroy();
@@ -414,6 +416,7 @@ export const createQuery = <
       query.controller.abort();
       query.retryDisposer();
       query.retryDisposer = () => {};
+      retryScheduled = false;
 
       if (revert && query.revertState) {
         restoreQueryStateSnapshot(query.state, query.revertState);
@@ -473,6 +476,11 @@ export const createQuery = <
         return query.fetchPromise;
       }
       if (currentState === 'retrying') {
+        if (retryAttempt === 0 && retryScheduled) {
+          return new Promise<void>((resolve, reject) => {
+            chainWaiters.push({ resolve, reject });
+          });
+        }
         query.fetchMachine.send('RETRY');
       } else if (force) {
         query.state.failureCount(0);
@@ -720,16 +728,21 @@ export const createQuery = <
       const delay =
         typeof retryDelay === 'function' ? retryDelay(attempt - 1, error as TError) : retryDelay;
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
+        retryScheduled = true;
         const id = timeoutManager.setTimeout(async () => {
+          retryScheduled = false;
           query.retryDisposer = () => {};
           try {
             await query.fetch({ retryAttempt: attempt, fetchFn, force: true, awaitChain });
-            resolveChain();
+            if (!retryScheduled) resolveChain();
           } catch (error) {
             rejectChain(error);
           }
         }, delay ?? 0);
-        query.retryDisposer = () => timeoutManager.clearTimeout(id);
+        query.retryDisposer = () => {
+          retryScheduled = false;
+          timeoutManager.clearTimeout(id);
+        };
         return true;
       }
       query.state.status('error');

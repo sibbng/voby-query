@@ -66,6 +66,71 @@ describe('query', () => {
     expect(queryFn).toHaveBeenCalledTimes(2);
   });
 
+  it('does not restart a pending retry when refetch disables cancellation', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first attempt'))
+      .mockResolvedValue('data');
+
+    const fetchPromise = queryClient.fetchQuery({
+      queryKey: key,
+      queryFn,
+      retry: 1,
+      retryDelay: 100,
+    });
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(query.fetchMachine.getState()).toBe('retrying');
+
+    const refetchPromise = query.refetch({ cancelRefetch: false });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(fetchPromise).resolves.toBe('data');
+    await refetchPromise;
+    expect(queryFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a non-canceling refetch pending through all retries', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first attempt'))
+      .mockRejectedValueOnce(new Error('second attempt'))
+      .mockResolvedValue('data');
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: key,
+      queryFn,
+      retry: 2,
+      retryDelay: 100,
+    });
+
+    const initialFetch = query.fetch({ force: true });
+    await vi.advanceTimersByTimeAsync(0);
+    await initialFetch;
+
+    const refetchPromise = query.refetch({ cancelRefetch: false });
+    let refetchSettled = false;
+    void refetchPromise.then(() => {
+      refetchSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(refetchSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await refetchPromise;
+    expect(queryFn).toHaveBeenCalledTimes(3);
+  });
+
   it('cancels a paused initial fetch when the last observer unsubscribes', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();
