@@ -1,8 +1,9 @@
 import { Subscribable } from './subscribable.ts';
 
-type SetupFn = (setOnline: (online: boolean) => void) => (() => void) | undefined;
+type Listener = (online: boolean) => void;
+type SetupFn = (setOnline: Listener) => (() => void) | undefined;
 
-export class OnlineManager extends Subscribable<() => void> {
+export class OnlineManager extends Subscribable<Listener> {
   #online = true;
   #cleanup?: () => void;
   #setup: SetupFn;
@@ -29,7 +30,7 @@ export class OnlineManager extends Subscribable<() => void> {
 
   protected onSubscribe(): void {
     if (!this.#cleanup) {
-      this.#cleanup = this.#setup(this.setOnline.bind(this));
+      this.setEventListener(this.#setup);
     }
   }
 
@@ -37,14 +38,19 @@ export class OnlineManager extends Subscribable<() => void> {
     if (!this.hasListeners()) {
       this.#cleanup?.();
       this.#cleanup = undefined;
-      this.#online = true;
     }
+  }
+
+  setEventListener(setup: SetupFn): void {
+    this.#setup = setup;
+    this.#cleanup?.();
+    this.#cleanup = setup(this.setOnline.bind(this));
   }
 
   setOnline(online: boolean): void {
     if (this.#online !== online) {
       this.#online = online;
-      this.listeners.forEach((listener) => listener());
+      this.listeners.forEach((listener) => listener(online));
     }
   }
 

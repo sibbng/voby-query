@@ -512,7 +512,7 @@ describe('useQuery.browser.test', () => {
       configurable: true,
       get: () => 'visible',
     });
-    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(1);
     if (originalVisibility) {
       Object.defineProperty(document, 'visibilityState', originalVisibility);
@@ -663,7 +663,7 @@ describe('useQuery.browser.test', () => {
       configurable: true,
       get: () => 'visible',
     });
-    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(11);
     if (originalVisibility) {
       Object.defineProperty(document, 'visibilityState', originalVisibility);
@@ -743,7 +743,7 @@ describe('useQuery.browser.test', () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(fetchCount).toBe(2);
 
-      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('visibilitychange'));
       await vi.advanceTimersByTimeAsync(1);
 
       if (originalVisibility) {

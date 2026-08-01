@@ -1,8 +1,9 @@
 import { Subscribable } from './subscribable.ts';
 
-type SetupFn = (setFocused: (focused: boolean) => void) => (() => void) | undefined;
+type Listener = (focused: boolean) => void;
+type SetupFn = (setFocused: (focused?: boolean) => void) => (() => void) | undefined;
 
-export class FocusManager extends Subscribable<() => void> {
+export class FocusManager extends Subscribable<Listener> {
   #focused?: boolean;
   #cleanup?: () => void;
   #setup: SetupFn;
@@ -10,25 +11,23 @@ export class FocusManager extends Subscribable<() => void> {
   constructor() {
     super();
     this.#setup = (setFocused) => {
-      if (!(typeof window !== 'undefined' && typeof window.document !== 'undefined')) {
+      if (!(typeof window !== 'undefined' && typeof window.addEventListener !== 'undefined')) {
         return;
       }
 
-      const visibilityHandler = () => {
-        setFocused(document.visibilityState === 'visible');
-      };
+      const visibilityHandler = () => setFocused();
 
-      document.addEventListener('visibilitychange', visibilityHandler);
+      window.addEventListener('visibilitychange', visibilityHandler);
 
       return () => {
-        document.removeEventListener('visibilitychange', visibilityHandler);
+        window.removeEventListener('visibilitychange', visibilityHandler);
       };
     };
   }
 
   protected onSubscribe(): void {
     if (!this.#cleanup) {
-      this.#cleanup = this.#setup(this.setFocused.bind(this));
+      this.setEventListener(this.#setup);
     }
   }
 
@@ -36,27 +35,40 @@ export class FocusManager extends Subscribable<() => void> {
     if (!this.hasListeners()) {
       this.#cleanup?.();
       this.#cleanup = undefined;
-      this.#focused = undefined;
     }
+  }
+
+  setEventListener(setup: SetupFn): void {
+    this.#setup = setup;
+    this.#cleanup?.();
+    this.#cleanup = setup((focused) => {
+      if (typeof focused === 'boolean') {
+        this.setFocused(focused);
+      } else {
+        this.onFocus();
+      }
+    });
   }
 
   setFocused(focused?: boolean): void {
-    if (this.#focused !== focused) {
+    const changed = this.#focused !== focused;
+    if (changed) {
       this.#focused = focused;
-      this.listeners.forEach((listener) => listener());
+      this.onFocus();
     }
   }
 
+  onFocus(): void {
+    const isFocused = this.isFocused();
+    this.listeners.forEach((listener) => listener(isFocused));
+  }
+
   isFocused(): boolean {
-    if (typeof this.#focused !== 'undefined') {
+    if (typeof this.#focused === 'boolean') {
       return this.#focused;
     }
 
-    if (typeof document !== 'undefined') {
-      return document.visibilityState !== 'hidden';
-    }
-
-    return true;
+    return globalThis.document?.visibilityState !== 'hidden';
   }
 }
 
