@@ -40,6 +40,8 @@ export function useInfiniteQuery<
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
   const tick = $(0);
+  const promiseTick = $(0);
+  let currentPromise: Promise<Awaited<InfiniteData<TQueryFnData, TPageParam>>> | undefined;
 
   const observer = useMemo(() => {
     let nextQuery!: Query<
@@ -66,10 +68,34 @@ export function useInfiniteQuery<
     >(client, wrappedOptions as any);
     useCleanup((nextQuery as any).addInstance());
     const obs = new QueryObserver(nextQuery, wrappedOptions as any);
-    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+    useCleanup(
+      obs.subscribe(() => {
+        const nextPromise = untrack(
+          () =>
+            obs.getCurrentResult().promise as Promise<
+              Awaited<InfiniteData<TQueryFnData, TPageParam>>
+            >,
+        );
+        if (nextPromise !== currentPromise) {
+          currentPromise = nextPromise;
+          promiseTick((v) => v + 1);
+        }
+        tick((v) => v + 1);
+      }),
+    );
     useCleanup(() => obs.destroy());
     return obs;
   });
+
+  let mountedAtQuery:
+    | Query<
+        InfiniteData<TQueryFnData, TPageParam>,
+        TError,
+        InfiniteData<TQueryFnData, TPageParam>,
+        TQueryKey
+      >
+    | undefined;
+  let mountedAtCounts: { dataUpdateCount: number; errorUpdateCount: number } | undefined;
 
   return useMemo(
     (): UseInfiniteQueryResultValue<
@@ -77,15 +103,20 @@ export function useInfiniteQuery<
       TError
     > => {
       const obs = observer();
+      promiseTick();
       const currentQuery = obs.query;
+      const observerResult = untrack(() => obs.getCurrentResult());
       const state = currentQuery.state;
       const resolvedOptions = currentQuery.resolvedOptions;
       const infiniteOptions = options;
 
-      const mountedAtCounts = {
-        dataUpdateCount: untrack(() => state.dataUpdateCount()),
-        errorUpdateCount: untrack(() => state.errorUpdateCount()),
-      };
+      if (mountedAtQuery !== currentQuery) {
+        mountedAtQuery = currentQuery;
+        mountedAtCounts = {
+          dataUpdateCount: untrack(() => state.dataUpdateCount()),
+          errorUpdateCount: untrack(() => state.errorUpdateCount()),
+        };
+      }
 
       const fetchPage = async (
         direction: InfiniteQueryDirection,
@@ -123,12 +154,17 @@ export function useInfiniteQuery<
         }
       };
 
+      const resultPromise = observerResult.promise as Promise<
+        Awaited<InfiniteData<TQueryFnData, TPageParam>>
+      >;
+      currentPromise = resultPromise;
+
       return Object.freeze({
         ...state,
         isFetchedAfterMount: useMemo(
           (): boolean =>
-            state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
-            state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+            state.dataUpdateCount() > mountedAtCounts!.dataUpdateCount ||
+            state.errorUpdateCount() > mountedAtCounts!.errorUpdateCount,
         ),
         isStale: useMemo(() => {
           tick();
@@ -182,14 +218,7 @@ export function useInfiniteQuery<
           fetchPage('backward', fetchOptions),
         refetch: currentQuery.refetch,
         cancel: currentQuery.cancel,
-        promise: (): Promise<Awaited<InfiniteData<TQueryFnData, TPageParam>>> => {
-          const d = state.data();
-          if (d !== undefined)
-            return Promise.resolve(d as Awaited<InfiniteData<TQueryFnData, TPageParam>>);
-          return (currentQuery.fetchPromise ?? currentQuery.fetch()).then(
-            () => state.data()! as Awaited<InfiniteData<TQueryFnData, TPageParam>>,
-          );
-        },
+        promise: resultPromise,
       });
     },
   );

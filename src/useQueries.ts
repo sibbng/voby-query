@@ -93,6 +93,7 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,
+        promise: obs.getCurrentResult().promise,
       });
     });
 

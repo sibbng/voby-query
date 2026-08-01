@@ -23,6 +23,12 @@ export class QueryObserver<
   #refetchIntervalId?: ManagedTimerId;
   #trackedProps: Set<string> = new Set();
   #lastValues?: Map<string, unknown>;
+  #currentPromise?: Promise<Awaited<TData>>;
+  #currentPromiseStatus: 'pending' | 'fulfilled' | 'rejected' = 'pending';
+  #currentPromiseValue?: Awaited<TData>;
+  #currentPromiseReason?: unknown;
+  #currentPromiseResolve?: (value: Awaited<TData>) => void;
+  #currentPromiseReject?: (reason?: unknown) => void;
   constructor(
     query: Query<TQueryFnData, TError, TData, TQueryKey>,
     options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
@@ -353,6 +359,59 @@ export class QueryObserver<
     return this.#query.state.isPending() && this.#resolvedOptions.placeholderData !== undefined;
   }
 
+  #createPromise(): void {
+    let resolve!: (value: Awaited<TData>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<Awaited<TData>>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    });
+    promise.catch(() => undefined);
+    this.#currentPromise = promise;
+    this.#currentPromiseStatus = 'pending';
+    this.#currentPromiseValue = undefined;
+    this.#currentPromiseReason = undefined;
+    this.#currentPromiseResolve = resolve;
+    this.#currentPromiseReject = reject;
+  }
+
+  #settlePromise(): void {
+    if (this.#currentPromiseStatus !== 'pending') return;
+
+    const data = this.#query.state.data();
+    if (data !== undefined) {
+      const value = data as Awaited<TData>;
+      this.#currentPromiseStatus = 'fulfilled';
+      this.#currentPromiseValue = value;
+      this.#currentPromiseResolve?.(value);
+      return;
+    }
+
+    const error = this.#query.state.error();
+    if (error !== null && this.#query.state.fetchStatus() === 'idle') {
+      this.#currentPromiseStatus = 'rejected';
+      this.#currentPromiseReason = error;
+      this.#currentPromiseReject?.(error);
+    }
+  }
+
+  #getPromise(): Promise<Awaited<TData>> {
+    const data = this.#query.state.data();
+    const error = this.#query.state.error();
+    const isFetching = this.#query.state.fetchStatus() !== 'idle';
+    const isErrorWithoutData = data === undefined && error !== null && !isFetching;
+    const shouldRecreate =
+      this.#currentPromise === undefined ||
+      (this.#currentPromiseStatus === 'fulfilled' && data !== this.#currentPromiseValue) ||
+      (this.#currentPromiseStatus === 'rejected' &&
+        (!isErrorWithoutData || error !== this.#currentPromiseReason));
+
+    if (shouldRecreate) this.#createPromise();
+    this.#settlePromise();
+
+    return this.#currentPromise!;
+  }
+
   getCurrentResult() {
     const query = this.#query;
     const state = query.state;
@@ -365,11 +424,7 @@ export class QueryObserver<
       isPlaceholderData: this.isPlaceholderData(),
       refetch: query.refetch,
       cancel: query.cancel,
-      promise: (): Promise<Awaited<TData>> => {
-        const d = state.data();
-        if (d !== undefined) return Promise.resolve(d as Awaited<TData>);
-        return (query.fetchPromise ?? query.fetch()).then(() => state.data()! as Awaited<TData>);
-      },
+      promise: this.#getPromise(),
     };
 
     return result;

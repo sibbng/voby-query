@@ -33,6 +33,8 @@ export function useQuery<
   const client = useQueryClient(queryClient ?? options.queryClient);
   const lastData = $<TQueryFnData | undefined>();
   const tick = $(0);
+  const promiseTick = $(0);
+  let currentPromise: Promise<Awaited<TData>> | undefined;
   let lastQueryWithDefinedData: Query<TQueryFnData, TError, TData, TQueryKey> | undefined;
   let pinnedPlaceholder:
     | {
@@ -67,10 +69,24 @@ export function useQuery<
     const obs = untrack(
       () => new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, options),
     );
-    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
+    useCleanup(
+      obs.subscribe(() => {
+        const nextPromise = untrack(
+          () => obs.getCurrentResult().promise as Promise<Awaited<TData>>,
+        );
+        if (nextPromise !== currentPromise) {
+          currentPromise = nextPromise;
+          promiseTick((v) => v + 1);
+        }
+        tick((v) => v + 1);
+      }),
+    );
     useCleanup(() => obs.destroy());
     return obs;
   });
+
+  let mountedAtQuery: Query<TQueryFnData, TError, TData, TQueryKey> | undefined;
+  let mountedAtCounts: { dataUpdateCount: number; errorUpdateCount: number } | undefined;
 
   useEffect(() => {
     client.cache.build<TQueryFnData, TError, TData, TQueryKey>(client, options);
@@ -79,16 +95,19 @@ export function useQuery<
 
   return useMemo(() => {
     const obs = observer();
+    promiseTick();
     const currentQuery = obs.query;
+    const observerResult = untrack(() => obs.getCurrentResult());
     const state = currentQuery.state;
     const obsOptions = obs.resolvedOptions;
 
-    // Snapshot the update counts at mount time so isFetchedAfterMount
-    // reflects fetches that happened *after* this observer mounted.
-    const mountedAtCounts = {
-      dataUpdateCount: untrack(() => state.dataUpdateCount()),
-      errorUpdateCount: untrack(() => state.errorUpdateCount()),
-    };
+    if (mountedAtQuery !== currentQuery) {
+      mountedAtQuery = currentQuery;
+      mountedAtCounts = {
+        dataUpdateCount: untrack(() => state.dataUpdateCount()),
+        errorUpdateCount: untrack(() => state.errorUpdateCount()),
+      };
+    }
 
     const placeholderValue = useMemo(() => {
       if (!state.isPending()) {
@@ -146,13 +165,16 @@ export function useQuery<
     const shouldThrow =
       state.isError() && shouldThrowError(obsOptions.throwOnError, [state.error()!, currentQuery]);
 
+    const resultPromise = observerResult.promise as Promise<Awaited<TData>>;
+    currentPromise = resultPromise;
+
     const result = {
       ...state,
       status: useMemo(() => (hasPlaceholderValue() ? 'success' : state.status())),
       isFetchedAfterMount: useMemo(
         (): boolean =>
-          state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
-          state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
+          state.dataUpdateCount() > mountedAtCounts!.dataUpdateCount ||
+          state.errorUpdateCount() > mountedAtCounts!.errorUpdateCount,
       ),
       isStale: useMemo(() => {
         tick();
@@ -202,13 +224,7 @@ export function useQuery<
       }),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
-      promise: (): Promise<Awaited<TData>> => {
-        const d = state.data();
-        if (d !== undefined) return Promise.resolve(d as Awaited<TData>);
-        return (currentQuery.fetchPromise ?? currentQuery.fetch()).then(
-          () => state.data()! as Awaited<TData>,
-        );
-      },
+      promise: resultPromise,
     };
 
     Object.freeze(result);

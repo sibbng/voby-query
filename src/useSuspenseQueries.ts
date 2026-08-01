@@ -76,6 +76,7 @@ export function useSuspenseQueries<
           data: dataMemos[i],
           refetch: q.refetch,
           cancel: q.cancel,
+          promise: obs.getCurrentResult().promise,
         };
       });
 
@@ -112,6 +113,7 @@ export function useSuspenseQueries<
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,
+        promise: obs.getCurrentResult().promise,
       };
     });
 

@@ -100,6 +100,7 @@ export function useSuspenseQuery<
       }),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
+      promise: obs.getCurrentResult().promise as Promise<Awaited<TData>>,
     };
 
     return Object.freeze(result);

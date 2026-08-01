@@ -187,6 +187,9 @@ export function useSuspenseInfiniteQuery<
         fetchPage('backward', fetchOptions),
       refetch: currentQuery.refetch,
       cancel: currentQuery.cancel,
+      promise: obs.getCurrentResult().promise as Promise<
+        Awaited<InfiniteData<TQueryFnData, TPageParam>>
+      >,
     };
 
     return Object.freeze(result);

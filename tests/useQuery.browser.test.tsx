@@ -52,6 +52,37 @@ describe('useQuery.browser.test', () => {
     expect(cachedData).toBe('test data');
   });
 
+  test('useQuery exposes a rejecting promise property for query errors', async () => {
+    const queryClient = new QueryClient();
+    const queryError = new Error('query promise error');
+    let queryResult: any;
+
+    function TestComponent() {
+      queryResult = useQuery({
+        queryKey: ['promise-error'],
+        queryFn: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          throw queryError;
+        },
+        retry: false,
+      });
+      return null;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    const promise = queryResult().promise;
+    expect(promise).toBeInstanceOf(Promise);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).rejects.toBe(queryError);
+  });
+
   test('useQuery staleTime behavior', async () => {
     const queryClient = new QueryClient();
 

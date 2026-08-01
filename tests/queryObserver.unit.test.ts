@@ -181,6 +181,77 @@ describe('queryObserver stale timers', () => {
     unsubscribe();
   });
 
+  it('keeps the result promise stable through retries', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+    let attempts = 0;
+
+    const query = queryCache.build(queryClient, {
+      queryKey: key,
+      queryFn: () => {
+        attempts++;
+        return attempts < 3 ? Promise.reject(new Error('rejected')) : Promise.resolve('data');
+      },
+      retry: 2,
+      retryDelay: 10,
+    });
+    const observer = new QueryObserver(query, {});
+    const unsubscribe = observer.subscribe(() => {});
+    const promises = [observer.getCurrentResult().promise];
+
+    await vi.advanceTimersByTimeAsync(0);
+    promises.push(observer.getCurrentResult().promise);
+    await vi.advanceTimersByTimeAsync(10);
+    promises.push(observer.getCurrentResult().promise);
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(promises[0]).resolves.toBe('data');
+    expect(new Set(promises).size).toBe(1);
+
+    unsubscribe();
+  });
+
+  it('creates a new result promise after recovering from an error', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+    let succeeds = false;
+    let attempts = 0;
+
+    const query = queryCache.build(queryClient, {
+      queryKey: key,
+      queryFn: () => {
+        if (succeeds) return Promise.resolve('data');
+        return Promise.reject(new Error(`rejected #${++attempts}`));
+      },
+      retry: false,
+    });
+    const observer = new QueryObserver(query, {});
+    const unsubscribe = observer.subscribe(() => {});
+    const firstPromise = observer.getCurrentResult().promise;
+
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(firstPromise).rejects.toThrow('rejected #1');
+
+    const failedRefetch = observer.refetch();
+    const secondPromise = observer.getCurrentResult().promise;
+    await vi.advanceTimersByTimeAsync(0);
+    await failedRefetch;
+    await expect(secondPromise).rejects.toThrow('rejected #2');
+
+    succeeds = true;
+    const successfulRefetch = observer.refetch();
+    const thirdPromise = observer.getCurrentResult().promise;
+    await vi.advanceTimersByTimeAsync(0);
+    await successfulRefetch;
+
+    await expect(thirdPromise).resolves.toBe('data');
+    expect(new Set([firstPromise, secondPromise, thirdPromise]).size).toBe(3);
+
+    unsubscribe();
+  });
+
   it('should notify when a prop in the notifyOnChangeProps array changes', async () => {
     const queryClient = new QueryClient();
     const queryCache = queryClient.getQueryCache() as any;

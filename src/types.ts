@@ -523,7 +523,7 @@ export type MutateOptions<
 type UseQueryResultMethods<TData = unknown> = {
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
   cancel: (options?: CancelOptions) => Promise<void>;
-  promise?: () => Promise<TData>;
+  promise: Promise<TData>;
 };
 
 export type UseQueriesOptions<T extends Array<any>, TCombinedResult = QueriesResults<T>> = {
