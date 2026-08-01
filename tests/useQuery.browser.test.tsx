@@ -235,7 +235,7 @@ describe('useQuery.browser.test', () => {
       });
       return (
         <>
-          <If when={() => query().isLoading() || (query().isIdle() && !query().data())}>
+          <If when={() => query().isLoading() || (query().isPending() && !query().data())}>
             Initial/Loading
           </If>
           <If when={() => query().isSuccess()}>{() => query().data()}</If>

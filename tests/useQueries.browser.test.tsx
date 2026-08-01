@@ -111,7 +111,8 @@ describe('useQueries.browser.test', () => {
     expect(typeof qs[0].status).toBe('function');
     expect(typeof qs[0].data).toBe('function');
     expect(typeof qs[0].refetch).toBe('function');
-    expect(typeof qs[0].cancel).toBe('function');
+    expect(qs[0]).not.toHaveProperty('cancel');
+    expect(qs[0]).not.toHaveProperty('dataUpdateCount');
     expect(qs[0].isSuccess()).toBe(true);
     expect(qs[0].isPending()).toBe(false);
   });

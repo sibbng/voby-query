@@ -2,7 +2,7 @@ import { $$, untrack } from 'voby';
 import { focusManager } from './focusManager.ts';
 import { notifyManager } from './notifyManager.ts';
 import type { Query } from './query.ts';
-import type { QueryKey } from './types.ts';
+import type { QueryKey, QueryResultStateReadonly, QueryState } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import type { ObserverOptions, ResolvedObserverOptions } from './types.ts';
 import { isValidTimeout, shallowEqualObjects, timeUntilStale } from './utils.ts';
@@ -10,6 +10,34 @@ import { isValidTimeout, shallowEqualObjects, timeUntilStale } from './utils.ts'
 export type QueryObserverResult = {
   [key: string]: unknown;
 };
+
+export const getQueryResultState = <D, TError>(
+  state: QueryState<D, TError>,
+): QueryResultStateReadonly<D, TError> => ({
+  data: state.data,
+  dataUpdatedAt: state.dataUpdatedAt,
+  error: state.error,
+  errorUpdatedAt: state.errorUpdatedAt,
+  errorUpdateCount: state.errorUpdateCount,
+  failureCount: state.failureCount,
+  failureReason: state.failureReason,
+  status: state.status,
+  fetchStatus: state.fetchStatus,
+  isFetching: state.isFetching,
+  isRefetching: state.isRefetching,
+  isRefetchError: state.isRefetchError,
+  isFetched: state.isFetched,
+  isPaused: state.isPaused,
+  isPending: state.isPending,
+  isSuccess: state.isSuccess,
+  isError: state.isError,
+  isLoading: state.isLoading,
+  isLoadingError: state.isLoadingError,
+  isPlaceholderData: state.isPlaceholderData,
+  isStale: state.isStale,
+  isInitialLoading: state.isInitialLoading,
+  isEnabled: state.isEnabled,
+});
 
 export class QueryObserver<
   TQueryFnData = unknown,
@@ -426,7 +454,7 @@ export class QueryObserver<
     const options = this.#resolvedOptions;
 
     const result = {
-      ...state,
+      ...getQueryResultState(state),
       isFetchedAfterMount:
         state.dataUpdateCount() > this.#queryInitialCounts.dataUpdateCount ||
         state.errorUpdateCount() > this.#queryInitialCounts.errorUpdateCount,
@@ -434,7 +462,6 @@ export class QueryObserver<
       isStale: this.isStale(),
       isPlaceholderData: this.isPlaceholderData(),
       refetch: query.refetch,
-      cancel: query.cancel,
       promise: this.#getPromise(),
     };
 

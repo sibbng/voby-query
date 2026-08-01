@@ -5,7 +5,7 @@ import {
   hasPreviousPage,
   refetchInfiniteData,
 } from './infiniteQuery.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import type { Query } from './query.ts';
 import type {
   InfiniteData,
@@ -169,7 +169,7 @@ export function useInfiniteQuery<
       currentPromise = resultPromise;
 
       const result = Object.freeze({
-        ...state,
+        ...getQueryResultState(state),
         isFetchedAfterMount: useMemo(
           (): boolean =>
             state.dataUpdateCount() > mountedAtCounts!.dataUpdateCount ||
@@ -231,7 +231,6 @@ export function useInfiniteQuery<
           await currentQuery.refetch(fetchOptions);
           return currentResult!;
         },
-        cancel: currentQuery.cancel,
         promise: resultPromise,
       });
 

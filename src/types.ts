@@ -124,6 +124,11 @@ export type QueryStateReadonly<D, TError = Error> = {
   [K in keyof QueryState<D, TError>]: ObservableReadonly<ReturnType<QueryState<D, TError>[K]>>;
 } & { isFetchedAfterMount: ObservableReadonly<boolean> };
 
+export type QueryResultStateReadonly<D, TError = Error> = Omit<
+  QueryStateReadonly<D, TError>,
+  'dataUpdateCount' | 'fetchMeta' | 'isInvalidated' | 'isIdle' | 'isFetchedAfterMount'
+>;
+
 export type MutationState<
   TData = unknown,
   TError = unknown,
@@ -523,7 +528,6 @@ export type MutateOptions<
 
 type UseQueryResultMethods<TData = unknown> = {
   refetch: (options?: QueryRefetchOptions) => Promise<void>;
-  cancel: (options?: CancelOptions) => Promise<void>;
   promise: Promise<TData>;
 };
 
@@ -538,15 +542,20 @@ export type QueriesOptions<T extends Array<any>> = {
   [K in keyof T]: QueryOptions;
 };
 
-export type QueriesResultItem<TData = unknown, TError = Error> = QueryStateReadonly<TData, TError> &
-  UseQueryResultMethods;
+export type QueriesResultItem<TData = unknown, TError = Error> = QueryResultStateReadonly<
+  TData,
+  TError
+> & {
+  isFetchedAfterMount: ObservableReadonly<boolean>;
+} & UseQueryResultMethods;
 
 export type QueriesResults<T extends Array<any>> = {
   [K in keyof T]: QueriesResultItem;
 };
 
-export type UseQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
-  UseQueryResultMethods<TData>;
+export type UseQueryResultValue<TData, TError = Error> = QueryResultStateReadonly<TData, TError> & {
+  isFetchedAfterMount: ObservableReadonly<boolean>;
+} & UseQueryResultMethods<TData>;
 
 export type UseQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
   UseQueryResultValue<TData | undefined, TError>
@@ -609,7 +618,6 @@ export type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
 interface UseInfiniteQueryResultMethods<TData = unknown, TError = Error> {
   refetch: (options?: QueryRefetchOptions) => Promise<UseInfiniteQueryResultValue<TData, TError>>;
-  cancel: (options?: CancelOptions) => Promise<void>;
   promise: Promise<TData>;
   fetchNextPage: (
     options?: InfiniteQueryFetchPageOptions,
@@ -623,8 +631,12 @@ interface UseInfiniteQueryResultMethods<TData = unknown, TError = Error> {
   isFetchingPreviousPage: ObservableReadonly<boolean>;
 }
 
-export type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
-  UseInfiniteQueryResultMethods<TData, TError>;
+export type UseInfiniteQueryResultValue<TData, TError = Error> = QueryResultStateReadonly<
+  TData,
+  TError
+> & {
+  isFetchedAfterMount: ObservableReadonly<boolean>;
+} & UseInfiniteQueryResultMethods<TData, TError>;
 
 export type UseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
   UseInfiniteQueryResultValue<TData | undefined, TError>

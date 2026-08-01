@@ -1,6 +1,6 @@
 import { $, useCleanup, useMemo, untrack, useResource } from 'voby';
 import { useQueryClient } from './queryClient.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import type {
   QueryClient as QC,
   QueryKey,
@@ -77,7 +77,7 @@ export function useSuspenseQuery<
     // Access `.value` to trigger suspend() in Voby's useResource
     // eslint-disable-next-line no-unused-expressions
     resource().value;
-    const { isPlaceholderData: _isPlaceholderData, ...rest } = stateObservable;
+    const { isPlaceholderData: _isPlaceholderData, ...rest } = getQueryResultState(stateObservable);
 
     const result: UseSuspenseQueryResultValue<Awaited<TData>, TError> = {
       ...rest,
@@ -97,7 +97,6 @@ export function useSuspenseQuery<
         return currentData as Awaited<TData>;
       }),
       refetch: currentQuery.refetch,
-      cancel: currentQuery.cancel,
       promise: obs.getCurrentResult().promise as Promise<Awaited<TData>>,
     };
 

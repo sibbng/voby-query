@@ -12,6 +12,28 @@ describe('queryObserver stale timers', () => {
     vi.useRealTimers();
   });
 
+  it('does not expose internal query state fields in results', async () => {
+    const queryClient = new QueryClient();
+    const key = queryKey();
+
+    await queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: async () => 'data',
+    });
+
+    const query = (queryClient.getQueryCache() as any).find({ queryKey: key });
+    const result = new QueryObserver(query, {}).getCurrentResult() as Record<string, unknown>;
+
+    expect(result).not.toHaveProperty('dataUpdateCount');
+    expect(result).not.toHaveProperty('fetchMeta');
+    expect(result).not.toHaveProperty('isInvalidated');
+    expect(result).not.toHaveProperty('isIdle');
+    expect(result).not.toHaveProperty('cancel');
+    expect(result).toHaveProperty('data');
+    expect(result).toHaveProperty('isFetched');
+    expect(result).toHaveProperty('isEnabled');
+  });
+
   it('arms the stale timer relative to dataUpdatedAt when staleTime shortens', async () => {
     const queryClient = new QueryClient();
     const queryCache = queryClient.getQueryCache() as any;

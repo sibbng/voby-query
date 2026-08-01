@@ -1,6 +1,6 @@
 import { $, type ObservableReadonly, useCleanup, useMemo, useResource } from 'voby';
 import { useQueryClient } from './queryClient.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import { ensureSuspenseTimers } from './utils.ts';
 import type { QueryClient, QueriesResultItem, UseQueriesOptions } from './types.ts';
 
@@ -71,11 +71,11 @@ export function useSuspenseQueries<
       const dataMemos = queryDataMemos();
       const results = currentObservers.map((obs: any, i: number) => {
         const q = obs.query;
+        const { isPlaceholderData: _isPlaceholderData, ...rest } = getQueryResultState(q.state);
         return {
-          ...q.state,
+          ...rest,
           data: dataMemos[i],
           refetch: q.refetch,
-          cancel: q.cancel,
           promise: obs.getCurrentResult().promise,
         };
       });
@@ -107,12 +107,12 @@ export function useSuspenseQueries<
     const dataMemos = queryDataMemos();
     const results = currentObservers.map((obs: any, i: number) => {
       const q = obs.query;
+      const { isPlaceholderData: _isPlaceholderData, ...rest } = getQueryResultState(q.state);
       return {
-        ...q.state,
+        ...rest,
         isStale: useMemo(() => obs.isStale()),
         data: dataMemos[i],
         refetch: q.refetch,
-        cancel: q.cancel,
         promise: obs.getCurrentResult().promise,
       };
     });

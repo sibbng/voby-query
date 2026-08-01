@@ -6,7 +6,7 @@ import {
   refetchInfiniteData,
 } from './infiniteQuery.ts';
 import type { Query } from './query.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import { ensureSuspenseTimers } from './utils.ts';
 import type {
   InfiniteData,
@@ -156,7 +156,7 @@ export function useSuspenseInfiniteQuery<
       return currentResult!;
     };
 
-    const { isPlaceholderData: _isPlaceholderData, ...rest } = state;
+    const { isPlaceholderData: _isPlaceholderData, ...rest } = getQueryResultState(state);
 
     const result: UseSuspenseInfiniteQueryResultValue<
       Awaited<InfiniteData<TQueryFnData, TPageParam>>,
@@ -196,7 +196,6 @@ export function useSuspenseInfiniteQuery<
         await currentQuery.refetch(fetchOptions);
         return currentResult!;
       },
-      cancel: currentQuery.cancel,
       promise: obs.getCurrentResult().promise as Promise<
         Awaited<InfiniteData<TQueryFnData, TPageParam>>
       >,

@@ -1,7 +1,7 @@
 import { $, type ObservableReadonly, useCleanup, useMemo, untrack } from 'voby';
 import { noop } from './utils.ts';
 import { useQueryClient } from './queryClient.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import type { QueryClient, QueriesResultItem, QueriesResults, UseQueriesOptions } from './types.ts';
 
 export type { UseQueriesOptions } from './types.ts';
@@ -87,7 +87,7 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
       const { data, placeholderValue } = queryMemos[i];
       const hasPlaceholderValue = useMemo(() => placeholderValue() !== undefined);
       return Object.freeze({
-        ...q.state,
+        ...getQueryResultState(q.state),
         isFetchedAfterMount: useMemo(
           (): boolean =>
             q.state.dataUpdateCount() > (counts?.dataUpdateCount ?? 0) ||
@@ -112,7 +112,6 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
         }),
         data,
         refetch: q.refetch,
-        cancel: q.cancel,
         promise: obs.getCurrentResult().promise,
       });
     });

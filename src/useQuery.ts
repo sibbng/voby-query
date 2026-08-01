@@ -1,6 +1,6 @@
 import { $, useCleanup, useEffect, useMemo, untrack } from 'voby';
 import { useQueryClient } from './queryClient.ts';
-import { QueryObserver } from './queryObserver.ts';
+import { getQueryResultState, QueryObserver } from './queryObserver.ts';
 import type { QueryClient as QC, QueryKey, QueryOptions, UseQueryResult } from './types.ts';
 import { CancelledError, type Query } from './query.ts';
 import { hashQueryKeyByOptions, replaceData, shouldThrowError } from './utils.ts';
@@ -170,7 +170,7 @@ export function useQuery<
     currentPromise = resultPromise;
 
     const result = {
-      ...state,
+      ...getQueryResultState(state),
       status: useMemo(() => (hasPlaceholderValue() ? 'success' : state.status())),
       isFetchedAfterMount: useMemo(
         (): boolean =>
@@ -224,7 +224,6 @@ export function useQuery<
         return data as Awaited<TData>;
       }),
       refetch: currentQuery.refetch,
-      cancel: currentQuery.cancel,
       promise: resultPromise,
     };
 
