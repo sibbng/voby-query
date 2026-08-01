@@ -439,4 +439,169 @@ describe('queryObserver stale timers', () => {
     unsubscribe();
     observer.destroy();
   });
+
+  it('should not refetch on mount when refetchOnMount is "always" and staleTime is "static"', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.setQueryData(key, 'initial');
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 'static',
+      refetchOnMount: 'always',
+      queryFn,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(0);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on window focus when refetchOnWindowFocus is "always" and staleTime is "static"', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 'static',
+      refetchOnWindowFocus: 'always',
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on reconnect when refetchOnReconnect is "always" and staleTime is "static"', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 'static',
+      refetchOnReconnect: 'always',
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on window focus when staleTime is "static" and query has a background error', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    let callCount = 0;
+    const queryFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) return 'data';
+      throw new Error('background error');
+    });
+
+    const query = queryCache.build(queryClient, {
+      queryKey: key,
+      queryFn,
+      retry: false,
+    });
+    const observer = new QueryObserver(query, {
+      staleTime: 'static',
+      refetchOnWindowFocus: true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect((observer.getCurrentResult().data as any)?.()).toBe('data');
+    expect((observer.getCurrentResult().status as any)()).toBe('success');
+
+    await observer.refetch();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect((observer.getCurrentResult().status as any)()).toBe('error');
+    expect((observer.getCurrentResult().data as any)?.()).toBe('data');
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should refetch on window focus when query has a background error and staleTime is not static', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    let callCount = 0;
+    const queryFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) return 'data';
+      if (callCount === 2) throw new Error('background error');
+      return 'new data';
+    });
+
+    const query = queryCache.build(queryClient, {
+      queryKey: key,
+      queryFn,
+      retry: false,
+    });
+    const observer = new QueryObserver(query, {
+      staleTime: 1000,
+      refetchOnWindowFocus: true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect((observer.getCurrentResult().data as any)?.()).toBe('data');
+    expect((observer.getCurrentResult().status as any)()).toBe('success');
+
+    await observer.refetch();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect((observer.getCurrentResult().status as any)()).toBe('error');
+    expect((observer.getCurrentResult().data as any)?.()).toBe('data');
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(3);
+    expect((observer.getCurrentResult().data as any)?.()).toBe('new data');
+
+    unsubscribe();
+    observer.destroy();
+  });
 });

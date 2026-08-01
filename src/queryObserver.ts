@@ -295,6 +295,11 @@ export class QueryObserver<
 
     if (this.#query.state.data() === undefined) return false;
 
+    // Upstream's shouldFetchOn gates the whole field evaluation on
+    // enabled !== false && staleTime !== 'static' (queryObserver.ts:773-789):
+    // a 'static' staleTime must suppress even 'always'.
+    if (this.#resolveStaleTime() === 'static') return false;
+
     const refetchOnMount = this.#resolvedOptions.refetchOnMount;
     if (typeof refetchOnMount === 'function') {
       return !!refetchOnMount(this.#query);
@@ -305,6 +310,8 @@ export class QueryObserver<
   }
 
   shouldFetchOnWindowFocus(): boolean {
+    if (this.#resolveStaleTime() === 'static') return false;
+
     const refetchOnWindowFocus = this.#resolvedOptions.refetchOnWindowFocus;
     if (typeof refetchOnWindowFocus === 'function') {
       return !!refetchOnWindowFocus(this.#query);
@@ -315,6 +322,8 @@ export class QueryObserver<
   }
 
   shouldFetchOnReconnect(): boolean {
+    if (this.#resolveStaleTime() === 'static') return false;
+
     const refetchOnReconnect = this.#resolvedOptions.refetchOnReconnect;
     if (typeof refetchOnReconnect === 'function') {
       return !!refetchOnReconnect(this.#query);
