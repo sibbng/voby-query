@@ -197,6 +197,23 @@ export function isPlainArray(value: unknown) {
   return Array.isArray(value) && value.length === Object.keys(value).length;
 }
 
+export function shallowEqualObjects<T extends Record<string, any>>(
+  a: T,
+  b: T | undefined,
+): boolean {
+  if ((b && Object.keys(a).length !== Object.keys(b).length) || !b) {
+    return false;
+  }
+
+  for (const key in a) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * This function returns `a` if `b` is deeply equal.
  * If not, it will replace any deeply equal children of `b` with those of `a`.

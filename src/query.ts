@@ -71,6 +71,7 @@ export type Query<
   queryHash: string;
   queryKey: unknown[];
   isActive: boolean;
+  cache: QueryCache;
   state: QueryState<TData, TError>;
   cancel: (options?: CancelOptions) => Promise<void>;
   destroy: () => void;
@@ -279,10 +280,12 @@ export const createQuery = <
     queryHash,
     queryKey: resolvedOptions.queryKey,
     isActive: false,
+    cache,
     resolvedOptions,
     instances: 0,
     observers: new Set(),
     addObserver: (observer) => {
+      if (query.observers.has(observer)) return;
       query.observers.add(observer);
       if (query.observers.size === 1) {
         query.destroyDisposer();
@@ -290,8 +293,10 @@ export const createQuery = <
       if (!query.isActive) {
         query.isActive = true;
       }
+      cache.notify({ type: 'observerAdded', query: query as Query<any, any, any, any>, observer });
     },
     removeObserver: (observer) => {
+      if (!query.observers.has(observer)) return;
       query.observers.delete(observer);
       if (query.observers.size === 0) {
         query.retryDisposer();
@@ -299,6 +304,11 @@ export const createQuery = <
         query.isActive = false;
         query.scheduleDestroy();
       }
+      cache.notify({
+        type: 'observerRemoved',
+        query: query as Query<any, any, any, any>,
+        observer,
+      });
     },
     state: undefined as any,
     controller: new AbortController(),

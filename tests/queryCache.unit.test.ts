@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryCache } from '../src/queryCache.ts';
+import { QueryObserver } from '../src/queryObserver.ts';
 import { QueryClient } from '../src/index.ts';
 
 beforeEach(() => {
@@ -85,6 +86,37 @@ describe('queryCache', () => {
       });
       queryClient.removeQueries({ queryKey: key });
       expect(events).toContain('removed');
+    });
+
+    it('should notify observerAdded, observerResultsUpdated, observerOptionsUpdated and observerRemoved', async () => {
+      const queryClient = new QueryClient();
+      const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+      const key = queryKey();
+      const events: string[] = [];
+      queryCache.subscribe((event) => {
+        events.push(event.type);
+      });
+
+      await queryClient.prefetchQuery({
+        queryKey: key,
+        queryFn: async () => 'data',
+      });
+      const query = queryCache.find({ queryKey: key }) as any;
+
+      const observer = new QueryObserver(query, { staleTime: 10 });
+      const unsubscribe = observer.subscribe(() => {});
+
+      expect(events).toContain('observerAdded');
+      expect(events.indexOf('observerAdded')).toBeGreaterThan(events.indexOf('added'));
+
+      await vi.advanceTimersByTimeAsync(11);
+      expect(events).toContain('observerResultsUpdated');
+
+      observer.setOptions({ staleTime: 20 });
+      expect(events).toContain('observerOptionsUpdated');
+
+      unsubscribe();
+      expect(events).toContain('observerRemoved');
     });
   });
 

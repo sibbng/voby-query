@@ -1,5 +1,6 @@
 import { createQuery, resolveQueryOptions, type Query } from './query.ts';
 import { Subscribable } from './subscribable.ts';
+import type { QueryObserver } from './queryObserver.ts';
 import type {
   QueryCache as QueryCacheType,
   QueryClient,
@@ -18,7 +19,23 @@ export interface QueryCacheConfig {
 export type QueryCacheNotifyEvent =
   | { type: 'added'; query: Query<any, any, any, any> }
   | { type: 'removed'; query: Query<any, any, any, any> }
-  | { type: 'updated'; query: Query<any, any, any, any> };
+  | { type: 'updated'; query: Query<any, any, any, any> }
+  | {
+      type: 'observerAdded';
+      query: Query<any, any, any, any>;
+      observer: QueryObserver<any, any, any, any>;
+    }
+  | {
+      type: 'observerRemoved';
+      query: Query<any, any, any, any>;
+      observer: QueryObserver<any, any, any, any>;
+    }
+  | { type: 'observerResultsUpdated'; query: Query<any, any, any, any> }
+  | {
+      type: 'observerOptionsUpdated';
+      query: Query<any, any, any, any>;
+      observer: QueryObserver<any, any, any, any>;
+    };
 
 type QueryCacheListener = (event: QueryCacheNotifyEvent) => void;
 

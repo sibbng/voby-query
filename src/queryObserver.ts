@@ -4,6 +4,7 @@ import type { Query } from './query.ts';
 import type { QueryKey } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import type { ObserverOptions, ResolvedObserverOptions } from './types.ts';
+import { shallowEqualObjects } from './utils.ts';
 
 export class QueryObserver<
   TQueryFnData = unknown,
@@ -114,6 +115,12 @@ export class QueryObserver<
   #notify(): void {
     for (const listener of this.#listeners) {
       listener();
+    }
+    if (this.#query.cache.hasListeners()) {
+      this.#query.cache.notify({
+        type: 'observerResultsUpdated',
+        query: this.#query as any,
+      });
     }
   }
 
@@ -259,6 +266,14 @@ export class QueryObserver<
   setOptions(options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>): void {
     const previousOptions = this.#resolvedOptions;
     this.#resolvedOptions = this.#resolveOptions(options);
+
+    if (!shallowEqualObjects(previousOptions, this.#resolvedOptions)) {
+      this.#query.cache.notify({
+        type: 'observerOptionsUpdated',
+        query: this.#query as any,
+        observer: this,
+      });
+    }
 
     const shouldFetchOnOptionsUpdate = untrack(
       () =>
