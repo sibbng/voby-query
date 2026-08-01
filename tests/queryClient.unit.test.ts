@@ -81,6 +81,19 @@ describe('queryClient', () => {
       queryClient.setQueryDefaults(key, { ...queryOptions2 });
       expect(queryClient.getQueryDefaults(key)).toMatchObject(queryOptions2);
     });
+
+    it('should merge defaults for keys that match', () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+
+      queryClient.setQueryDefaults([...key, 'todo'], { suspense: true } as any);
+      queryClient.setQueryDefaults([...key, 'todo', 'detail'], { staleTime: 5000 });
+
+      expect(queryClient.getQueryDefaults([...key, 'todo', 'detail'])).toMatchObject({
+        suspense: true,
+        staleTime: 5000,
+      });
+    });
   });
 
   describe('setQueryData', () => {
@@ -607,6 +620,19 @@ describe('queryClient', () => {
 
       expect(queryClient.getMutationDefaults(key1)).toMatchObject(mutationOptions1);
       expect(queryClient.getMutationDefaults(key2)).toMatchObject(mutationOptions2);
+    });
+
+    it('should merge defaults for keys that match', () => {
+      const key = queryKey();
+      const queryClient = new QueryClient();
+
+      queryClient.setMutationDefaults([...key, 'todo'], { retry: 1 });
+      queryClient.setMutationDefaults([...key, 'todo', 'detail'], { retryDelay: 100 });
+
+      expect(queryClient.getMutationDefaults([...key, 'todo', 'detail'])).toMatchObject({
+        retry: 1,
+        retryDelay: 100,
+      });
     });
   });
 

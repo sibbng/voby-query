@@ -90,12 +90,13 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
   const getQueryDefaults = (queryKey: QueryKey) => {
     const queryHash = queryKeyHashFn(queryKey);
+    let result: Partial<QueryOptions> = {};
     for (const [key, { queryKey: defaultQueryKey, defaults }] of queryDefaultsMap.entries()) {
       if (queryHash === key || partialMatchKey(defaultQueryKey, queryKey)) {
-        return defaults;
+        result = { ...result, ...defaults };
       }
     }
-    return {};
+    return result;
   };
 
   const setQueryDefaults = (queryKey: QueryKey, defaults: Partial<QueryOptions>) => {
@@ -109,6 +110,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   >();
 
   const getMutationDefaults = (mutationKey?: MutationKey) => {
+    let result: Partial<MutationOptions> = {};
     if (mutationKey) {
       const mutationHash = queryKeyHashFn(mutationKey);
       for (const [
@@ -116,11 +118,11 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
         { mutationKey: defaultMutationKey, defaults },
       ] of mutationDefaultsMap.entries()) {
         if (mutationHash === key || partialMatchKey(defaultMutationKey, mutationKey)) {
-          return defaults;
+          result = { ...result, ...defaults };
         }
       }
     }
-    return {};
+    return result;
   };
 
   const setMutationDefaults = (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => {
