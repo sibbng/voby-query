@@ -45,6 +45,12 @@ export type InfiniteQueryFunctionContext<
 export type QueryKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 export type MutationKey = FunctionMaybe<ObservableMaybe<unknown>[]>;
 
+export type MutationFunctionContext = {
+  client: QueryClient;
+  meta?: Record<string, unknown>;
+  mutationKey?: MutationKey;
+};
+
 export const dataTagSymbol = Symbol('dataTagSymbol');
 export type dataTagSymbol = typeof dataTagSymbol;
 export const dataTagErrorSymbol = Symbol('dataTagErrorSymbol');
@@ -117,9 +123,10 @@ export type MutationState<
   TData = unknown,
   TError = unknown,
   TVariables = unknown,
-  _TContext = unknown,
+  TContext = unknown,
 > = {
   data: Observable<TData | undefined>;
+  context: Observable<TContext | undefined>;
   error: Observable<TError | null>;
   status: Observable<MutationStatus>;
   failureCount: Observable<number>;
@@ -437,24 +444,30 @@ export type MutationOptions<
   TVariables = TData,
   TContext = unknown,
 > = {
-  mutationFn?: (variables: TVariables) => Promise<TData>;
+  mutationFn?: (variables: TVariables, context: MutationFunctionContext) => Promise<TData>;
   mutationKey?: MutationKey;
-  onMutate?: (variables: TVariables) => Promise<TContext> | TContext;
+  onMutate?: (
+    variables: TVariables,
+    context: MutationFunctionContext,
+  ) => Promise<TContext> | TContext;
   onSuccess?: (
     data: TData,
     variables: TVariables,
     context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
   ) => void | Promise<void>;
   onError?: (
     error: TError,
     variables: TVariables,
     context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
   ) => void | Promise<void>;
   onSettled?: (
     data: TData | undefined,
     error: TError | null,
     variables: TVariables,
     context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
   ) => void | Promise<void>;
   retry?: boolean | number | ((failureCount: number, error: TError) => boolean);
   retryDelay?: number | ((retryAttempt: number, error: TError) => number);
@@ -481,13 +494,24 @@ export type MutateOptions<
   TVariables = unknown,
   TContext = unknown,
 > = {
-  onSuccess?: (data: TData, variables: TVariables, context: TContext | undefined) => void;
-  onError?: (error: TError, variables: TVariables, context: TContext | undefined) => void;
+  onSuccess?: (
+    data: TData,
+    variables: TVariables,
+    context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
+  ) => void;
+  onError?: (
+    error: TError,
+    variables: TVariables,
+    context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
+  ) => void;
   onSettled?: (
     data: TData | undefined,
     error: TError | null,
     variables: TVariables,
     context: TContext | undefined,
+    mutationContext: MutationFunctionContext,
   ) => void;
 };
 

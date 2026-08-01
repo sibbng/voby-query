@@ -59,7 +59,12 @@ describe('mutationCache', () => {
       ).rejects.toThrow('error');
 
       expect(onError).toHaveBeenCalledTimes(1);
-      expect(onError).toHaveBeenCalledWith(new Error('error'), 'vars', undefined);
+      expect(onError).toHaveBeenCalledWith(
+        new Error('error'),
+        'vars',
+        undefined,
+        expect.objectContaining({ client: queryClient }),
+      );
     });
 
     it('should call onSuccess when a mutation is successful', async () => {

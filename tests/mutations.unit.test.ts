@@ -72,7 +72,7 @@ describe('mutations', () => {
     await executeMutation(queryClient, { mutationKey: key }, 'vars').catch(() => {});
 
     expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenCalledWith('vars');
+    expect(fn).toHaveBeenCalledWith('vars', expect.objectContaining({ client: queryClient }));
   });
 
   it('mutate should throw an error if no mutationFn found', async () => {
@@ -103,6 +103,50 @@ describe('mutations', () => {
     );
 
     expect(result).toBe('success-data');
+  });
+
+  it('passes mutation function context and stores the onMutate context', async () => {
+    const queryClient = new QueryClient();
+    const onMutateResult = { optimisticId: 1 };
+    const options: any = {
+      mutationKey: ['context-test'],
+      meta: { source: 'test' },
+      mutationFn: vi.fn(async (_variables: string, context: any) => {
+        expect(context.client).toBe(queryClient);
+        expect(context.meta).toEqual({ source: 'test' });
+        expect(context.mutationKey).toEqual(['context-test']);
+        return 'success-data';
+      }),
+      onMutate: vi.fn((_variables: string, context: any) => {
+        expect(context.client).toBe(queryClient);
+        return onMutateResult;
+      }),
+      onSuccess: vi.fn(),
+      onSettled: vi.fn(),
+    };
+    const mutation = queryClient.getMutationCache().build(queryClient, options) as any;
+
+    await mutation.mutate('vars', {
+      onSuccess: (...args: any[]) => {
+        expect(args[2]).toBe(onMutateResult);
+        expect(args[3].client).toBe(queryClient);
+      },
+    });
+
+    expect(mutation.state.context()).toBe(onMutateResult);
+    expect(options.onSuccess).toHaveBeenCalledWith(
+      'success-data',
+      'vars',
+      onMutateResult,
+      expect.objectContaining({ client: queryClient }),
+    );
+    expect(options.onSettled).toHaveBeenCalledWith(
+      'success-data',
+      null,
+      'vars',
+      onMutateResult,
+      expect.objectContaining({ client: queryClient }),
+    );
   });
 
   it('mutateAsync should reject when the mutation fails even without throwOnError', async () => {
@@ -449,7 +493,12 @@ describe('mutations', () => {
 
     await expect((mutation as any).mutate('vars')).rejects.toBe(callbackError);
 
-    expect(onError).toHaveBeenCalledWith(callbackError, 'vars', undefined);
+    expect(onError).toHaveBeenCalledWith(
+      callbackError,
+      'vars',
+      undefined,
+      expect.objectContaining({ client: queryClient }),
+    );
     expect(mutation.state.status()).toBe('error');
     expect(mutation.state.error()).toBe(callbackError);
   });

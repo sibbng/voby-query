@@ -4,6 +4,7 @@ import { timeoutManager } from './timeoutManager.ts';
 import type {
   MutateOptions,
   MutationKey,
+  MutationFunctionContext,
   MutationOptions,
   MutationState,
   MutationStatus,
@@ -111,6 +112,7 @@ export const createMutation = <
   const setInitialState = () => {
     state.status('idle');
     state.data(undefined);
+    state.context(undefined);
     state.error(null);
     state.failureCount(0);
     state.failureReason(null);
@@ -124,6 +126,7 @@ export const createMutation = <
     stateDisposer = dispose;
 
     const data = $<TData | undefined>(undefined);
+    const context = $<TContext | undefined>(undefined, { equals: false });
     const error = $<TError | null>(null, { equals: false });
     const status = $<MutationStatus>('idle');
     const failureCount = $(0);
@@ -140,6 +143,7 @@ export const createMutation = <
 
     state = {
       data,
+      context,
       error,
       status,
       failureCount,
@@ -249,6 +253,7 @@ export const createMutation = <
 
       machine.send('MUTATE');
       state.data(undefined);
+      state.context(undefined);
       state.error(null);
       state.failureCount(0);
       state.failureReason(null);
@@ -259,10 +264,20 @@ export const createMutation = <
       mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
 
       let context: TContext | undefined;
+      const mutationFunctionContext: MutationFunctionContext = {
+        client: mutation.resolvedOptions.queryClient,
+        meta: mutation.resolvedOptions.meta,
+        mutationKey: mutation.resolvedOptions.mutationKey as MutationKey,
+      };
 
       try {
         if (mutation.resolvedOptions.onMutate) {
-          context = await mutation.resolvedOptions.onMutate(variables);
+          context = await mutation.resolvedOptions.onMutate(variables, mutationFunctionContext);
+          state.context(context);
+          mutationCache.notify({
+            type: 'updated',
+            mutation: mutation as Mutation<any, any, any, any>,
+          });
         }
 
         if (!mutation.resolvedOptions.mutationFn) {
@@ -276,7 +291,7 @@ export const createMutation = <
         let data!: TData;
         while (true) {
           try {
-            data = await mutation.resolvedOptions.mutationFn(variables);
+            data = await mutation.resolvedOptions.mutationFn(variables, mutationFunctionContext);
             break;
           } catch (error) {
             failureCount += 1;
@@ -299,8 +314,19 @@ export const createMutation = <
           }
         }
 
-        await mutation.resolvedOptions.onSuccess?.(data, variables, context);
-        await mutation.resolvedOptions.onSettled?.(data, null, variables, context);
+        await mutation.resolvedOptions.onSuccess?.(
+          data,
+          variables,
+          context,
+          mutationFunctionContext,
+        );
+        await mutation.resolvedOptions.onSettled?.(
+          data,
+          null,
+          variables,
+          context,
+          mutationFunctionContext,
+        );
 
         machine.send('SUCCESS');
         state.data(data);
@@ -313,12 +339,12 @@ export const createMutation = <
         });
 
         try {
-          mutateOptions?.onSuccess?.(data, variables, context);
+          mutateOptions?.onSuccess?.(data, variables, context, mutationFunctionContext);
         } catch (error) {
           void Promise.reject(error);
         }
         try {
-          mutateOptions?.onSettled?.(data, null, variables, context);
+          mutateOptions?.onSettled?.(data, null, variables, context, mutationFunctionContext);
         } catch (error) {
           void Promise.reject(error);
         }
@@ -326,7 +352,12 @@ export const createMutation = <
         return data;
       } catch (error) {
         try {
-          await mutation.resolvedOptions.onError?.(error as TError, variables, context);
+          await mutation.resolvedOptions.onError?.(
+            error as TError,
+            variables,
+            context,
+            mutationFunctionContext,
+          );
         } catch (callbackError) {
           void Promise.reject(callbackError);
         }
@@ -337,6 +368,7 @@ export const createMutation = <
             error as TError,
             variables,
             context,
+            mutationFunctionContext,
           );
         } catch (callbackError) {
           void Promise.reject(callbackError);
@@ -354,12 +386,18 @@ export const createMutation = <
         });
 
         try {
-          mutateOptions?.onError?.(error as TError, variables, context);
+          mutateOptions?.onError?.(error as TError, variables, context, mutationFunctionContext);
         } catch (callbackError) {
           void Promise.reject(callbackError);
         }
         try {
-          mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
+          mutateOptions?.onSettled?.(
+            undefined,
+            error as TError,
+            variables,
+            context,
+            mutationFunctionContext,
+          );
         } catch (callbackError) {
           void Promise.reject(callbackError);
         }

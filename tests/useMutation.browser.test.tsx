@@ -161,6 +161,7 @@ describe('useMutation', () => {
       'Success: test-vars', // data
       'test-vars', // variables
       undefined, // context (undefined as onMutate is not used)
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(mutationResult().data()).toBe('Success: test-vars');
   });
@@ -201,6 +202,7 @@ describe('useMutation', () => {
       testError, // error
       'error-vars', // variables
       undefined, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(mutationResult().error()).toBe(testError);
   });
@@ -238,6 +240,7 @@ describe('useMutation', () => {
       null, // error
       'settled-success-vars', // variables
       undefined, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(mutationResult().data()).toBe('Settled success: settled-success-vars');
   });
@@ -278,6 +281,7 @@ describe('useMutation', () => {
       testError, // error
       'settled-error-vars', // variables
       undefined, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(mutationResult().error()).toBe(testError);
   });
@@ -387,8 +391,8 @@ describe('useMutation', () => {
         mutationFn: mutationFnError,
         onMutate: onMutateMock, // Re-using the same mock to check calls for error case
         onError: onErrorMock,
-        onSettled: (data, error, variables, context) =>
-          onSettledMock(data, error, variables, context), // Wrap to distinguish calls
+        onSettled: (data, error, variables, context, mutationContext) =>
+          onSettledMock(data, error, variables, context, mutationContext), // Wrap to distinguish calls
       });
       mutationErrorResult = mutation;
       return null;
@@ -405,18 +409,23 @@ describe('useMutation', () => {
     await vi.advanceTimersByTimeAsync(16); // onMutate: 5ms + mutationFn: 10ms + buffer
     await promS;
 
-    expect(onMutateMock).toHaveBeenCalledWith('vars-for-success');
+    expect(onMutateMock).toHaveBeenCalledWith(
+      'vars-for-success',
+      expect.objectContaining({ client: queryClient }),
+    );
     const expectedContextSuccess = 'Context from vars-for-success';
     expect(onSuccessMock).toHaveBeenCalledWith(
       'Success with context: vars-for-success', // data
       'vars-for-success', // variables
       expectedContextSuccess, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(onSettledMock).toHaveBeenCalledWith(
       'Success with context: vars-for-success', // data
       null, // error
       'vars-for-success', // variables
       expectedContextSuccess, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
 
     // Reset mocks for error path test (or use separate mocks)
@@ -437,18 +446,23 @@ describe('useMutation', () => {
     await vi.advanceTimersByTimeAsync(16); // onMutate: 5ms + mutationFn: 10ms + buffer
     await promE;
 
-    expect(onMutateMock).toHaveBeenCalledWith('vars-for-error');
+    expect(onMutateMock).toHaveBeenCalledWith(
+      'vars-for-error',
+      expect.objectContaining({ client: queryClient }),
+    );
     const expectedContextError = 'Context from vars-for-error';
     expect(onErrorMock).toHaveBeenCalledWith(
       expect.any(Error), // error (Error object with message `Error with context: vars-for-error`)
       'vars-for-error', // variables
       expectedContextError, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
     expect(onSettledMock).toHaveBeenCalledWith(
       undefined, // data
       expect.any(Error), // error
       'vars-for-error', // variables
       expectedContextError, // context
+      expect.objectContaining({ client: queryClient }), // mutation context
     );
   });
 

@@ -4,6 +4,7 @@ import { useQueryClient } from './queryClient.ts';
 import { noop } from './utils.ts';
 import type {
   MutationFilters,
+  MutationFunctionContext,
   MutationOptions,
   MutationState,
   UseMutationResult,
@@ -12,6 +13,7 @@ import type {
 export type { Mutation } from './mutation.ts';
 export type {
   MutationFilters,
+  MutationFunctionContext,
   MutationOptions,
   MutationState,
   UseMutationResult,
@@ -32,6 +34,7 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
 
   return useMemo(() => ({
     data: useMemo(() => mutation().state.data()),
+    context: useMemo(() => mutation().state.context()),
     error: useMemo(() => mutation().state.error()),
     isError: useMemo(() => mutation().state.isError()),
     isIdle: useMemo(() => mutation().state.isIdle()),
