@@ -89,6 +89,7 @@ export type Query<
   staleDisposer: () => void;
   retryDisposer: () => void;
   cancelReject?: (error: CancelledError) => void;
+  abortSignalConsumed: boolean;
   isStaleByTime: (staleTime: number | 'static') => boolean;
   isDisabled: () => boolean;
   isStatic: () => boolean;
@@ -306,8 +307,14 @@ export const createQuery = <
       if (!query.observers.has(observer)) return;
       query.observers.delete(observer);
       if (query.observers.size === 0) {
-        query.retryDisposer();
-        query.retryDisposer = () => {};
+        const isInitialPausedFetch =
+          query.fetchMachine.getState() === 'paused' && query.state.status() === 'pending';
+        if (query.abortSignalConsumed || isInitialPausedFetch) {
+          void query.cancel({ revert: true });
+        } else {
+          query.retryDisposer();
+          query.retryDisposer = () => {};
+        }
         query.isActive = false;
         query.scheduleDestroy();
       }
@@ -325,6 +332,7 @@ export const createQuery = <
     staleDisposer: () => {},
     retryDisposer: () => {},
     cancelReject: undefined,
+    abortSignalConsumed: false,
     fetchPromise: undefined,
     revertState: undefined,
     fetchMachine: undefined as any,
@@ -523,9 +531,13 @@ export const createQuery = <
           if (signal.aborted) return;
 
           const meta = query.resolvedOptions.meta;
+          query.abortSignalConsumed = false;
           const queryResult = untrack(() =>
             (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
-              signal,
+              get signal() {
+                query.abortSignalConsumed = true;
+                return signal;
+              },
               queryKey: query.resolvedOptions.queryKey,
               meta,
             }),

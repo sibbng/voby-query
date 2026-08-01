@@ -66,6 +66,36 @@ describe('query', () => {
     expect(queryFn).toHaveBeenCalledTimes(2);
   });
 
+  it('cancels a paused initial fetch when the last observer unsubscribes', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockResolvedValue('data');
+
+    onlineManager.setOnline(false);
+
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: key,
+      queryFn,
+      networkMode: 'online',
+    });
+    const observer = new QueryObserver(query as any, {
+      queryFn,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await Promise.resolve();
+    expect(query.state.fetchStatus()).toBe('paused');
+
+    unsubscribe();
+    expect(query.state.fetchStatus()).toBe('idle');
+
+    onlineManager.setOnline(true);
+    queryClient.getQueryCache().onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).not.toHaveBeenCalled();
+  });
+
   it('should provide context to queryFn', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();
@@ -297,6 +327,86 @@ describe('query', () => {
 
     expect(signal.aborted).toBe(true);
     expect(onAbort).toHaveBeenCalled();
+  });
+
+  it('aborts and reverts a signal-aware fetch when the last observer unsubscribes', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    let abortCount = 0;
+    let resolveRefetch: (value: string) => void = () => {};
+
+    await queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: async () => 'original data',
+      staleTime: 1000,
+    });
+
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+    const observer = new QueryObserver(query as any, {
+      queryFn: async () => 'original data',
+      staleTime: 1000,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    const promise = queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: ({ signal }) =>
+        new Promise<string>((resolve) => {
+          resolveRefetch = resolve;
+          signal.addEventListener(
+            'abort',
+            () => {
+              abortCount++;
+            },
+            { once: true },
+          );
+        }),
+      staleTime: 0,
+    });
+
+    await Promise.resolve();
+    expect(query.state.fetchStatus()).toBe('fetching');
+
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    resolveRefetch('refetched data');
+
+    const result = await promise;
+    expect(abortCount).toBe(1);
+    expect(result).toBe('original data');
+    expect(query.state.data()).toBe('original data');
+  });
+
+  it('continues a signal-unused fetch when the last observer unsubscribes', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+
+    await queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: async () => 'original data',
+      staleTime: 1000,
+    });
+
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+    const observer = new QueryObserver(query as any, {
+      queryFn: async () => 'original data',
+      staleTime: 1000,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    const promise = queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: () =>
+        new Promise<string>((resolve) => setTimeout(() => resolve('refetched data'), 10)),
+      staleTime: 0,
+    });
+
+    await Promise.resolve();
+    unsubscribe();
+
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(promise).resolves.toBe('refetched data');
+    expect(query.state.data()).toBe('refetched data');
   });
 
   it('can use default meta', async () => {
