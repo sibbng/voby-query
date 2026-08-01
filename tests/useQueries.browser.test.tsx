@@ -222,6 +222,7 @@ describe('useQueries.browser.test', () => {
 
   test('useQueries placeholderData shown while loading', async () => {
     const queryClient = new QueryClient();
+    let result: any;
 
     function TestComponent() {
       const queries = useQueries({
@@ -244,6 +245,7 @@ describe('useQueries.browser.test', () => {
           },
         ],
       });
+      result = queries;
 
       return (
         <div>
@@ -264,6 +266,14 @@ describe('useQueries.browser.test', () => {
 
     // Placeholder data shown immediately
     expect(document.body.textContent).toBe('placeholder-a | placeholder-b');
+
+    const placeholderResult = result()[0];
+    expect(placeholderResult.status()).toBe('success');
+    expect(placeholderResult.isPending()).toBe(false);
+    expect(placeholderResult.isSuccess()).toBe(true);
+    expect(placeholderResult.isPlaceholderData()).toBe(true);
+    expect(placeholderResult.isLoading()).toBe(false);
+    expect(placeholderResult.isLoadingError()).toBe(false);
 
     await vi.advanceTimersByTimeAsync(31);
     expect(document.body.textContent).toBe('actual-a | actual-b');

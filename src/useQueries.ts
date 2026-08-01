@@ -45,23 +45,23 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
       return observers().map((obs: any) => {
         const q = (obs as any).query;
         const opts = q.resolvedOptions;
-        return useMemo(() => {
-          const rawData = q.state.data();
-          if (q.state.isPending()) {
-            if (typeof opts.placeholderData === 'function') {
-              const placeholderValue = (opts.placeholderData as (prev: unknown) => unknown)(
-                lastDataMap.get(q.queryHash),
-              );
-              if (placeholderValue !== undefined) {
-                if (opts.select) {
-                  return opts.select(placeholderValue);
-                }
-                return placeholderValue;
-              }
-            } else if (opts.placeholderData !== undefined) {
-              return opts.placeholderData;
-            }
+        const placeholderValue = useMemo(() => {
+          if (!q.state.isPending()) return undefined;
+          if (typeof opts.placeholderData === 'function') {
+            return (opts.placeholderData as (prev: unknown) => unknown)(
+              lastDataMap.get(q.queryHash),
+            );
           }
+          return opts.placeholderData;
+        });
+        const data = useMemo(() => {
+          const placeholder = placeholderValue();
+          if (placeholder !== undefined) {
+            if (opts.select) return opts.select(placeholder);
+            return placeholder;
+          }
+
+          const rawData = q.state.data();
           if (q.state.isSuccess() && rawData !== undefined) {
             lastDataMap.set(q.queryHash, rawData);
           }
@@ -70,6 +70,8 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
           }
           return rawData;
         });
+
+        return { data, placeholderValue };
       });
     },
     { sync: true },
@@ -78,10 +80,12 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
   return useMemo(() => {
     tick();
 
-    const dataMemos = queryDataMemos();
+    const queryMemos = queryDataMemos();
     const results = observers().map((obs: any, i: number) => {
       const q = obs.query;
       const counts = mountedCountsMap.get(q.queryHash);
+      const { data, placeholderValue } = queryMemos[i];
+      const hasPlaceholderValue = useMemo(() => placeholderValue() !== undefined);
       return Object.freeze({
         ...q.state,
         isFetchedAfterMount: useMemo(
@@ -90,7 +94,23 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
             q.state.errorUpdateCount() > (counts?.errorUpdateCount ?? 0),
         ),
         isStale: useMemo(() => obs.isStale()),
-        data: dataMemos[i],
+        status: useMemo(() => (hasPlaceholderValue() ? 'success' : q.state.status())),
+        isPending: useMemo(() => (hasPlaceholderValue() ? false : q.state.isPending())),
+        isSuccess: useMemo(() => (hasPlaceholderValue() ? true : q.state.isSuccess())),
+        isPlaceholderData: useMemo(() => hasPlaceholderValue()),
+        isLoading: useMemo(() => !hasPlaceholderValue() && q.state.isLoading()),
+        isInitialLoading: useMemo(() => !hasPlaceholderValue() && q.state.isInitialLoading()),
+        isRefetching: useMemo(() => {
+          const fetchStatus = q.state.fetchStatus();
+          if (fetchStatus !== 'fetching') return false;
+          if (hasPlaceholderValue()) return true;
+          return q.state.isRefetching();
+        }),
+        isLoadingError: useMemo(() => {
+          if (hasPlaceholderValue()) return false;
+          return q.state.isLoadingError();
+        }),
+        data,
         refetch: q.refetch,
         cancel: q.cancel,
         promise: obs.getCurrentResult().promise,
