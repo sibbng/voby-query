@@ -278,6 +278,12 @@ export const createMutation = <
       };
 
       try {
+        await mutationCache.config.onMutate?.(
+          variables,
+          mutation as Mutation<any, any, any, any>,
+          mutationFunctionContext,
+        );
+
         if (mutation.resolvedOptions.onMutate) {
           context = await mutation.resolvedOptions.onMutate(variables, mutationFunctionContext);
           state.context(context);
@@ -321,10 +327,25 @@ export const createMutation = <
           }
         }
 
+        await mutationCache.config.onSuccess?.(
+          data,
+          variables,
+          context,
+          mutation as Mutation<any, any, any, any>,
+          mutationFunctionContext,
+        );
         await mutation.resolvedOptions.onSuccess?.(
           data,
           variables,
           context,
+          mutationFunctionContext,
+        );
+        await mutationCache.config.onSettled?.(
+          data,
+          null,
+          variables,
+          context,
+          mutation as Mutation<any, any, any, any>,
           mutationFunctionContext,
         );
         await mutation.resolvedOptions.onSettled?.(
@@ -359,10 +380,35 @@ export const createMutation = <
         return data;
       } catch (error) {
         try {
+          await mutationCache.config.onError?.(
+            error,
+            variables,
+            context,
+            mutation as Mutation<any, any, any, any>,
+            mutationFunctionContext,
+          );
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
+
+        try {
           await mutation.resolvedOptions.onError?.(
             error as TError,
             variables,
             context,
+            mutationFunctionContext,
+          );
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
+
+        try {
+          await mutationCache.config.onSettled?.(
+            undefined,
+            error,
+            variables,
+            context,
+            mutation as Mutation<any, any, any, any>,
             mutationFunctionContext,
           );
         } catch (callbackError) {

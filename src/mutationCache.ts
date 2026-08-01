@@ -8,10 +8,41 @@ import { Subscribable } from './subscribable.ts';
 import type {
   MutationCache as MutationCacheType,
   MutationFilters,
+  MutationFunctionContext,
   MutationOptions,
   QueryClient,
 } from './types.ts';
 import { matchMutation, noop } from './utils.ts';
+
+export interface MutationCacheConfig {
+  onError?: (
+    error: unknown,
+    variables: unknown,
+    context: unknown,
+    mutation: Mutation<any, any, any, any>,
+    mutationFunctionContext: MutationFunctionContext,
+  ) => unknown | Promise<unknown>;
+  onSuccess?: (
+    data: unknown,
+    variables: unknown,
+    context: unknown,
+    mutation: Mutation<any, any, any, any>,
+    mutationFunctionContext: MutationFunctionContext,
+  ) => unknown | Promise<unknown>;
+  onMutate?: (
+    variables: unknown,
+    mutation: Mutation<any, any, any, any>,
+    mutationFunctionContext: MutationFunctionContext,
+  ) => unknown | Promise<unknown>;
+  onSettled?: (
+    data: unknown,
+    error: unknown,
+    variables: unknown,
+    context: unknown,
+    mutation: Mutation<any, any, any, any>,
+    mutationFunctionContext: MutationFunctionContext,
+  ) => unknown | Promise<unknown>;
+}
 
 export type MutationCacheNotifyEvent =
   | { type: 'added'; mutation: Mutation<any, any, any, any> }
@@ -23,13 +54,19 @@ type MutationCacheListener = (event: MutationCacheNotifyEvent) => void;
 export class MutationCache<
   TMutation extends Mutation<any, any, any, any> = Mutation<any, any, any, any>,
 > extends Subscribable<MutationCacheListener> {
+  public readonly config: MutationCacheConfig;
   private readonly mutations: Map<string, TMutation>;
   private readonly scopes: Map<string, TMutation[]>;
   private nextId: number;
 
-  constructor(cache?: Map<string, TMutation>) {
+  constructor(
+    config: MutationCacheConfig | Map<string, TMutation> = {},
+    cache?: Map<string, TMutation>,
+  ) {
     super();
-    this.mutations = new Map(cache);
+    const initialCache = config instanceof Map ? config : cache;
+    this.config = config instanceof Map ? {} : config;
+    this.mutations = new Map(initialCache);
     this.scopes = new Map();
     for (const mutation of this.mutations.values()) {
       this.addToScope(mutation);
@@ -197,7 +234,12 @@ export class MutationCache<
 }
 
 export const createMutationCache = <TMutation extends Mutation<any, any, any, any>>(
-  cache?: MutationCache<TMutation> | Map<string, TMutation>,
+  config?: MutationCacheConfig | MutationCache<TMutation> | Map<string, TMutation>,
+  cache?: Map<string, TMutation>,
 ) => {
-  return cache instanceof MutationCache ? cache : new MutationCache(cache);
+  if (config instanceof MutationCache) return config;
+  if (typeof config === 'object' && config !== null && !(config instanceof Map)) {
+    return new MutationCache<TMutation>(config, cache);
+  }
+  return new MutationCache<TMutation>({}, config as Map<string, TMutation> | undefined);
 };

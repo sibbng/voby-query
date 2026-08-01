@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryClient } from '../src/index.ts';
+import { MutationCache } from '../src/mutationCache.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -37,6 +38,146 @@ describe('mutationCache', () => {
   });
 
   describe('config callbacks', () => {
+    it('should await configured cache callbacks in upstream order', async () => {
+      const order: string[] = [];
+      const key = mutationKey();
+      const onMutate = vi.fn(() => {
+        order.push('cache-onMutate');
+      });
+      const onSuccess = vi.fn(async () => {
+        order.push('cache-onSuccess');
+        await Promise.resolve();
+      });
+      const onSettled = vi.fn(() => {
+        order.push('cache-onSettled');
+      });
+      const cache = new MutationCache({ onMutate, onSuccess, onSettled });
+      const queryClient = new QueryClient({ mutationCache: cache });
+      const optionOnMutate = vi.fn(() => {
+        order.push('option-onMutate');
+        return { rollback: true };
+      });
+      const optionOnSuccess = vi.fn(() => {
+        order.push('option-onSuccess');
+      });
+      const optionOnSettled = vi.fn(() => {
+        order.push('option-onSettled');
+      });
+
+      await executeMutation(
+        queryClient,
+        {
+          mutationKey: key,
+          meta: { source: 'test' },
+          mutationFn: async () => 'data',
+          onMutate: optionOnMutate,
+          onSuccess: optionOnSuccess,
+          onSettled: optionOnSettled,
+        },
+        'vars',
+      );
+
+      const mutation = cache.getAll()[0];
+      const mutationContext = {
+        client: queryClient,
+        meta: { source: 'test' },
+        mutationKey: key,
+      };
+
+      expect(order).toEqual([
+        'cache-onMutate',
+        'option-onMutate',
+        'cache-onSuccess',
+        'option-onSuccess',
+        'cache-onSettled',
+        'option-onSettled',
+      ]);
+      expect(onMutate).toHaveBeenCalledWith('vars', mutation, mutationContext);
+      expect(onSuccess).toHaveBeenCalledWith(
+        'data',
+        'vars',
+        { rollback: true },
+        mutation,
+        mutationContext,
+      );
+      expect(onSettled).toHaveBeenCalledWith(
+        'data',
+        null,
+        'vars',
+        { rollback: true },
+        mutation,
+        mutationContext,
+      );
+    });
+
+    it('should run configured error callbacks before option callbacks', async () => {
+      const order: string[] = [];
+      const key = mutationKey();
+      const error = new Error('cache-error');
+      const onError = vi.fn(() => {
+        order.push('cache-onError');
+      });
+      const onSettled = vi.fn(() => {
+        order.push('cache-onSettled');
+      });
+      const cache = new MutationCache({ onError, onSettled });
+      const queryClient = new QueryClient({ mutationCache: cache });
+      const optionOnMutate = vi.fn(() => {
+        return { rollback: true };
+      });
+      const optionOnError = vi.fn(() => {
+        order.push('option-onError');
+      });
+      const optionOnSettled = vi.fn(() => {
+        order.push('option-onSettled');
+      });
+
+      await expect(
+        executeMutation(
+          queryClient,
+          {
+            mutationKey: key,
+            mutationFn: async () => {
+              throw error;
+            },
+            onMutate: optionOnMutate,
+            onError: optionOnError,
+            onSettled: optionOnSettled,
+          },
+          'vars',
+        ),
+      ).rejects.toBe(error);
+
+      const mutation = cache.getAll()[0];
+      const mutationContext = {
+        client: queryClient,
+        meta: undefined,
+        mutationKey: key,
+      };
+
+      expect(order).toEqual([
+        'cache-onError',
+        'option-onError',
+        'cache-onSettled',
+        'option-onSettled',
+      ]);
+      expect(onError).toHaveBeenCalledWith(
+        error,
+        'vars',
+        { rollback: true },
+        mutation,
+        mutationContext,
+      );
+      expect(onSettled).toHaveBeenCalledWith(
+        undefined,
+        error,
+        'vars',
+        { rollback: true },
+        mutation,
+        mutationContext,
+      );
+    });
+
     it('should call onError when a mutation errors', async () => {
       const key = mutationKey();
       const onError = vi.fn();
