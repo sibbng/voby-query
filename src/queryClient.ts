@@ -256,7 +256,8 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     filters,
     { throwOnError = false, cancelRefetch = true } = {},
   ) => {
-    const { refetchType = 'active', ...queryFilters } = filters || {};
+    const { refetchType, ...queryFilters } = filters || {};
+    const effectiveRefetchType = refetchType ?? queryFilters.type ?? 'active';
     const queriesToInvalidate = cache.findAll(queryFilters);
 
     for (const query of queriesToInvalidate) {
@@ -265,12 +266,12 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       cache.notify({ type: 'updated', query: query as QueryLike });
     }
 
-    if (refetchType === 'none') return;
+    if (effectiveRefetchType === 'none') return;
 
     const queriesToRefetch = queriesToInvalidate.filter((query) => {
       if (!query.resolvedOptions.enabled) return false;
-      if (refetchType === 'active' && !query.isActive) return false;
-      if (refetchType === 'inactive' && query.isActive) return false;
+      if (effectiveRefetchType === 'active' && !query.isActive) return false;
+      if (effectiveRefetchType === 'inactive' && query.isActive) return false;
       return true;
     });
 

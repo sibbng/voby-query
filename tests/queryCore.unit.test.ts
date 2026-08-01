@@ -185,6 +185,31 @@ test('invalidateQueries with refetchType: all refetches inactive queries', async
   expect(callCount).toBe(2);
 });
 
+test('invalidateQueries falls back to filters.type when refetchType is not given', async () => {
+  const queryClient = new QueryClient();
+  let callCount = 0;
+
+  await queryClient.fetchQuery({
+    queryKey: ['invalidate-type-inactive'],
+    queryFn: async () => {
+      callCount++;
+      return `data ${callCount}`;
+    },
+    staleTime: 1000,
+  });
+
+  const query = findQuery(queryClient, 'invalidate-type-inactive')!;
+  expect(query.state.isStale()).toBe(false);
+
+  await queryClient.invalidateQueries({
+    queryKey: ['invalidate-type-inactive'],
+    type: 'inactive',
+  });
+
+  expect(callCount).toBe(2);
+  expect(query.state.isStale()).toBe(false);
+});
+
 // ──────────────────────────────────────
 // Section C — cancel & revert
 // ──────────────────────────────────────
