@@ -27,6 +27,10 @@ export type Updater<TInput, TOutput> = TOutput | ((input: TInput) => TOutput);
 
 export type InfiniteQueryDirection = 'forward' | 'backward';
 
+export type FetchMeta = {
+  fetchMore?: { direction: InfiniteQueryDirection };
+};
+
 export type InfiniteData<TData = unknown, TPageParam = unknown> = {
   pages: TData[];
   pageParams: TPageParam[];
@@ -95,7 +99,7 @@ export type QueryState<D = undefined, TError = Error> = {
   errorUpdatedAt: Observable<number>;
   failureCount: Observable<number>;
   failureReason: Observable<TError | null>;
-  meta: Observable<null>;
+  fetchMeta: Observable<FetchMeta | null>;
   isInvalidated: Observable<boolean>;
   status: Observable<QueryStatus>;
   fetchStatus: Observable<FetchStatus>;
@@ -103,7 +107,6 @@ export type QueryState<D = undefined, TError = Error> = {
   isRefetching: ObservableReadonly<boolean>;
   isRefetchError: ObservableReadonly<boolean>;
   isFetched: ObservableReadonly<boolean>;
-  isFetchedAfterMount: ObservableReadonly<boolean>;
   isPaused: ObservableReadonly<boolean>;
   isPending: ObservableReadonly<boolean>;
   isSuccess: ObservableReadonly<boolean>;
@@ -118,10 +121,8 @@ export type QueryState<D = undefined, TError = Error> = {
 };
 
 export type QueryStateReadonly<D, TError = Error> = {
-  [K in keyof Omit<QueryState<D, TError>, 'meta'>]: ObservableReadonly<
-    ReturnType<QueryState<D, TError>[K]>
-  >;
-} & { meta: QueryState<D, TError>['meta'] };
+  [K in keyof QueryState<D, TError>]: ObservableReadonly<ReturnType<QueryState<D, TError>[K]>>;
+} & { isFetchedAfterMount: ObservableReadonly<boolean> };
 
 export type MutationState<
   TData = unknown,
@@ -537,7 +538,7 @@ export type QueriesOptions<T extends Array<any>> = {
   [K in keyof T]: QueryOptions;
 };
 
-export type QueriesResultItem<TData = unknown, TError = Error> = QueryState<TData, TError> &
+export type QueriesResultItem<TData = unknown, TError = Error> = QueryStateReadonly<TData, TError> &
   UseQueryResultMethods;
 
 export type QueriesResults<T extends Array<any>> = {

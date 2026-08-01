@@ -117,6 +117,9 @@ describe('useInfiniteQuery.browser.test', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(result().isFetchingNextPage()).toBe(true);
     expect(result().isFetching()).toBe(true);
+    expect(queryClient.getQueryState(['pages-next'])!.fetchMeta()).toEqual({
+      fetchMore: { direction: 'forward' },
+    });
 
     resolveNextPage();
     await promise;
@@ -175,6 +178,9 @@ describe('useInfiniteQuery.browser.test', () => {
     expect(document.body.textContent).toBe('page 1|page 2');
     expect(result().data().pageParams).toEqual([1, 2]);
     expect(result().hasPreviousPage()).toBe(false);
+    expect(queryClient.getQueryState(['pages-previous'])!.fetchMeta()).toEqual({
+      fetchMore: { direction: 'backward' },
+    });
   });
 
   test('fetchNextPage does not call queryFn when there is no next page', async () => {

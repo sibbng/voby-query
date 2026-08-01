@@ -178,6 +178,49 @@ describe('query', () => {
     expect(args.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it('stores fetch metadata while a fetch is in progress', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    let resolveFetch!: (value: string) => void;
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: key,
+      queryFn: () =>
+        new Promise<string>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    });
+    const fetchMeta = { fetchMore: { direction: 'forward' as const } };
+
+    const fetchPromise = query.fetch({ force: true, meta: fetchMeta });
+    await Promise.resolve();
+
+    expect((query.state as any).fetchMeta()).toEqual(fetchMeta);
+
+    resolveFetch('data');
+    await fetchPromise;
+  });
+
+  it('preserves fetch metadata across retries', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockRejectedValueOnce(new Error('retry')).mockResolvedValue('data');
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: key,
+      queryFn,
+      retry: 1,
+      retryDelay: 100,
+    });
+    const fetchMeta = { fetchMore: { direction: 'backward' as const } };
+
+    const fetchPromise = query.fetch({ force: true, meta: fetchMeta, awaitChain: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(query.state.fetchMeta()).toEqual(fetchMeta);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await fetchPromise;
+    expect(query.state.fetchMeta()).toEqual(fetchMeta);
+  });
+
   it('cancelling a resolved query should not have any effect', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();
@@ -222,6 +265,7 @@ describe('query', () => {
 
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
     expect(query.resolvedOptions.meta).toBe(meta);
+    expect((query as any).meta).toBe(meta);
   });
 
   it('updates meta object on change', async () => {
@@ -236,6 +280,17 @@ describe('query', () => {
 
     const query = queryClient.getQueryCache().find({ queryKey: key })!;
     expect(query.resolvedOptions.meta).toBeUndefined();
+    expect((query as any).meta).toBeUndefined();
+  });
+
+  it('does not expose hook-only mount state through the query state', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+
+    await queryClient.prefetchQuery({ queryKey: key, queryFn: async () => 'data' });
+
+    const state = queryClient.getQueryState(key)!;
+    expect((state as any).isFetchedAfterMount).toBeUndefined();
   });
 
   it('should not change state on invalidate() if already invalidated', async () => {

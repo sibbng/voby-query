@@ -2,6 +2,7 @@ import { isDevelopment, isProduction } from 'std-env';
 import { $, $$, untrack, useMemo, useRoot } from 'voby';
 import type {
   CancelOptions,
+  FetchMeta,
   FetchStatus,
   QueryCache,
   QueryClient,
@@ -39,7 +40,7 @@ type QueryStateSnapshot<D = undefined, TError = Error> = {
   errorUpdatedAt: number;
   failureCount: number;
   failureReason: TError | null;
-  meta: null;
+  fetchMeta: FetchMeta | null;
   isInvalidated: boolean;
   status: QueryStatus;
   fetchStatus: FetchStatus;
@@ -58,6 +59,7 @@ type QueryFetchOptions = {
   force?: boolean;
   fetchFn?: QueryFetchFn;
   awaitChain?: boolean;
+  meta?: FetchMeta;
 };
 
 type FetchState = 'idle' | 'fetching' | 'success' | 'error' | 'retrying' | 'cancelled' | 'paused';
@@ -73,6 +75,7 @@ export type Query<
   queryKey: unknown[];
   isActive: boolean;
   cache: QueryCache;
+  meta: Record<string, unknown> | undefined;
   state: QueryState<TData, TError>;
   cancel: (options?: CancelOptions) => Promise<void>;
   destroy: () => void;
@@ -107,6 +110,7 @@ export type Query<
     error: TError,
     fetchFn?: QueryFetchFn,
     awaitChain?: boolean,
+    meta?: FetchMeta,
   ) => boolean;
   isCancelled: boolean;
   fetchMachine: MachineInstance<FetchState, FetchEvent>;
@@ -123,7 +127,7 @@ const createQueryStateSnapshot = <D, TError>(
   errorUpdatedAt: state.errorUpdatedAt(),
   failureCount: state.failureCount(),
   failureReason: state.failureReason(),
-  meta: state.meta(),
+  fetchMeta: state.fetchMeta(),
   isInvalidated: state.isInvalidated(),
   status: state.status(),
   fetchStatus: state.fetchStatus(),
@@ -142,7 +146,7 @@ const restoreQueryStateSnapshot = <D, TError>(
   state.errorUpdatedAt(snapshot.errorUpdatedAt);
   state.failureCount(snapshot.failureCount);
   state.failureReason(snapshot.failureReason);
-  state.meta(snapshot.meta);
+  state.fetchMeta(snapshot.fetchMeta);
   state.isInvalidated(snapshot.isInvalidated);
   state.status(snapshot.status);
   state.fetchStatus(snapshot.fetchStatus);
@@ -306,6 +310,9 @@ export const createQuery = <
     queryKey: resolvedOptions.queryKey,
     isActive: false,
     cache,
+    get meta() {
+      return query.resolvedOptions.meta;
+    },
     resolvedOptions,
     instances: 0,
     observers: new Set(),
@@ -472,6 +479,7 @@ export const createQuery = <
       force = false,
       fetchFn,
       awaitChain = false,
+      meta,
     } = {}) => {
       const currentState = query.fetchMachine.getState();
 
@@ -508,6 +516,8 @@ export const createQuery = <
           action: { type: 'fetch' },
         });
       }
+
+      query.state.fetchMeta(meta ?? null);
 
       // Use the queryFn of the first observer with one if the query itself
       // has none (e.g. the query was created via setQueryData or hydration)
@@ -573,7 +583,7 @@ export const createQuery = <
           if (cancellationError) throw cancellationError;
           if (signal.aborted) return;
 
-          const meta = query.resolvedOptions.meta;
+          const meta = query.meta;
           query.abortSignalConsumed = false;
           const queryResult = untrack(() =>
             (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
@@ -644,7 +654,13 @@ export const createQuery = <
             query.state.failureCount((prev) => prev + 1);
             query.state.failureReason(error);
 
-            const willRetry = query.scheduleRetry(retryAttempt + 1, error, fetchFn, awaitChain);
+            const willRetry = query.scheduleRetry(
+              retryAttempt + 1,
+              error,
+              fetchFn,
+              awaitChain,
+              meta,
+            );
             query.fetchMachine.send(willRetry ? 'RETRYING' : 'FAIL');
 
             if (!willRetry) {
@@ -721,6 +737,7 @@ export const createQuery = <
       error: TError,
       fetchFn?: QueryFetchFn,
       awaitChain?: boolean,
+      meta?: FetchMeta,
     ): boolean => {
       const { retry, retryDelay } = query.resolvedOptions;
       if (retry === false) {
@@ -739,7 +756,13 @@ export const createQuery = <
           retryScheduled = false;
           query.retryDisposer = () => {};
           try {
-            await query.fetch({ retryAttempt: attempt, fetchFn, force: true, awaitChain });
+            await query.fetch({
+              retryAttempt: attempt,
+              fetchFn,
+              force: true,
+              awaitChain,
+              meta,
+            });
             if (!retryScheduled) resolveChain();
           } catch (error) {
             rejectChain(error);
@@ -771,7 +794,7 @@ export const createQuery = <
     const errorUpdatedAt = $(0);
     const failureCount = $(0);
     const failureReason = $<TError | null>(null);
-    const meta = $(null);
+    const fetchMeta = $<FetchMeta | null>(null);
     const isInvalidated = $(false);
     const status = $<QueryStatus>(
       query.resolvedOptions.initialData !== undefined ? 'success' : 'pending',
@@ -929,14 +952,13 @@ export const createQuery = <
       errorUpdatedAt,
       failureCount,
       failureReason,
-      meta,
+      fetchMeta,
       isInvalidated,
       status,
       fetchStatus,
       isFetching: useMemo((): boolean => fetchStatus() === 'fetching'),
       isRefetching: useMemo((): boolean => fetchStatus() === 'fetching' && status() !== 'pending'),
       isFetched: useMemo((): boolean => dataUpdateCount() > 0 || errorUpdateCount() > 0),
-      isFetchedAfterMount: useMemo((): boolean => status() !== 'pending'),
       isPaused: useMemo((): boolean => fetchStatus() === 'paused'),
       isPending: useMemo((): boolean => status() === 'pending'),
       isSuccess: useMemo((): boolean => status() === 'success'),

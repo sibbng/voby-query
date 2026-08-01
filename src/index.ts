@@ -39,6 +39,7 @@ export type {
   MutationKey,
   MutationFunctionContext,
   MutationScope,
+  FetchMeta,
   DataTag,
   AnyDataTag,
   UnsetMarker,

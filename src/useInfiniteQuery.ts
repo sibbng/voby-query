@@ -37,7 +37,6 @@ export function useInfiniteQuery<
   queryClient?: QC,
 ): UseInfiniteQueryResult<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError> {
   const client = useQueryClient(queryClient ?? options.queryClient);
-  const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
   const tick = $(0);
   const promiseTick = $(0);
@@ -134,24 +133,18 @@ export function useInfiniteQuery<
           await currentQuery.cancel({ revert: false, silent: true });
         }
 
-        fetchingDirection(direction);
-        try {
-          await currentQuery.fetch({
-            force: true,
-            throwOnError,
-            fetchFn: ({ signal }: { signal: AbortSignal }) =>
-              fetchInfiniteDataPage({
-                options: infiniteOptions,
-                signal,
-                data: state.data(),
-                direction,
-              }),
-          });
-        } finally {
-          if (fetchingDirection() === direction) {
-            fetchingDirection(undefined);
-          }
-        }
+        await currentQuery.fetch({
+          force: true,
+          throwOnError,
+          meta: { fetchMore: { direction } },
+          fetchFn: ({ signal }: { signal: AbortSignal }) =>
+            fetchInfiniteDataPage({
+              options: infiniteOptions,
+              signal,
+              data: state.data(),
+              direction,
+            }),
+        });
       };
 
       const resultPromise = observerResult.promise as Promise<
@@ -208,9 +201,11 @@ export function useInfiniteQuery<
         }),
         hasNextPage: useMemo(() => hasNextPage(infiniteOptions, state.data())),
         hasPreviousPage: useMemo(() => hasPreviousPage(infiniteOptions, state.data())),
-        isFetchingNextPage: useMemo(() => state.isFetching() && fetchingDirection() === 'forward'),
+        isFetchingNextPage: useMemo(
+          () => state.isFetching() && state.fetchMeta()?.fetchMore?.direction === 'forward',
+        ),
         isFetchingPreviousPage: useMemo(
-          () => state.isFetching() && fetchingDirection() === 'backward',
+          () => state.isFetching() && state.fetchMeta()?.fetchMore?.direction === 'backward',
         ),
         fetchNextPage: (fetchOptions?: InfiniteQueryFetchPageOptions) =>
           fetchPage('forward', fetchOptions),

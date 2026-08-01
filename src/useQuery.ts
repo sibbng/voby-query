@@ -8,6 +8,7 @@ import { hashQueryKeyByOptions, replaceData, shouldThrowError } from './utils.ts
 export { CancelledError } from './query.ts';
 export type {
   CancelOptions,
+  FetchMeta,
   FetchStatus,
   MutationCache,
   QueryCache,

@@ -29,6 +29,7 @@ export class QueryObserver<
   #currentPromiseReason?: unknown;
   #currentPromiseResolve?: (value: Awaited<TData>) => void;
   #currentPromiseReject?: (reason?: unknown) => void;
+  #queryInitialCounts: { dataUpdateCount: number; errorUpdateCount: number };
   constructor(
     query: Query<TQueryFnData, TError, TData, TQueryKey>,
     options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
@@ -36,6 +37,10 @@ export class QueryObserver<
     this.#query = query;
     this.#resolvedOptions = this.#resolveOptions(options);
     this.#lastValues = new Map<string, unknown>();
+    this.#queryInitialCounts = untrack(() => ({
+      dataUpdateCount: this.#query.state.dataUpdateCount(),
+      errorUpdateCount: this.#query.state.errorUpdateCount(),
+    }));
     untrack(() => {
       for (const key of Object.keys(this.#query.state)) {
         this.#lastValues!.set(key, (this.#query.state as any)[key]());
@@ -419,6 +424,9 @@ export class QueryObserver<
 
     const result = {
       ...state,
+      isFetchedAfterMount:
+        state.dataUpdateCount() > this.#queryInitialCounts.dataUpdateCount ||
+        state.errorUpdateCount() > this.#queryInitialCounts.errorUpdateCount,
       isEnabled: options.enabled,
       isStale: this.isStale(),
       isPlaceholderData: this.isPlaceholderData(),
