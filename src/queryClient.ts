@@ -154,12 +154,14 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
     unsubscribeFocus = focusManager.subscribe(async () => {
       if (focusManager.isFocused()) {
+        await mutationCache.resumePausedMutations();
         cache.onFocus();
       }
     });
 
     unsubscribeOnline = onlineManager.subscribe(async () => {
       if (onlineManager.isOnline()) {
+        await mutationCache.resumePausedMutations();
         cache.onOnline();
       }
     });
@@ -560,6 +562,13 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     return mutationCache;
   };
 
+  const resumePausedMutations = (): Promise<unknown> => {
+    if (onlineManager.isOnline()) {
+      return mutationCache.resumePausedMutations();
+    }
+    return Promise.resolve();
+  };
+
   const clear = (): void => {
     cache.clear();
     mutationCache.clear();
@@ -593,6 +602,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     mutationCache,
     getQueryCache,
     getMutationCache,
+    resumePausedMutations,
     clear,
     resetQueries,
     jobQueue,
@@ -692,6 +702,7 @@ export class QueryClient {
   declare isMutating: (filters?: MutationFilters) => number;
   declare getQueryCache: () => QueryCache;
   declare getMutationCache: () => MutationCache;
+  declare resumePausedMutations: () => Promise<unknown>;
   declare clear: () => void;
   declare getDefaultOptions: () => {
     queries: Omit<QueryOptions, 'queryKey'>;

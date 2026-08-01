@@ -11,7 +11,7 @@ import type {
   MutationOptions,
   QueryClient,
 } from './types.ts';
-import { matchMutation } from './utils.ts';
+import { matchMutation, noop } from './utils.ts';
 
 export type MutationCacheNotifyEvent =
   | { type: 'added'; mutation: Mutation<any, any, any, any> }
@@ -82,6 +82,11 @@ export class MutationCache<
 
   getAll() {
     return Array.from(this.mutations.values());
+  }
+
+  resumePausedMutations(): Promise<unknown> {
+    const pausedMutations = this.getAll().filter((mutation) => mutation.state.isPaused());
+    return Promise.all(pausedMutations.map((mutation) => mutation.continue().catch(noop)));
   }
 
   findAll(filters?: MutationFilters) {

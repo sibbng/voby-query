@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { QueryClient } from '../src/index.ts';
+import { QueryClient, onlineManager } from '../src/index.ts';
 import { QueryObserver } from '../src/queryObserver.ts';
 
 beforeEach(() => {
@@ -8,12 +8,64 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  onlineManager.setOnline(true);
 });
 
 let keyCounter = 0;
 const queryKey = () => [`query_${keyCounter++}`];
 
 describe('query', () => {
+  it('pauses an offline query and resumes the original fetch when online', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi.fn().mockResolvedValue('data');
+
+    onlineManager.setOnline(false);
+    const promise = queryClient.fetchQuery({ queryKey: key, queryFn });
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+
+    await Promise.resolve();
+
+    expect(queryFn).not.toHaveBeenCalled();
+    expect(query.state.fetchStatus()).toBe('paused');
+    expect(query.state.isPaused()).toBe(true);
+
+    onlineManager.setOnline(true);
+
+    await expect(promise).resolves.toBe('data');
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(query.state.fetchStatus()).toBe('idle');
+  });
+
+  it('runs the first offlineFirst attempt but pauses its retry while offline', async () => {
+    const key = queryKey();
+    const queryClient = new QueryClient();
+    const queryFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline failure'))
+      .mockResolvedValue('data');
+
+    onlineManager.setOnline(false);
+    const promise = queryClient.fetchQuery({
+      queryKey: key,
+      queryFn,
+      networkMode: 'offlineFirst',
+      retry: 1,
+      retryDelay: 0,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const query = queryClient.getQueryCache().find({ queryKey: key })!;
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(query.state.fetchStatus()).toBe('paused');
+
+    onlineManager.setOnline(true);
+
+    await expect(promise).resolves.toBe('data');
+    expect(queryFn).toHaveBeenCalledTimes(2);
+  });
+
   it('should provide context to queryFn', async () => {
     const key = queryKey();
     const queryClient = new QueryClient();

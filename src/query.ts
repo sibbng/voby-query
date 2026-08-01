@@ -1,5 +1,5 @@
 import { isDevelopment, isProduction } from 'std-env';
-import { $, $$, untrack, useEventListener, useMemo, useRoot } from 'voby';
+import { $, $$, untrack, useMemo, useRoot } from 'voby';
 import type {
   CancelOptions,
   FetchStatus,
@@ -14,11 +14,9 @@ import type {
 } from './types.ts';
 import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
 import { ensureQueryFn, replaceData, resolveKey, shouldThrowError, skipToken } from './utils.ts';
-import { onlineManager } from './onlineManager.ts';
+import { createNetworkPause, type NetworkPause } from './retryer.ts';
 import { timeoutManager } from './timeoutManager.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
-
-const isBrowser = typeof window !== 'undefined';
 
 export class CancelledError extends Error {
   revert: boolean;
@@ -281,6 +279,9 @@ export const createQuery = <
     waiters.forEach((waiter) => waiter.reject(error));
   };
 
+  let networkPause!: NetworkPause;
+  let pausedController: AbortController | undefined;
+
   const query: Query<TQueryFnData, TError, TData, TQueryKey> = {
     queryHash,
     queryKey: resolvedOptions.queryKey,
@@ -355,15 +356,6 @@ export const createQuery = <
       query.destroyDisposer();
       query.isActive = true;
       query.instances++;
-      untrack(async () => {
-        const isOnline = onlineManager.isOnline();
-        const networkMode = query.resolvedOptions.networkMode;
-
-        if (query.state.fetchStatus() !== 'fetching') {
-          const shouldBePaused = networkMode === 'online' ? !isOnline : false;
-          query.state.fetchStatus(shouldBePaused ? 'paused' : 'idle');
-        }
-      });
       return query.removeInstance;
     },
     removeInstance: () => {
@@ -378,15 +370,14 @@ export const createQuery = <
       if (observer) {
         observer.refetch({ cancelRefetch: false });
       }
-      if (query.fetchMachine.getState() === 'paused') {
-        query.fetchMachine.send('FETCH', true);
-      }
+      networkPause.continue();
     },
     onFocus: () => {
       const observer = [...query.observers].find((o) => o.shouldFetchOnWindowFocus());
       if (observer) {
         observer.refetch({ cancelRefetch: false });
       }
+      networkPause.continue();
     },
     cancel: async ({ revert = true, silent = false } = {}) => {
       const currentState = query.fetchMachine.getState();
@@ -396,9 +387,8 @@ export const createQuery = <
 
       const hadPreviousData = query.revertState?.data !== undefined;
 
-      if (currentState !== 'paused') {
-        query.controller.abort();
-      }
+      networkPause.cancel();
+      query.controller.abort();
       query.isCancelled = true;
       query.retryDisposer();
       query.retryDisposer = () => {};
@@ -460,6 +450,9 @@ export const createQuery = <
       if (currentState === 'fetching') {
         return query.fetchPromise;
       }
+      if (currentState === 'paused') {
+        return query.fetchPromise;
+      }
       if (currentState === 'retrying') {
         query.fetchMachine.send('RETRY');
       } else if (force) {
@@ -486,6 +479,10 @@ export const createQuery = <
 
       fetchPromise = (async () => {
         try {
+          const pause = networkPause.wait(retryAttempt > 0);
+          if (pause) await pause;
+          if (query.isCancelled || signal.aborted) return;
+
           const meta = query.resolvedOptions.meta;
           const result = await untrack(() =>
             (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
@@ -612,26 +609,6 @@ export const createQuery = <
       }
       const delay =
         typeof retryDelay === 'function' ? retryDelay(attempt - 1, error as TError) : retryDelay;
-      if (
-        isBrowser &&
-        query.resolvedOptions.networkMode === 'online' &&
-        query.state.fetchStatus() === 'paused'
-      ) {
-        useEventListener(
-          window,
-          'online',
-          async () => {
-            try {
-              await query.fetch({ retryAttempt: attempt, fetchFn, force: true, awaitChain });
-              resolveChain();
-            } catch (error) {
-              rejectChain(error);
-            }
-          },
-          { once: true },
-        );
-        return true;
-      }
       if (retry === true || typeof retry === 'function' || (retry && attempt <= retry)) {
         const id = timeoutManager.setTimeout(async () => {
           query.retryDisposer = () => {};
@@ -781,6 +758,28 @@ export const createQuery = <
     });
 
     query.fetchMachine = fetchMachine;
+
+    networkPause = createNetworkPause(
+      () => query.resolvedOptions.networkMode,
+      () => {
+        if (query.fetchMachine.getState() === 'fetching') {
+          pausedController = query.controller;
+          query.fetchMachine.send('PAUSE');
+        }
+      },
+      () => {
+        if (query.fetchMachine.getState() !== 'paused') return;
+        const pendingFetch = query.fetchPromise;
+        query.fetchMachine.send('FETCH', true);
+        if (pausedController) {
+          query.controller = pausedController;
+          pausedController = undefined;
+        }
+        if (query.fetchPromise === undefined && pendingFetch !== undefined) {
+          query.fetchPromise = pendingFetch;
+        }
+      },
+    );
 
     query.state = {
       data,

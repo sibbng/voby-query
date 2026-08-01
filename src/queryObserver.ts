@@ -76,8 +76,6 @@ export class QueryObserver<
 
       const shouldFetchOnSubscribe = untrack(() => {
         if (!this.#resolvedOptions.enabled) return false;
-        if (this.#query.state.fetchStatus() === 'paused') return false;
-
         return this.shouldFetchOnMount();
       });
 

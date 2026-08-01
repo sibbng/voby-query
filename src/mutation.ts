@@ -12,6 +12,7 @@ import type {
 } from './types.ts';
 import type { MutationCache } from './mutationCache.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
+import { createNetworkPause, type NetworkPause } from './retryer.ts';
 
 type MutationState_ = 'idle' | 'pending' | 'success' | 'error';
 type MutationEvent = 'MUTATE' | 'SUCCESS' | 'ERROR' | 'RESET';
@@ -40,6 +41,7 @@ export type Mutation<
   scheduleDestroy: () => void;
   instances: number;
   machine: MachineInstance<MutationState_, MutationEvent>;
+  continue: () => Promise<TData | undefined>;
 };
 
 export const resolveMutationHash = (mutationKey?: MutationKey) => {
@@ -103,6 +105,8 @@ export const createMutation = <
   let state!: MutationState<TData, TError, TVariables, TContext>;
   let stateDisposer: () => void = () => {};
   let machine!: MachineInstance<MutationState_, MutationEvent>;
+  let networkPause!: NetworkPause;
+  let currentPromise: Promise<TData | undefined> | undefined;
 
   const setInitialState = () => {
     state.status('idle');
@@ -172,6 +176,7 @@ export const createMutation = <
         success: {
           onEnter: () => {
             status('success');
+            state.isPaused(false);
           },
           transitions: {
             MUTATE: { target: 'pending' },
@@ -181,6 +186,7 @@ export const createMutation = <
         error: {
           onEnter: () => {
             status('error');
+            state.isPaused(false);
           },
           transitions: {
             MUTATE: { target: 'pending' },
@@ -201,6 +207,7 @@ export const createMutation = <
     machine,
     destroyDisposer: () => {},
     destroy: () => {
+      networkPause.cancel();
       mutation.destroyDisposer();
       mutation.stateDisposer();
     },
@@ -231,6 +238,10 @@ export const createMutation = <
       machine.send('RESET');
       mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
     },
+    continue: () => {
+      networkPause.continue();
+      return currentPromise ?? Promise.resolve(undefined);
+    },
     mutate: async (variables, mutateOptions) => {
       if (!machine.can('MUTATE')) {
         return undefined;
@@ -245,7 +256,7 @@ export const createMutation = <
       state.error(null);
       state.failureCount(0);
       state.failureReason(null);
-      state.isPaused(false);
+      state.isPaused(!networkPause.canStart());
       state.variables(variables);
       state.submittedAt(Date.now());
       state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
@@ -261,6 +272,9 @@ export const createMutation = <
         if (!mutation.resolvedOptions.mutationFn) {
           throw new Error('No mutationFn found');
         }
+
+        const initialPause = waitForNetwork(false);
+        if (initialPause) await initialPause;
 
         let failureCount = 0;
         let data!: TData;
@@ -284,6 +298,8 @@ export const createMutation = <
             }
 
             await new Promise((resolve) => timeoutManager.setTimeout(resolve, resolvedRetryDelay));
+            const retryPause = waitForNetwork(true);
+            if (retryPause) await retryPause;
           }
         }
 
@@ -358,6 +374,44 @@ export const createMutation = <
       return state.data();
     },
     mutateAsync: undefined as never,
+  };
+
+  const setPaused = (paused: boolean) => {
+    if (state.isPaused() === paused) return;
+    state.isPaused(paused);
+    mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+  };
+
+  networkPause = createNetworkPause(
+    () => mutation.resolvedOptions.networkMode,
+    () => setPaused(true),
+    () => setPaused(false),
+  );
+
+  const waitForNetwork = (retry: boolean): Promise<void> | undefined => {
+    const pause = networkPause.wait(retry);
+    if (!pause) {
+      setPaused(false);
+      return undefined;
+    }
+    return pause.then(() => {
+      setPaused(false);
+    });
+  };
+
+  const executeMutation = mutation.mutate;
+  mutation.mutate = (variables, mutateOptions) => {
+    const promise = executeMutation(variables, mutateOptions);
+    currentPromise = promise;
+    void promise.then(
+      () => {
+        if (currentPromise === promise) currentPromise = undefined;
+      },
+      () => {
+        if (currentPromise === promise) currentPromise = undefined;
+      },
+    );
+    return promise;
   };
 
   mutation.mutateAsync = mutation.mutate;

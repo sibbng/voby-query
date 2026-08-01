@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { QueryClient } from '../src/index.ts';
+import { QueryClient, onlineManager } from '../src/index.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -7,6 +7,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  onlineManager.setOnline(true);
 });
 
 let keyCounter = 0;
@@ -21,6 +22,29 @@ const executeMutation = (queryClient: QueryClient, options: any, variables: any)
 };
 
 describe('mutations', () => {
+  it('pauses an offline mutation and resumes it when online', async () => {
+    const queryClient = new QueryClient();
+    const mutationFn = vi.fn().mockResolvedValue('data');
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn,
+    });
+
+    onlineManager.setOnline(false);
+    const promise = (mutation as any).mutate('vars');
+
+    await Promise.resolve();
+
+    expect(mutationFn).not.toHaveBeenCalled();
+    expect(mutation.state.status()).toBe('pending');
+    expect(mutation.state.isPaused()).toBe(true);
+
+    onlineManager.setOnline(true);
+
+    await expect(promise).resolves.toBe('data');
+    expect(mutationFn).toHaveBeenCalledTimes(1);
+    expect(mutation.state.isPaused()).toBe(false);
+  });
+
   it('mutate should accept null values', async () => {
     let variables: any;
     const queryClient = new QueryClient();
