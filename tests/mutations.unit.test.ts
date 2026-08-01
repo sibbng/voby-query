@@ -22,6 +22,20 @@ const executeMutation = (queryClient: QueryClient, options: any, variables: any)
 };
 
 describe('mutations', () => {
+  it('uses zero as the initial and reset submittedAt value', async () => {
+    const queryClient = new QueryClient();
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => 'data',
+    });
+
+    expect(mutation.state.submittedAt()).toBe(0);
+
+    await mutation.mutate('vars');
+    mutation.reset();
+
+    expect(mutation.state.submittedAt()).toBe(0);
+  });
+
   it('pauses an offline mutation and resumes it when online', async () => {
     const queryClient = new QueryClient();
     const mutationFn = vi.fn().mockResolvedValue('data');

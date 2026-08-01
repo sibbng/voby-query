@@ -120,7 +120,7 @@ export const createMutation = <
     state.failureCount(0);
     state.failureReason(null);
     state.isPaused(false);
-    state.submittedAt(undefined);
+    state.submittedAt(0);
     state.variables(undefined);
     state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
   };
@@ -135,7 +135,7 @@ export const createMutation = <
     const failureCount = $(0);
     const failureReason = $<TError | null>(null, { equals: false });
     const isPaused = $(false);
-    const submittedAt = $<number | undefined>(undefined);
+    const submittedAt = $<number>(0);
     const variables = $<TVariables | undefined>(undefined, { equals: false });
     const meta = $<Record<string, unknown>>(
       (resolvedOptions.meta ?? {}) as Record<string, unknown>,

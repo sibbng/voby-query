@@ -136,7 +136,7 @@ export type MutationState<
   failureCount: Observable<number>;
   failureReason: Observable<TError | null>;
   isPaused: Observable<boolean>;
-  submittedAt: Observable<number | undefined>;
+  submittedAt: Observable<number>;
   variables: Observable<TVariables | undefined>;
   isError: Observable<boolean>;
   isIdle: Observable<boolean>;
