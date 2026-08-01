@@ -89,7 +89,8 @@ export class MutationCache<
   }
 
   find(filters?: MutationFilters) {
-    return this.findAll(filters)[0];
+    const defaultedFilters = { exact: true, ...filters };
+    return this.getAll().find((mutation) => matchMutation(defaultedFilters, mutation));
   }
 
   build<TData = unknown, TError = unknown, TVariables = TData, TContext = unknown>(

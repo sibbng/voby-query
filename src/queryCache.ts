@@ -109,7 +109,8 @@ export class QueryCache<
   }
 
   find(filters?: QueryFilters) {
-    return this.findAll(filters)[0];
+    const defaultedFilters = { exact: true, ...filters };
+    return this.getAll().find((query) => matchQueryFilter(defaultedFilters, query));
   }
 
   build<

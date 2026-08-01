@@ -130,6 +130,35 @@ describe('mutationCache', () => {
       expect(testCache.find({ mutationKey: ['mutation'], exact: false })).toEqual(mutation);
       expect(testCache.find({ mutationKey: ['unknown'] })).toEqual(undefined);
     });
+
+    it('should find exact matches by default', async () => {
+      const queryClient = new QueryClient();
+      const testCache = queryClient.getMutationCache() as any;
+
+      await executeMutation(
+        queryClient,
+        {
+          mutationKey: ['a', 1],
+          mutationFn: async () => undefined,
+        },
+        1,
+      ).catch(() => {});
+
+      await executeMutation(
+        queryClient,
+        {
+          mutationKey: ['a', 2],
+          mutationFn: async () => undefined,
+        },
+        2,
+      ).catch(() => {});
+
+      const [mutation1] = testCache.getAll();
+
+      expect(testCache.find({ mutationKey: ['a', 1] })).toEqual(mutation1);
+      expect(testCache.find({ mutationKey: ['a'], exact: false })).toEqual(mutation1);
+      expect(testCache.find({ mutationKey: ['a'] })).toEqual(undefined);
+    });
   });
 
   describe('findAll', () => {

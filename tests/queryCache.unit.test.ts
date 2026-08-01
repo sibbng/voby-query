@@ -142,6 +142,36 @@ describe('queryCache', () => {
       const query = queryCache.find({ queryKey: key }) as any;
       expect(query).toBeDefined();
     });
+
+    it('find should filter correctly with exact set to false', async () => {
+      const queryClient = new QueryClient();
+      const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+      const key = queryKey();
+      await queryClient.prefetchQuery({
+        queryKey: key,
+        queryFn: async () => 'data1',
+      });
+      const query = queryCache.find({ queryKey: key, exact: false }) as any;
+      expect(query).toBeDefined();
+    });
+
+    it('find should match exact keys by default', async () => {
+      const queryClient = new QueryClient();
+      const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+
+      await queryClient.fetchQuery({
+        queryKey: ['a', 1],
+        queryFn: async () => 'data1',
+      });
+      await queryClient.fetchQuery({
+        queryKey: ['a', 2],
+        queryFn: async () => 'data2',
+      });
+
+      expect(queryCache.find({ queryKey: ['a', 1] })?.queryKey).toEqual(['a', 1]);
+      expect(queryCache.find({ queryKey: ['a'], exact: false })?.queryKey).toEqual(['a', 1]);
+      expect(queryCache.find({ queryKey: ['a'] })).toBeUndefined();
+    });
   });
 
   describe('findAll', () => {
