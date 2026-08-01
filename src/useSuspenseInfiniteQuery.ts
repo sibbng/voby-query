@@ -74,6 +74,10 @@ export function useSuspenseInfiniteQuery<
     return obs;
   });
 
+  let currentResult:
+    | UseSuspenseInfiniteQueryResultValue<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError>
+    | undefined;
+
   const resource = useResource<Awaited<InfiniteData<TQueryFnData, TPageParam>>>(() => {
     const obs = observer();
     const currentQuery = obs.query;
@@ -120,12 +124,18 @@ export function useSuspenseInfiniteQuery<
     const fetchPage = async (
       direction: InfiniteQueryDirection,
       fetchOptions?: InfiniteQueryFetchPageOptions,
-    ) => {
+    ): Promise<
+      UseSuspenseInfiniteQueryResultValue<Awaited<InfiniteData<TQueryFnData, TPageParam>>, TError>
+    > => {
       const { cancelRefetch = true } = fetchOptions ?? {};
       const data = state.data();
 
-      if (direction === 'forward' && data && !hasNextPage(options, data)) return;
-      if (direction === 'backward' && data && !hasPreviousPage(options, data)) return;
+      if (direction === 'forward' && data && !hasNextPage(options, data)) {
+        return currentResult!;
+      }
+      if (direction === 'backward' && data && !hasPreviousPage(options, data)) {
+        return currentResult!;
+      }
 
       if (cancelRefetch) {
         await currentQuery.cancel({ revert: false, silent: true });
@@ -142,6 +152,8 @@ export function useSuspenseInfiniteQuery<
             direction,
           }),
       });
+
+      return currentResult!;
     };
 
     const { isPlaceholderData: _isPlaceholderData, ...rest } = state;
@@ -180,13 +192,17 @@ export function useSuspenseInfiniteQuery<
         fetchPage('forward', fetchOptions),
       fetchPreviousPage: (fetchOptions?: InfiniteQueryFetchPageOptions) =>
         fetchPage('backward', fetchOptions),
-      refetch: currentQuery.refetch,
+      refetch: async (fetchOptions?: InfiniteQueryFetchPageOptions) => {
+        await currentQuery.refetch(fetchOptions);
+        return currentResult!;
+      },
       cancel: currentQuery.cancel,
       promise: obs.getCurrentResult().promise as Promise<
         Awaited<InfiniteData<TQueryFnData, TPageParam>>
       >,
     };
 
+    currentResult = result;
     return Object.freeze(result);
   });
 }

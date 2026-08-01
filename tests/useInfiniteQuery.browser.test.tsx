@@ -115,6 +115,55 @@ describe('useInfiniteQuery.browser.test', () => {
     expect(document.body.textContent).toBe('page 1');
   });
 
+  test('fetchNextPage resolves with the updated result', async () => {
+    const queryClient = new QueryClient();
+    let result: any;
+
+    function TestComponent() {
+      const query = useInfiniteQuery<Page, Error, ['result-pages'], number>({
+        queryKey: ['result-pages'],
+        initialPageParam: 1,
+        queryFn: async ({ pageParam }) => {
+          await new Promise<void>((resolve) => setTimeout(resolve, 5));
+          return {
+            value: `page ${pageParam}`,
+            next: pageParam < 2 ? pageParam + 1 : undefined,
+          };
+        },
+        getNextPageParam: (lastPage) => lastPage.next,
+      });
+      result = query;
+
+      return (
+        <div>
+          {() =>
+            query()
+              .data()
+              ?.pages.map((page) => page.value)
+              .join('|') ?? 'loading'
+          }
+        </div>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(document.body.textContent).toBe('page 1');
+
+    const nextPromise = result().fetchNextPage();
+    await vi.advanceTimersByTimeAsync(11);
+    const nextResult = await nextPromise;
+
+    expect(nextResult.data().pageParams).toEqual([1, 2]);
+    expect(nextResult.hasNextPage()).toBe(false);
+  });
+
   test('fetchNextPage appends the next page and exposes fetching state', async () => {
     const queryClient = new QueryClient();
     let result: any;
@@ -220,12 +269,14 @@ describe('useInfiniteQuery.browser.test', () => {
 
     const p = result().fetchPreviousPage();
     await vi.advanceTimersByTimeAsync(10);
-    await p;
+    const previousResult = await p;
     await vi.advanceTimersByTimeAsync(1);
 
     expect(document.body.textContent).toBe('page 1|page 2');
     expect(result().data().pageParams).toEqual([1, 2]);
     expect(result().hasPreviousPage()).toBe(false);
+    expect(previousResult.data().pageParams).toEqual([1, 2]);
+    expect(previousResult.hasPreviousPage()).toBe(false);
     expect(queryClient.getQueryState(['pages-previous'])!.fetchMeta()).toEqual({
       fetchMore: { direction: 'backward' },
     });
@@ -331,11 +382,15 @@ describe('useInfiniteQuery.browser.test', () => {
     generation = 1;
     const p2 = result().refetch();
     await vi.advanceTimersByTimeAsync(10);
-    await p2;
+    const refetchedResult = await p2;
     await vi.advanceTimersByTimeAsync(1);
 
     expect(document.body.textContent).toBe('gen 1 page 1|gen 1 page 2');
     expect(seenPageParams).toEqual([1, 2, 1, 2]);
+    expect(refetchedResult.data().pages.map((page: Page) => page.value)).toEqual([
+      'gen 1 page 1',
+      'gen 1 page 2',
+    ]);
   });
 
   test('isFetchedAfterMount should be false when data is cached before mount', async () => {

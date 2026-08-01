@@ -581,15 +581,6 @@ export type UseSuspenseInfiniteQueryOptions<
   'enabled' | 'placeholderData' | 'throwOnError'
 >;
 
-export type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
-  UseInfiniteQueryResultValue<TData, TError>,
-  'isPlaceholderData'
->;
-
-export type UseSuspenseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
-  UseSuspenseInfiniteQueryResultValue<TData, TError>
->;
-
 export type UsePrefetchQueryOptions<
   TQueryFnData = unknown,
   TError = Error,
@@ -616,20 +607,46 @@ export type UsePrefetchInfiniteQueryOptions<
 
 export type InfiniteQueryFetchPageOptions = QueryRefetchOptions;
 
-type UseInfiniteQueryResultMethods<TData = unknown> = UseQueryResultMethods<TData> & {
-  fetchNextPage: (options?: InfiniteQueryFetchPageOptions) => Promise<void>;
-  fetchPreviousPage: (options?: InfiniteQueryFetchPageOptions) => Promise<void>;
+interface UseInfiniteQueryResultMethods<TData = unknown, TError = Error> {
+  refetch: (options?: QueryRefetchOptions) => Promise<UseInfiniteQueryResultValue<TData, TError>>;
+  cancel: (options?: CancelOptions) => Promise<void>;
+  promise: Promise<TData>;
+  fetchNextPage: (
+    options?: InfiniteQueryFetchPageOptions,
+  ) => Promise<UseInfiniteQueryResultValue<TData, TError>>;
+  fetchPreviousPage: (
+    options?: InfiniteQueryFetchPageOptions,
+  ) => Promise<UseInfiniteQueryResultValue<TData, TError>>;
   hasNextPage: ObservableReadonly<boolean>;
   hasPreviousPage: ObservableReadonly<boolean>;
   isFetchingNextPage: ObservableReadonly<boolean>;
   isFetchingPreviousPage: ObservableReadonly<boolean>;
-};
+}
 
 export type UseInfiniteQueryResultValue<TData, TError = Error> = QueryStateReadonly<TData, TError> &
-  UseInfiniteQueryResultMethods<TData>;
+  UseInfiniteQueryResultMethods<TData, TError>;
 
 export type UseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
   UseInfiniteQueryResultValue<TData | undefined, TError>
+>;
+
+export type UseSuspenseInfiniteQueryResultValue<TData, TError = Error> = Omit<
+  UseInfiniteQueryResultValue<TData, TError>,
+  'isPlaceholderData' | 'refetch' | 'fetchNextPage' | 'fetchPreviousPage'
+> & {
+  refetch: (
+    options?: QueryRefetchOptions,
+  ) => Promise<UseSuspenseInfiniteQueryResultValue<TData, TError>>;
+  fetchNextPage: (
+    options?: InfiniteQueryFetchPageOptions,
+  ) => Promise<UseSuspenseInfiniteQueryResultValue<TData, TError>>;
+  fetchPreviousPage: (
+    options?: InfiniteQueryFetchPageOptions,
+  ) => Promise<UseSuspenseInfiniteQueryResultValue<TData, TError>>;
+};
+
+export type UseSuspenseInfiniteQueryResult<TData = unknown, TError = Error> = ObservableReadonly<
+  UseSuspenseInfiniteQueryResultValue<TData, TError>
 >;
 
 type UseMutationResultMethods<

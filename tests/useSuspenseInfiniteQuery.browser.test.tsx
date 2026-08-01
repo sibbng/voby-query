@@ -259,12 +259,14 @@ describe('useSuspenseInfiniteQuery', () => {
 
     const nextPromise = result().fetchNextPage();
     await vi.advanceTimersByTimeAsync(10);
-    await nextPromise;
+    const nextResult = await nextPromise;
     await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toBe('page 1|page 2');
 
     expect(result().data().pageParams).toEqual([1, 2]);
     expect(result().hasNextPage()).toBe(false);
+    expect(nextResult.data().pageParams).toEqual([1, 2]);
+    expect(nextResult.hasNextPage()).toBe(false);
   });
 
   test('useSuspenseInfiniteQuery - fetchPreviousPage prepends a previous page', async () => {
@@ -313,12 +315,14 @@ describe('useSuspenseInfiniteQuery', () => {
 
     const prevPromise = result().fetchPreviousPage();
     await vi.advanceTimersByTimeAsync(10);
-    await prevPromise;
+    const previousResult = await prevPromise;
     await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toBe('page 1|page 2');
 
     expect(result().data().pageParams).toEqual([1, 2]);
     expect(result().hasPreviousPage()).toBe(false);
+    expect(previousResult.data().pageParams).toEqual([1, 2]);
+    expect(previousResult.hasPreviousPage()).toBe(false);
   });
 
   test('useSuspenseInfiniteQuery - refetch reloads from first page param', async () => {
@@ -374,9 +378,13 @@ describe('useSuspenseInfiniteQuery', () => {
     generation = 1;
     const refetchPromise = result().refetch();
     await vi.advanceTimersByTimeAsync(10);
-    await refetchPromise;
+    const refetchedResult = await refetchPromise;
     await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toBe('gen 1 page 1|gen 1 page 2');
+    expect(refetchedResult.data().pages.map((page: Page) => page.value)).toEqual([
+      'gen 1 page 1',
+      'gen 1 page 2',
+    ]);
   });
 
   test('useSuspenseInfiniteQuery - no isPlaceholderData property on result', async () => {

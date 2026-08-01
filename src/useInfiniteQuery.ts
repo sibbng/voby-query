@@ -41,6 +41,12 @@ export function useInfiniteQuery<
   const tick = $(0);
   const promiseTick = $(0);
   let currentPromise: Promise<Awaited<InfiniteData<TQueryFnData, TPageParam>>> | undefined;
+  let currentResult:
+    | UseInfiniteQueryResultValue<
+        Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined,
+        TError
+      >
+    | undefined;
 
   const observer = useMemo(() => {
     let nextQuery!: Query<
@@ -120,13 +126,22 @@ export function useInfiniteQuery<
       const fetchPage = async (
         direction: InfiniteQueryDirection,
         fetchOptions?: InfiniteQueryFetchPageOptions,
-      ) => {
+      ): Promise<
+        UseInfiniteQueryResultValue<
+          Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined,
+          TError
+        >
+      > => {
         const { throwOnError = resolvedOptions.throwOnError, cancelRefetch = true } =
           fetchOptions ?? {};
         const data = state.data();
 
-        if (direction === 'forward' && data && !hasNextPage(infiniteOptions, data)) return;
-        if (direction === 'backward' && data && !hasPreviousPage(infiniteOptions, data)) return;
+        if (direction === 'forward' && data && !hasNextPage(infiniteOptions, data)) {
+          return currentResult!;
+        }
+        if (direction === 'backward' && data && !hasPreviousPage(infiniteOptions, data)) {
+          return currentResult!;
+        }
 
         if (cancelRefetch) {
           await currentQuery.cancel({ revert: false, silent: true });
@@ -144,6 +159,8 @@ export function useInfiniteQuery<
               direction,
             }),
         });
+
+        return currentResult!;
       };
 
       const resultPromise = observerResult.promise as Promise<
@@ -151,7 +168,7 @@ export function useInfiniteQuery<
       >;
       currentPromise = resultPromise;
 
-      return Object.freeze({
+      const result = Object.freeze({
         ...state,
         isFetchedAfterMount: useMemo(
           (): boolean =>
@@ -210,10 +227,16 @@ export function useInfiniteQuery<
           fetchPage('forward', fetchOptions),
         fetchPreviousPage: (fetchOptions?: InfiniteQueryFetchPageOptions) =>
           fetchPage('backward', fetchOptions),
-        refetch: currentQuery.refetch,
+        refetch: async (fetchOptions?: InfiniteQueryFetchPageOptions) => {
+          await currentQuery.refetch(fetchOptions);
+          return currentResult!;
+        },
         cancel: currentQuery.cancel,
         promise: resultPromise,
       });
+
+      currentResult = result;
+      return result;
     },
   );
 }
