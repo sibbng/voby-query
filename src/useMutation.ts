@@ -1,4 +1,4 @@
-import { $, type ObservableReadonly, useCleanup, useMemo } from 'voby';
+import { $, type ObservableReadonly, useCleanup, useEffect, useMemo } from 'voby';
 import type { Mutation } from './mutation.ts';
 import { useQueryClient } from './queryClient.ts';
 import { noop } from './utils.ts';
@@ -23,14 +23,58 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
 ): UseMutationResult<TData, TError, TVariables, TContext> {
   const queryClient = useQueryClient(options.queryClient);
 
-  const mutation = useMemo(() => {
+  type CurrentMutation = Mutation<TData, TError, TVariables, TContext>;
+  const retainedMutations = new Set<CurrentMutation>();
+  const retainMutation = (mutation: CurrentMutation) => {
+    mutation.addInstance();
+    retainedMutations.add(mutation);
+  };
+  const releaseMutation = (mutation: CurrentMutation) => {
+    if (!retainedMutations.delete(mutation)) return;
+    mutation.removeInstance();
+  };
+
+  const mutationOptions = useMemo(() => {
     const nextMutation = queryClient.mutationCache.build<TData, TError, TVariables, TContext>(
       queryClient,
       options,
     );
-    useCleanup(nextMutation.addInstance());
+    retainMutation(nextMutation);
     return nextMutation;
   });
+  const mutation = $<CurrentMutation>(mutationOptions());
+  let latestOptionsMutation = mutationOptions();
+
+  useEffect(() => {
+    const nextMutation = mutationOptions();
+    if (nextMutation === latestOptionsMutation) return;
+
+    releaseMutation(latestOptionsMutation);
+    latestOptionsMutation = nextMutation;
+    mutation(nextMutation);
+  });
+
+  useCleanup(() => {
+    for (const retainedMutation of retainedMutations) {
+      retainedMutation.removeInstance();
+    }
+    retainedMutations.clear();
+  });
+
+  const executeMutation = (
+    variables: TVariables,
+    mutateOptions?: Parameters<CurrentMutation['mutate']>[1],
+  ) => {
+    const previousMutation = mutation();
+    const nextMutation = queryClient.mutationCache.build<TData, TError, TVariables, TContext>(
+      queryClient,
+      options,
+    );
+    retainMutation(nextMutation);
+    releaseMutation(previousMutation);
+    mutation(nextMutation);
+    return nextMutation.mutate(variables, mutateOptions);
+  };
 
   return useMemo(() => ({
     data: useMemo(() => mutation().state.data()),
@@ -44,10 +88,10 @@ export function useMutation<TData, TError = Error, TVariables = void, TContext =
     failureCount: useMemo(() => mutation().state.failureCount()),
     failureReason: useMemo(() => mutation().state.failureReason()),
     mutate: (variables, options) => {
-      mutation().mutate(variables, options).catch(noop);
+      executeMutation(variables, options).catch(noop);
     },
-    mutateAsync: mutation().mutateAsync,
-    reset: mutation().reset,
+    mutateAsync: executeMutation,
+    reset: () => mutation().reset(),
     status: useMemo(() => mutation().state.status()),
     submittedAt: useMemo(() => mutation().state.submittedAt()),
     variables: useMemo(() => mutation().state.variables()),

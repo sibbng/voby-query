@@ -512,8 +512,7 @@ describe('useMutation', () => {
     await promise1;
     await promise2;
 
-    // Assertions based on the library's behavior (assuming only the first call is processed)
-    // The first call should complete successfully.
+    // The latest mutation is the one exposed by the hook result.
     expect(mutationResult().status()).toBe('success');
     expect(mutationResult().data()).toBe('Processed: call2');
     expect(mutationFnExecutionLog).toEqual([
@@ -523,12 +522,6 @@ describe('useMutation', () => {
       'End: call2',
     ]);
 
-    // Now, let's see what promise2 resolves to.
-    // If the second call was ignored, promise2 might resolve with the result of promise1,
-    // or undefined, or throw, depending on implementation.
-    // Given the current setup, it's likely promise2 will resolve with the outcome of call1
-    // because mutateAsync() returns the same promise instance if already pending.
-
     let promise2Result: string | undefined;
     let promise2Error: Error | undefined;
     try {
@@ -537,11 +530,10 @@ describe('useMutation', () => {
       promise2Error = e;
     }
 
-    expect(promise2Result).toBe('Processed: call2'); // Assuming it resolves with call1's data
+    expect(promise2Result).toBe('Processed: call2');
     expect(promise2Error).toBeUndefined();
 
-    // Verify no second execution
-    expect(mutationFnExecutionLog.length).toBe(4); // Still only call1 executed
+    expect(mutationFnExecutionLog.length).toBe(4);
 
     // Let's try another mutateAsync after the first one is fully settled.
     mutationFnExecutionLog.length = 0; // Clear log
@@ -553,6 +545,45 @@ describe('useMutation', () => {
     expect(mutationResult().status()).toBe('success');
     expect(mutationResult().data()).toBe('Processed: call3');
     expect(mutationFnExecutionLog).toEqual(['Start: call3', 'End: call3']);
+  });
+
+  test('useMutation creates a separate pending mutation for each call', async () => {
+    const queryClient = new QueryClient();
+    let mutationResult: any;
+    const resolvers: Array<(value: string) => void> = [];
+
+    function TestComponent() {
+      const mutation = useMutation<string, Error, string>({
+        mutationFn: (variables) =>
+          new Promise<string>((resolve) => {
+            resolvers.push(() => resolve(`Processed: ${variables}`));
+          }),
+      });
+      mutationResult = mutation;
+      return null;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    const promise1 = mutationResult().mutateAsync('call1');
+    const promise2 = mutationResult().mutateAsync('call2');
+
+    await Promise.resolve();
+
+    const pendingMutations = queryClient.getMutationCache().findAll({ status: 'pending' });
+    expect(pendingMutations).toHaveLength(2);
+    expect(pendingMutations[0]).not.toBe(pendingMutations[1]);
+
+    resolvers.forEach((resolve) => resolve('done'));
+    await expect(Promise.all([promise1, promise2])).resolves.toEqual([
+      'Processed: call1',
+      'Processed: call2',
+    ]);
   });
 
   test('useMutationState filters by partial observable mutation keys', async () => {
