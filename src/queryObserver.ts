@@ -384,7 +384,9 @@ export class QueryObserver<
       () =>
         mounted &&
         previousOptions.enabled === false &&
-        this.#resolvedOptions.enabled &&
+        (!this.#resolvedOptions.suspense || this.#query.state.status() !== 'error') &&
+        this.#resolvedOptions.enabled !== false &&
+        this.#query.isStaleByTime(this.#resolveStaleTime()) &&
         this.#query.state.fetchStatus() !== 'paused',
     );
 

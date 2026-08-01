@@ -288,4 +288,48 @@ describe('queryObserver stale timers', () => {
     observer.destroy();
     unsubscribeCache();
   });
+
+  it('should not refetch when enabled switches to true and data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 1000 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, { enabled: false });
+    const unsubscribe = observer.subscribe(() => {});
+
+    observer.setOptions({ enabled: true, staleTime: 1000 });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
+
+  it('should refetch when enabled switches to true and data is stale', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 100 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, { enabled: false });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    observer.setOptions({ enabled: true, staleTime: 100 });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+  });
 });
