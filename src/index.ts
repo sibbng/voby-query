@@ -38,6 +38,7 @@ export { dataTagSymbol, dataTagErrorSymbol, unsetMarker } from './types.ts';
 export type {
   MutationKey,
   MutationFunctionContext,
+  MutationScope,
   DataTag,
   AnyDataTag,
   UnsetMarker,

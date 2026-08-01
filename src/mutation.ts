@@ -107,6 +107,9 @@ export const createMutation = <
   let stateDisposer: () => void = () => {};
   let machine!: MachineInstance<MutationState_, MutationEvent>;
   let networkPause!: NetworkPause;
+  let scopePausedPromise: Promise<void> | undefined;
+  let scopeContinue: (() => void) | undefined;
+  let scopeCancel: (() => void) | undefined;
   let currentPromise: Promise<TData | undefined> | undefined;
 
   const setInitialState = () => {
@@ -212,6 +215,7 @@ export const createMutation = <
     destroyDisposer: () => {},
     destroy: () => {
       networkPause.cancel();
+      scopeCancel?.();
       mutation.destroyDisposer();
       mutation.stateDisposer();
     },
@@ -243,6 +247,9 @@ export const createMutation = <
       mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
     },
     continue: () => {
+      if (mutationCache.canRun(mutation)) {
+        scopeContinue?.();
+      }
       networkPause.continue();
       return currentPromise ?? Promise.resolve(undefined);
     },
@@ -257,7 +264,7 @@ export const createMutation = <
       state.error(null);
       state.failureCount(0);
       state.failureReason(null);
-      state.isPaused(!networkPause.canStart());
+      state.isPaused(!networkPause.canStart() || !mutationCache.canRun(mutation));
       state.variables(variables);
       state.submittedAt(Date.now());
       state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
@@ -284,7 +291,7 @@ export const createMutation = <
           throw new Error('No mutationFn found');
         }
 
-        const initialPause = waitForNetwork(false);
+        const initialPause = waitForExecution(false);
         if (initialPause) await initialPause;
 
         let failureCount = 0;
@@ -309,7 +316,7 @@ export const createMutation = <
             }
 
             await new Promise((resolve) => timeoutManager.setTimeout(resolve, resolvedRetryDelay));
-            const retryPause = waitForNetwork(true);
+            const retryPause = waitForExecution(true);
             if (retryPause) await retryPause;
           }
         }
@@ -403,6 +410,8 @@ export const createMutation = <
         }
 
         throw error;
+      } finally {
+        void mutationCache.runNext(mutation);
       }
 
       return state.data();
@@ -419,16 +428,41 @@ export const createMutation = <
   networkPause = createNetworkPause(
     () => mutation.resolvedOptions.networkMode,
     () => setPaused(true),
-    () => setPaused(false),
+    () => {},
   );
 
-  const waitForNetwork = (retry: boolean): Promise<void> | undefined => {
-    const pause = networkPause.wait(retry);
-    if (!pause) {
+  const waitForScope = (): Promise<void> | undefined => {
+    if (mutationCache.canRun(mutation)) return undefined;
+    if (scopePausedPromise) return scopePausedPromise;
+
+    scopePausedPromise = new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        scopeContinue = undefined;
+        scopeCancel = undefined;
+        scopePausedPromise = undefined;
+        resolve();
+      };
+
+      scopeContinue = finish;
+      scopeCancel = finish;
+    });
+    return scopePausedPromise;
+  };
+
+  const waitForExecution = (retry: boolean): Promise<void> | undefined => {
+    const pauses = [networkPause.wait(retry), waitForScope()].filter(
+      (pause): pause is Promise<void> => pause !== undefined,
+    );
+    if (pauses.length === 0) {
       setPaused(false);
       return undefined;
     }
-    return pause.then(() => {
+
+    setPaused(true);
+    return Promise.all(pauses).then(() => {
       setPaused(false);
     });
   };

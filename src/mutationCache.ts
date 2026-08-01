@@ -24,11 +24,16 @@ export class MutationCache<
   TMutation extends Mutation<any, any, any, any> = Mutation<any, any, any, any>,
 > extends Subscribable<MutationCacheListener> {
   private readonly mutations: Map<string, TMutation>;
+  private readonly scopes: Map<string, TMutation[]>;
   private nextId: number;
 
   constructor(cache?: Map<string, TMutation>) {
     super();
     this.mutations = new Map(cache);
+    this.scopes = new Map();
+    for (const mutation of this.mutations.values()) {
+      this.addToScope(mutation);
+    }
     this.nextId = 0;
   }
 
@@ -52,6 +57,7 @@ export class MutationCache<
 
   set(cacheKey: string, mutation: TMutation) {
     this.mutations.set(cacheKey, mutation);
+    this.addToScope(mutation);
     this.notify({ type: 'added', mutation: mutation as Mutation<any, any, any, any> });
     return this;
   }
@@ -98,6 +104,26 @@ export class MutationCache<
     return this.getAll().find((mutation) => matchMutation(defaultedFilters, mutation));
   }
 
+  canRun(mutation: Mutation<any, any, any, any>) {
+    const scopeId = mutation.resolvedOptions.scope?.id;
+    if (scopeId === undefined) return true;
+
+    const firstPendingMutation = this.scopes
+      .get(scopeId)
+      ?.find((candidate) => candidate.state.isPending());
+    return !firstPendingMutation || firstPendingMutation === mutation;
+  }
+
+  runNext(mutation: Mutation<any, any, any, any>): Promise<unknown> {
+    const scopeId = mutation.resolvedOptions.scope?.id;
+    if (scopeId === undefined) return Promise.resolve();
+
+    const nextMutation = this.scopes
+      .get(scopeId)
+      ?.find((candidate) => candidate !== mutation && candidate.state.isPaused());
+    return nextMutation?.continue() ?? Promise.resolve();
+  }
+
   build<TData = unknown, TError = unknown, TVariables = TData, TContext = unknown>(
     queryClient: QueryClient,
     options: MutationOptions<TData, TError, TVariables, TContext>,
@@ -122,6 +148,7 @@ export class MutationCache<
     if (cachedMutation !== mutation) return;
 
     this.mutations.delete(mutation.cacheKey);
+    this.removeFromScope(mutation);
     mutation.destroy();
     this.notify({ type: 'removed', mutation: mutation as Mutation<any, any, any, any> });
   }
@@ -137,10 +164,35 @@ export class MutationCache<
         mutation.destroy();
       }
     }
+    this.scopes.clear();
     this.notify({
       type: 'removed',
       mutation: mutations[mutations.length - 1] as Mutation<any, any, any, any>,
     });
+  }
+
+  private addToScope(mutation: TMutation) {
+    const scopeId = mutation.resolvedOptions.scope?.id;
+    if (scopeId === undefined) return;
+
+    const scopedMutations = this.scopes.get(scopeId);
+    if (scopedMutations) {
+      scopedMutations.push(mutation);
+    } else {
+      this.scopes.set(scopeId, [mutation]);
+    }
+  }
+
+  private removeFromScope(mutation: TMutation) {
+    const scopeId = mutation.resolvedOptions.scope?.id;
+    if (scopeId === undefined) return;
+
+    const scopedMutations = this.scopes.get(scopeId);
+    if (!scopedMutations) return;
+
+    const index = scopedMutations.indexOf(mutation);
+    if (index !== -1) scopedMutations.splice(index, 1);
+    if (scopedMutations.length === 0) this.scopes.delete(scopeId);
   }
 }
 

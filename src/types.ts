@@ -51,6 +51,10 @@ export type MutationFunctionContext = {
   mutationKey?: MutationKey;
 };
 
+export type MutationScope = {
+  id: string;
+};
+
 export const dataTagSymbol = Symbol('dataTagSymbol');
 export type dataTagSymbol = typeof dataTagSymbol;
 export const dataTagErrorSymbol = Symbol('dataTagErrorSymbol');
@@ -473,6 +477,7 @@ export type MutationOptions<
   retryDelay?: number | ((retryAttempt: number, error: TError) => number);
   gcTime?: number;
   networkMode?: 'online' | 'always' | 'offlineFirst';
+  scope?: MutationScope;
   throwOnError?: boolean | ((error: TError) => boolean);
   meta?: Record<string, unknown>;
   queryClient?: QueryClient;

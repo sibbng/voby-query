@@ -198,6 +198,93 @@ describe('mutations', () => {
     expect(results).toStrictEqual(['start-A', 'start-B', 'finish-A', 'finish-B']);
   });
 
+  it('mutations in the same scope should run in serial', async () => {
+    const queryClient = new QueryClient();
+    const results: string[] = [];
+    let resolveFirst!: (value: string) => void;
+    const firstResult = new Promise<string>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    const firstMutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        results.push('start-A');
+        return firstResult;
+      },
+      scope: { id: 'serial-scope' },
+    });
+    const secondMutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        results.push('start-B');
+        return 'b';
+      },
+      scope: { id: 'serial-scope' },
+    });
+
+    const firstPromise = (firstMutation as any).mutate('vars1');
+    const secondPromise = (secondMutation as any).mutate('vars2');
+
+    await Promise.resolve();
+    expect(results).toEqual(['start-A']);
+
+    resolveFirst('a');
+    await expect(firstPromise).resolves.toBe('a');
+    await expect(secondPromise).resolves.toBe('b');
+    expect(results).toEqual(['start-A', 'start-B']);
+  });
+
+  it('keeps paused mutations serialized when resuming a scope', async () => {
+    const queryClient = new QueryClient();
+    const results: string[] = [];
+    let resolveFirst!: (value: string) => void;
+    let resolveFirstStarted!: () => void;
+    const firstResult = new Promise<string>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const firstStarted = new Promise<void>((resolve) => {
+      resolveFirstStarted = resolve;
+    });
+
+    const firstMutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        results.push('start-A');
+        resolveFirstStarted();
+        return firstResult;
+      },
+      networkMode: 'online',
+      scope: { id: 'paused-serial-scope' },
+    });
+    const secondMutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        results.push('start-B');
+        return 'b';
+      },
+      networkMode: 'online',
+      scope: { id: 'paused-serial-scope' },
+    });
+
+    onlineManager.setOnline(false);
+    const firstPromise = firstMutation.mutate('vars1');
+    const secondPromise = secondMutation.mutate('vars2');
+    await Promise.resolve();
+
+    expect(results).toEqual([]);
+    expect(secondMutation.state.isPaused()).toBe(true);
+
+    onlineManager.setOnline(true);
+    const resumePromise = queryClient.resumePausedMutations();
+    await firstStarted;
+    expect(results).toEqual(['start-A']);
+
+    resolveFirst('a');
+    await expect(Promise.all([firstPromise, secondPromise, resumePromise])).resolves.toEqual([
+      'a',
+      'b',
+      ['a', 'b'],
+    ]);
+    expect(results).toEqual(['start-A', 'start-B']);
+  });
+
   it('should retry once with retry: 1 and expose the final failureCount', async () => {
     const queryClient = new QueryClient();
     const mutationFn = vi.fn().mockRejectedValue(new Error('err'));
