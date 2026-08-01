@@ -131,25 +131,24 @@ export class QueryObserver<
 
   #updateStaleTimeout(): void {
     untrack(() => {
-      this.#query.state.isStale(
-        this.#resolvedOptions.enabled && this.#query.isStaleByTime(this.#resolveStaleTime()),
-      );
-
       if (this.#staleTimeoutId !== undefined) {
         timeoutManager.clearTimeout(this.#staleTimeoutId);
         this.#staleTimeoutId = undefined;
       }
 
       const query = this.#query;
-      if (query.state.data() === undefined) return;
+      const state = query.state;
+      if (state.data() === undefined) return;
+      if (state.isInvalidated()) return;
 
       const staleTime = this.#resolveStaleTime();
       if (staleTime === 'static' || staleTime === Infinity || staleTime <= 0) return;
+      if (this.isStale()) return;
 
       this.#staleTimeoutId = timeoutManager.setTimeout(() => {
         this.#staleTimeoutId = undefined;
         this.#notify();
-      }, staleTime);
+      }, staleTime + 1);
     });
   }
 
@@ -205,7 +204,7 @@ export class QueryObserver<
     }
     if (refetchOnMount === 'always') return true;
     if (refetchOnMount === false) return false;
-    return this.#query.state.isStale();
+    return this.isStale();
   }
 
   shouldFetchOnWindowFocus(): boolean {
@@ -214,7 +213,7 @@ export class QueryObserver<
       return !!refetchOnWindowFocus(this.#query);
     }
     if (refetchOnWindowFocus === 'always') return true;
-    if (refetchOnWindowFocus && this.#query.state.isStale()) return true;
+    if (refetchOnWindowFocus && this.isStale()) return true;
     return false;
   }
 
@@ -224,7 +223,7 @@ export class QueryObserver<
       return !!refetchOnReconnect(this.#query);
     }
     if (refetchOnReconnect === 'always') return true;
-    if (refetchOnReconnect && this.#query.state.isStale()) return true;
+    if (refetchOnReconnect && this.isStale()) return true;
     return false;
   }
 
@@ -233,8 +232,13 @@ export class QueryObserver<
   }
 
   isStale(): boolean {
+    if (!this.#resolvedOptions.enabled) return false;
     const staleTime = this.#resolveStaleTime();
     return this.#query.isStaleByTime(staleTime);
+  }
+
+  onQueryUpdate(): void {
+    this.#updateStaleTimeout();
   }
 
   isPlaceholderData(): boolean {

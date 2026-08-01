@@ -32,6 +32,7 @@ export function useQuery<
 ): UseQueryResult<Awaited<TData>, TError> {
   const client = useQueryClient(queryClient ?? options.queryClient);
   const lastData = $<TQueryFnData | undefined>();
+  const tick = $(0);
   let lastQueryWithDefinedData: Query<TQueryFnData, TError, TData, TQueryKey> | undefined;
   let pinnedPlaceholder:
     | {
@@ -66,7 +67,7 @@ export function useQuery<
     const obs = untrack(
       () => new QueryObserver<TQueryFnData, TError, TData, TQueryKey>(q, options),
     );
-    useCleanup(obs.subscribe(() => {}));
+    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
     useCleanup(() => obs.destroy());
     return obs;
   });
@@ -153,6 +154,10 @@ export function useQuery<
           state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
           state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
       ),
+      isStale: useMemo(() => {
+        tick();
+        return obs.isStale();
+      }),
       isSuccess: useMemo(() => (hasPlaceholderValue() ? true : state.isSuccess())),
       isPending: useMemo(() => (hasPlaceholderValue() ? false : state.isPending())),
       isPlaceholderData: useMemo(() => hasPlaceholderValue()),

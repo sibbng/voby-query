@@ -88,6 +88,7 @@ export function useSuspenseQuery<
           stateObservable.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
           stateObservable.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
       ),
+      isStale: useMemo(() => obs.isStale()),
       data: useMemo(() => {
         const currentData = stateObservable.data();
 

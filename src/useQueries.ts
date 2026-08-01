@@ -89,6 +89,7 @@ export function useQueries<T extends Array<any>, TCombinedResult = QueriesResult
             q.state.dataUpdateCount() > (counts?.dataUpdateCount ?? 0) ||
             q.state.errorUpdateCount() > (counts?.errorUpdateCount ?? 0),
         ),
+        isStale: useMemo(() => obs.isStale()),
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,

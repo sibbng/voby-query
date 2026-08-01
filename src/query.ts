@@ -245,6 +245,9 @@ export const setQuerySuccessData = (
   query.state.isInvalidated(false);
   query.state.status('success');
   if (scheduleStale) scheduleQueryStale(query);
+  for (const observer of query.observers) {
+    observer.onQueryUpdate();
+  }
 };
 
 export const createQuery = <
@@ -322,7 +325,8 @@ export const createQuery = <
     fetchMachine: undefined as any,
     isStaleByTime: (staleTime) => {
       if (query.state.data() === undefined) return true;
-      if (staleTime === 'static' || staleTime === Infinity) return false;
+      if (staleTime === 'static') return false;
+      if (query.state.isInvalidated()) return true;
       return Date.now() - query.state.dataUpdatedAt() >= staleTime;
     },
     addInstance: () => {
@@ -626,7 +630,11 @@ export const createQuery = <
 
     const data = $(query.resolvedOptions.initialData as TData, { equals: false });
     const dataUpdateCount = $(0);
-    const dataUpdatedAt = $(query.resolvedOptions.initialDataUpdatedAt ?? 0);
+    const dataUpdatedAt = $(
+      query.resolvedOptions.initialData !== undefined
+        ? (query.resolvedOptions.initialDataUpdatedAt ?? Date.now())
+        : 0,
+    );
     const error = $<TError | null>(null, { equals: false });
     const errorUpdateCount = $(0);
     const errorUpdatedAt = $(0);

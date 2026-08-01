@@ -32,8 +32,8 @@ test('initialData sets initial state to success with data', async () => {
 
   const query = findQuery(queryClient, 'initial-data-success')!;
   expect(query.state.status()).toBe('success');
-  expect(query.state.data()).toBe('real data');
-  expect(query.state.dataUpdateCount()).toBe(1);
+  expect(query.state.data()).toBe('init value');
+  expect(query.state.dataUpdateCount()).toBe(0);
 });
 
 test('initialDataUpdatedAt: 0 makes initial data stale', async () => {

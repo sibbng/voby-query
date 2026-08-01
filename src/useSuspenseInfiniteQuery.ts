@@ -163,6 +163,7 @@ export function useSuspenseInfiniteQuery<
           state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
           state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
       ),
+      isStale: useMemo(() => obs.isStale()),
       data: useMemo(() => {
         const currentData = state.data();
 

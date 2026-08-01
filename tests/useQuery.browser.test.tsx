@@ -103,6 +103,92 @@ describe('useQuery.browser.test', () => {
     expect(fetchCount).toBe(2); // fetchFn was called again
   });
 
+  test('useQuery isStale is per-observer with different staleTimes on the same key', async () => {
+    const queryClient = new QueryClient();
+
+    function ObserverA() {
+      const query = useQuery({
+        queryKey: ['stale-per-observer'],
+        queryFn: async () => 'shared data',
+        staleTime: 50,
+      });
+
+      return (
+        <>
+          <p>A data: {() => query().data()}</p>
+          <p>A stale: {() => query().isStale().toString()}</p>
+        </>
+      );
+    }
+
+    function ObserverB() {
+      const query = useQuery({
+        queryKey: ['stale-per-observer'],
+        queryFn: async () => 'shared data',
+        staleTime: 1000,
+      });
+
+      return (
+        <>
+          <p>B data: {() => query().data()}</p>
+          <p>B stale: {() => query().isStale().toString()}</p>
+        </>
+      );
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <ObserverA />
+        <ObserverB />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(document.body.textContent).toContain('A data: shared data');
+    expect(document.body.textContent).toContain('B data: shared data');
+    expect(document.body.textContent).toContain('A stale: false');
+    expect(document.body.textContent).toContain('B stale: false');
+
+    // Only A's staleTime (50ms) passes — B must stay fresh
+    await vi.advanceTimersByTimeAsync(60);
+
+    expect(document.body.textContent).toContain('A stale: true');
+    expect(document.body.textContent).toContain('B stale: false');
+
+    // B's staleTime (1000ms) passes — B becomes stale too
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(document.body.textContent).toContain('B stale: true');
+  });
+
+  test('useQuery disabled observer is not stale', async () => {
+    const queryClient = new QueryClient();
+
+    function TestComponent() {
+      const query = useQuery({
+        queryKey: ['stale-disabled'],
+        queryFn: async () => 'data',
+        enabled: false,
+        staleTime: 0,
+      });
+
+      return <p>Stale: {() => query().isStale().toString()}</p>;
+    }
+
+    render(
+      <QueryClientProvider value={queryClient}>
+        <TestComponent />
+      </QueryClientProvider>,
+      document.body,
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(document.body.textContent).toContain('Stale: false');
+  });
+
   test('useQuery enabled option: starts disabled, then enabled', async () => {
     const queryClient = new QueryClient();
     const queryFnMock = vi.fn(async () => {

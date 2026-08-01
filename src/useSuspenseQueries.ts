@@ -108,6 +108,7 @@ export function useSuspenseQueries<
       const q = obs.query;
       return {
         ...q.state,
+        isStale: useMemo(() => obs.isStale()),
         data: dataMemos[i],
         refetch: q.refetch,
         cancel: q.cancel,

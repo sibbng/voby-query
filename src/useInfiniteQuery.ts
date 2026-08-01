@@ -39,6 +39,7 @@ export function useInfiniteQuery<
   const client = useQueryClient(queryClient ?? options.queryClient);
   const fetchingDirection = $<InfiniteQueryDirection | undefined>(undefined);
   const lastData = $<Awaited<InfiniteData<TQueryFnData, TPageParam>> | undefined>();
+  const tick = $(0);
 
   const observer = useMemo(() => {
     let nextQuery!: Query<
@@ -65,7 +66,7 @@ export function useInfiniteQuery<
     >(client, wrappedOptions as any);
     useCleanup((nextQuery as any).addInstance());
     const obs = new QueryObserver(nextQuery, wrappedOptions as any);
-    useCleanup(obs.subscribe(() => {}));
+    useCleanup(obs.subscribe(() => tick((v) => v + 1)));
     useCleanup(() => obs.destroy());
     return obs;
   });
@@ -129,6 +130,10 @@ export function useInfiniteQuery<
             state.dataUpdateCount() > mountedAtCounts.dataUpdateCount ||
             state.errorUpdateCount() > mountedAtCounts.errorUpdateCount,
         ),
+        isStale: useMemo(() => {
+          tick();
+          return obs.isStale();
+        }),
         data: useMemo(() => {
           const data = state.data();
 
