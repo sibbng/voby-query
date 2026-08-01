@@ -42,44 +42,52 @@ export type QueryClientConfig = {
 };
 
 const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
-  const queryDefaults = {
-    queryKeyHashFn: hashFn,
-    enabled: true,
-    throwOnError: false,
-    gcTime: 1000 * 60 * 5,
-    staleTime: 0,
-    refetchInterval: undefined as number | undefined,
-    networkMode: 'online' as const,
-    retry: 3,
-    retryOnMount: true,
-    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
-    cancelRefetch: true,
-    refetchOnWindowFocus: true,
-    structuralSharing: true,
-    refetchOnReconnect: options?.defaultOptions?.queries?.networkMode
-      ? options.defaultOptions.queries.networkMode === 'online'
-      : true,
-    refetchOnMount: true,
-    ...options?.defaultOptions?.queries,
+  const baseDefaultOptions: {
+    queries: Omit<QueryOptions, 'queryKey'>;
+    mutations: MutationOptions;
+  } = {
+    queries: {
+      queryKeyHashFn: hashFn,
+      enabled: true,
+      throwOnError: false,
+      gcTime: 1000 * 60 * 5,
+      staleTime: 0,
+      refetchInterval: undefined as number | undefined,
+      networkMode: 'online' as const,
+      retry: 3,
+      retryOnMount: true,
+      retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
+      cancelRefetch: true,
+      refetchOnWindowFocus: true,
+      structuralSharing: true,
+      refetchOnReconnect: options?.defaultOptions?.queries?.networkMode
+        ? options.defaultOptions.queries.networkMode === 'online'
+        : true,
+      refetchOnMount: true,
+      ...options?.defaultOptions?.queries,
+    },
+    mutations: {
+      retry: 0,
+      gcTime: 5 * 60 * 1000,
+      networkMode: 'online' as const,
+      throwOnError: false,
+      ...options?.defaultOptions?.mutations,
+    },
   };
-  const mutationDefaults = {
-    retry: 0,
-    gcTime: 5 * 60 * 1000,
-    networkMode: 'online' as const,
-    throwOnError: false,
-    ...options?.defaultOptions?.mutations,
-  };
-  const getDefaultOptions = () => ({
-    queries: queryDefaults,
-    mutations: mutationDefaults,
-  });
+
+  let defaultOptions = baseDefaultOptions;
+  let queryDefaults = defaultOptions.queries;
+  let mutationDefaults = defaultOptions.mutations;
+
+  const getDefaultOptions = () => defaultOptions;
 
   const setDefaultOptions = (newOptions: {
-    queries?: Partial<typeof queryDefaults>;
-    mutations?: Partial<typeof mutationDefaults>;
+    queries?: Partial<Omit<QueryOptions, 'queryKey'>>;
+    mutations?: Partial<MutationOptions>;
   }) => {
-    Object.assign(queryDefaults, newOptions.queries);
-    Object.assign(mutationDefaults, newOptions.mutations);
+    queryDefaults = { ...baseDefaultOptions.queries, ...newOptions.queries };
+    mutationDefaults = { ...baseDefaultOptions.mutations, ...newOptions.mutations };
+    defaultOptions = { queries: queryDefaults, mutations: mutationDefaults };
   };
 
   const queryDefaultsMap = new Map<
@@ -87,10 +95,10 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     { queryKey: QueryKey; defaults: Partial<QueryDefaultsOptions> }
   >();
 
-  const queryKeyHashFn = queryDefaults.queryKeyHashFn ?? hashFn;
+  const getQueryKeyHashFn = () => defaultOptions.queries.queryKeyHashFn ?? hashFn;
 
   const getQueryDefaults = (queryKey: QueryKey) => {
-    const queryHash = queryKeyHashFn(queryKey);
+    const queryHash = getQueryKeyHashFn()(queryKey);
     let result: Partial<QueryDefaultsOptions> = {};
     for (const [key, { queryKey: defaultQueryKey, defaults }] of queryDefaultsMap.entries()) {
       if (queryHash === key || partialMatchKey(defaultQueryKey, queryKey)) {
@@ -101,7 +109,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   };
 
   const setQueryDefaults = (queryKey: QueryKey, defaults: Partial<QueryDefaultsOptions>) => {
-    const queryHash = queryKeyHashFn(queryKey);
+    const queryHash = getQueryKeyHashFn()(queryKey);
     queryDefaultsMap.set(queryHash, { queryKey, defaults });
   };
 
@@ -113,7 +121,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   const getMutationDefaults = (mutationKey?: MutationKey) => {
     let result: Partial<MutationOptions> = {};
     if (mutationKey) {
-      const mutationHash = queryKeyHashFn(mutationKey);
+      const mutationHash = getQueryKeyHashFn()(mutationKey);
       for (const [
         key,
         { mutationKey: defaultMutationKey, defaults },
@@ -127,7 +135,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   };
 
   const setMutationDefaults = (mutationKey: MutationKey, defaults: Partial<MutationOptions>) => {
-    const mutationHash = queryKeyHashFn(mutationKey);
+    const mutationHash = getQueryKeyHashFn()(mutationKey);
     mutationDefaultsMap.set(mutationHash, { mutationKey, defaults });
   };
 
@@ -201,7 +209,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   >(
     queryKey: TTaggedQueryKey,
   ) => {
-    const queryHash = queryKeyHashFn(queryKey);
+    const queryHash = getQueryKeyHashFn()(queryKey);
     return cache.get(queryHash)?.state.data() as TQueryFnData | undefined;
   };
 
@@ -212,7 +220,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     queryKey: TTaggedQueryKey,
     data: TQueryFnData | ((previous: TQueryFnData | undefined) => TQueryFnData | undefined),
   ) => {
-    const queryHash = queryKeyHashFn(queryKey);
+    const queryHash = getQueryKeyHashFn()(queryKey);
     let query = cache.get(queryHash) as QueryLike | undefined;
     const resolvedData = functionalUpdate(data as any, query?.state.data());
 
@@ -442,7 +450,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   >(
     queryKey: TTaggedQueryKey,
   ) => {
-    const queryHash = queryKeyHashFn(queryKey);
+    const queryHash = getQueryKeyHashFn()(queryKey);
     const query = cache.get(queryHash);
     return query?.state as QueryState<TQueryFnData, TError> | undefined;
   };

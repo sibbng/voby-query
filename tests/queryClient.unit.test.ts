@@ -61,6 +61,26 @@ describe('queryClient', () => {
       expect(defaults.mutations.mutationFn).toBe(mutationFn);
       expect(defaults.mutations.retry).toBe(2);
     });
+
+    it('should replace previous options instead of merging them', () => {
+      const queryClient = new QueryClient();
+      queryClient.setDefaultOptions({ queries: { staleTime: 5000 } });
+      queryClient.setDefaultOptions({ queries: { gcTime: 10000 } });
+
+      const defaults = queryClient.getDefaultOptions();
+      expect(defaults.queries.staleTime).toBe(0);
+      expect(defaults.queries.gcTime).toBe(10000);
+      expect(defaults.queries.retry).toBe(3);
+    });
+
+    it('should return the same default options reference until replaced', () => {
+      const queryClient = new QueryClient();
+      const first = queryClient.getDefaultOptions();
+      expect(queryClient.getDefaultOptions()).toBe(first);
+
+      queryClient.setDefaultOptions({ queries: { staleTime: 5000 } });
+      expect(queryClient.getDefaultOptions()).not.toBe(first);
+    });
   });
 
   describe('setQueryDefaults', () => {
