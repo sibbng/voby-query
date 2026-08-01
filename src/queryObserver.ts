@@ -109,6 +109,13 @@ export class QueryObserver<
     });
   }
 
+  // Upstream's #executeFetch: a plain fetch with no cancelRefetch, so an
+  // in-flight fetch is deduped (returns the existing promise) instead of
+  // being cancelled and restarted (upstream queryObserver.ts:335-352).
+  #executeFetch(): Promise<void> {
+    return this.#query.fetch();
+  }
+
   refetch(options?: { cancelRefetch?: boolean }): Promise<void> {
     return this.#query.refetch({
       cancelRefetch: options?.cancelRefetch ?? true,
@@ -273,10 +280,10 @@ export class QueryObserver<
       if (!interval) return;
 
       this.#refetchIntervalId = timeoutManager.setTimeout(() => {
-        void this.#refetchObserverQuery();
+        void this.#executeFetch();
         this.#refetchIntervalId = timeoutManager.setInterval(async () => {
           if (this.#resolvedOptions.refetchIntervalInBackground || focusManager.isFocused()) {
-            await this.#refetchObserverQuery();
+            await this.#executeFetch();
           }
         }, interval as number) as any;
       }, interval as number) as any;

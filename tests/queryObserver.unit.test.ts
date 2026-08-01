@@ -332,4 +332,40 @@ describe('queryObserver stale timers', () => {
 
     unsubscribe();
   });
+
+  it('should not cancel an in-flight fetch when the interval ticks', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const resolvers: Array<(v: string) => void> = [];
+    const queryFn = vi.fn(() => new Promise<string>((resolve) => resolvers.push(resolve)));
+
+    const query = queryCache.build(queryClient, { queryKey: key, queryFn });
+    const observer = new QueryObserver(query, { refetchInterval: 50 });
+    const unsubscribe = observer.subscribe(() => {});
+
+    // t=0: mount fetch starts
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    // First tick while the initial fetch is in-flight (no data yet): dedup
+    await vi.advanceTimersByTimeAsync(50);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    // Complete the first fetch; the next tick starts a background refetch
+    resolvers[0]('data');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    // Tick while that refetch is in-flight: must dedup, not cancel + restart
+    await vi.advanceTimersByTimeAsync(50);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    // Cleanup: settle any pending fetch so no timers leak
+    for (const resolve of resolvers.slice(1)) resolve('data');
+    await vi.advanceTimersByTimeAsync(0);
+    unsubscribe();
+    observer.destroy();
+  });
 });
