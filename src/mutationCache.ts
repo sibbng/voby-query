@@ -4,6 +4,7 @@ import {
   resolveMutationOptions,
   type Mutation,
 } from './mutation.ts';
+import { notifyManager } from './notifyManager.ts';
 import { Subscribable } from './subscribable.ts';
 import type {
   MutationCache as MutationCacheType,
@@ -75,9 +76,11 @@ export class MutationCache<
   }
 
   notify(event: MutationCacheNotifyEvent): void {
-    for (const listener of this.listeners) {
-      listener(event);
-    }
+    notifyManager.batch(() => {
+      for (const listener of this.listeners) {
+        listener(event);
+      }
+    });
   }
 
   get size() {
@@ -129,7 +132,9 @@ export class MutationCache<
 
   resumePausedMutations(): Promise<unknown> {
     const pausedMutations = this.getAll().filter((mutation) => mutation.state.isPaused());
-    return Promise.all(pausedMutations.map((mutation) => mutation.continue().catch(noop)));
+    return notifyManager.batch(() =>
+      Promise.all(pausedMutations.map((mutation) => mutation.continue().catch(noop))),
+    );
   }
 
   findAll(filters?: MutationFilters) {
@@ -191,20 +196,20 @@ export class MutationCache<
   }
 
   clear() {
-    const mutations = this.getAll();
-    if (mutations.length === 0) return;
-
-    for (const mutation of mutations) {
-      this.notify({ type: 'removed', mutation: mutation as Mutation<any, any, any, any> });
-    }
-    this.mutations.clear();
-    for (const mutation of mutations) {
-      mutation.destroyDisposer();
-      if (mutation.instances === 0) {
-        mutation.destroy();
+    notifyManager.batch(() => {
+      const mutations = this.getAll();
+      for (const mutation of mutations) {
+        this.notify({ type: 'removed', mutation: mutation as Mutation<any, any, any, any> });
       }
-    }
-    this.scopes.clear();
+      this.mutations.clear();
+      for (const mutation of mutations) {
+        mutation.destroyDisposer();
+        if (mutation.instances === 0) {
+          mutation.destroy();
+        }
+      }
+      this.scopes.clear();
+    });
   }
 
   private addToScope(mutation: TMutation) {

@@ -16,6 +16,7 @@ import type {
 import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
 import { ensureQueryFn, replaceData, resolveKey, shouldThrowError, skipToken } from './utils.ts';
 import { createNetworkPause, type NetworkPause } from './retryer.ts';
+import { notifyManager } from './notifyManager.ts';
 import { timeoutManager } from './timeoutManager.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
 
@@ -258,18 +259,20 @@ export const setQuerySuccessData = (
   dataUpdatedAt = Date.now(),
   scheduleStale = true,
 ) => {
-  query.state.data(data);
-  query.state.dataUpdatedAt(dataUpdatedAt);
-  query.state.dataUpdateCount((previous) => previous + 1);
-  query.state.error(null);
-  query.state.failureCount(0);
-  query.state.failureReason(null);
-  query.state.isInvalidated(false);
-  query.state.status('success');
-  if (scheduleStale) scheduleQueryStale(query);
-  for (const observer of query.observers) {
-    observer.onQueryUpdate();
-  }
+  notifyManager.batch(() => {
+    query.state.data(data);
+    query.state.dataUpdatedAt(dataUpdatedAt);
+    query.state.dataUpdateCount((previous) => previous + 1);
+    query.state.error(null);
+    query.state.failureCount(0);
+    query.state.failureReason(null);
+    query.state.isInvalidated(false);
+    query.state.status('success');
+    if (scheduleStale) scheduleQueryStale(query);
+    for (const observer of query.observers) {
+      observer.onQueryUpdate();
+    }
+  });
 };
 
 export const createQuery = <
@@ -439,11 +442,13 @@ export const createQuery = <
       query.retryDisposer = () => {};
       retryScheduled = false;
 
-      if (revert && query.revertState) {
-        restoreQueryStateSnapshot(query.state, query.revertState);
-      }
+      notifyManager.batch(() => {
+        if (revert && query.revertState) {
+          restoreQueryStateSnapshot(query.state, query.revertState);
+        }
 
-      query.fetchMachine.send('CANCEL');
+        query.fetchMachine.send('CANCEL');
+      });
     },
     reset: () => {
       void query.cancel({ revert: false, silent: true });
@@ -503,29 +508,41 @@ export const createQuery = <
             chainWaiters.push({ resolve, reject });
           });
         }
-        query.fetchMachine.send('RETRY');
+        notifyManager.batch(() => {
+          query.fetchMachine.send('RETRY');
+          query.state.fetchMeta(meta ?? null);
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'fetch' },
+          });
+        });
       } else if (force) {
-        query.state.failureCount(0);
-        query.state.failureReason(null);
-        query.fetchMachine.send('FETCH', true);
-        cache.notify({
-          type: 'updated',
-          query: query as Query<any, any, any, any>,
-          action: { type: 'fetch' },
+        notifyManager.batch(() => {
+          query.state.failureCount(0);
+          query.state.failureReason(null);
+          query.fetchMachine.send('FETCH', true);
+          query.state.fetchMeta(meta ?? null);
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'fetch' },
+          });
         });
       } else {
         if (!query.fetchMachine.can('FETCH')) return;
-        query.state.failureCount(0);
-        query.state.failureReason(null);
-        query.fetchMachine.send('FETCH');
-        cache.notify({
-          type: 'updated',
-          query: query as Query<any, any, any, any>,
-          action: { type: 'fetch' },
+        notifyManager.batch(() => {
+          query.state.failureCount(0);
+          query.state.failureReason(null);
+          query.fetchMachine.send('FETCH');
+          query.state.fetchMeta(meta ?? null);
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'fetch' },
+          });
         });
       }
-
-      query.state.fetchMeta(meta ?? null);
 
       // Use the queryFn of the first observer with one if the query itself
       // has none (e.g. the query was created via setQueryData or hydration)
@@ -561,25 +578,27 @@ export const createQuery = <
           return;
         }
 
-        query.state.error(error as unknown as TError);
-        query.state.errorUpdatedAt(Date.now());
-        query.state.errorUpdateCount((previous) => previous + 1);
-        query.state.failureCount((previous) => previous + 1);
-        query.state.failureReason(error as unknown as TError);
-        query.state.isInvalidated(query.state.data() !== undefined);
-        query.state.status('error');
-        query.staleDisposer();
-        query.staleDisposer = () => {};
-        query.state.isStale(true);
-        for (const observer of query.observers) {
-          observer.onQueryUpdate();
-        }
-        cache.config.onError?.(error, query as Query<any, any, any, any>);
-        cache.config.onSettled?.(query.state.data(), error, query as Query<any, any, any, any>);
-        cache.notify({
-          type: 'updated',
-          query: query as Query<any, any, any, any>,
-          action: { type: 'error', error },
+        notifyManager.batch(() => {
+          query.state.error(error as unknown as TError);
+          query.state.errorUpdatedAt(Date.now());
+          query.state.errorUpdateCount((previous) => previous + 1);
+          query.state.failureCount((previous) => previous + 1);
+          query.state.failureReason(error as unknown as TError);
+          query.state.isInvalidated(query.state.data() !== undefined);
+          query.state.status('error');
+          query.staleDisposer();
+          query.staleDisposer = () => {};
+          query.state.isStale(true);
+          for (const observer of query.observers) {
+            observer.onQueryUpdate();
+          }
+          cache.config.onError?.(error, query as Query<any, any, any, any>);
+          cache.config.onSettled?.(query.state.data(), error, query as Query<any, any, any, any>);
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'error', error },
+          });
         });
         throw error;
       };
@@ -640,14 +659,16 @@ export const createQuery = <
             newData = replaceData(query.state.data(), resultData, query.resolvedOptions) as TData;
           }
 
-          setQuerySuccessData(query, newData, Date.now(), true);
-          query.fetchMachine.send('SUCCESS');
-          cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
-          cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
-          cache.notify({
-            type: 'updated',
-            query: query as Query<any, any, any, any>,
-            action: { type: 'success', data: newData },
+          notifyManager.batch(() => {
+            setQuerySuccessData(query, newData, Date.now(), true);
+            query.fetchMachine.send('SUCCESS');
+            cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
+            cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
+            cache.notify({
+              type: 'updated',
+              query: query as Query<any, any, any, any>,
+              action: { type: 'success', data: newData },
+            });
           });
         } catch (err) {
           const isCancelledError = err instanceof CancelledError;
@@ -924,29 +945,33 @@ export const createQuery = <
       () => {
         if (query.fetchMachine.getState() === 'fetching') {
           pausedController = query.controller;
-          query.fetchMachine.send('PAUSE');
-          cache.notify({
-            type: 'updated',
-            query: query as Query<any, any, any, any>,
-            action: { type: 'pause' },
+          notifyManager.batch(() => {
+            query.fetchMachine.send('PAUSE');
+            cache.notify({
+              type: 'updated',
+              query: query as Query<any, any, any, any>,
+              action: { type: 'pause' },
+            });
           });
         }
       },
       () => {
         if (query.fetchMachine.getState() !== 'paused') return;
         const pendingFetch = query.fetchPromise;
-        query.fetchMachine.send('FETCH', true);
-        if (pausedController) {
-          query.controller = pausedController;
-          pausedController = undefined;
-        }
-        if (query.fetchPromise === undefined && pendingFetch !== undefined) {
-          query.fetchPromise = pendingFetch;
-        }
-        cache.notify({
-          type: 'updated',
-          query: query as Query<any, any, any, any>,
-          action: { type: 'continue' },
+        notifyManager.batch(() => {
+          query.fetchMachine.send('FETCH', true);
+          if (pausedController) {
+            query.controller = pausedController;
+            pausedController = undefined;
+          }
+          if (query.fetchPromise === undefined && pendingFetch !== undefined) {
+            query.fetchPromise = pendingFetch;
+          }
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'continue' },
+          });
         });
       },
     );

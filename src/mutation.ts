@@ -14,6 +14,7 @@ import type {
 import type { MutationCache } from './mutationCache.ts';
 import { createMachine, type MachineInstance } from './machines.ts';
 import { createNetworkPause, type NetworkPause } from './retryer.ts';
+import { notifyManager } from './notifyManager.ts';
 
 type MutationState_ = 'idle' | 'pending' | 'success' | 'error';
 type MutationEvent = 'MUTATE' | 'SUCCESS' | 'ERROR' | 'RESET';
@@ -247,8 +248,13 @@ export const createMutation = <
     },
     reset: () => {
       if (!machine.can('RESET')) return;
-      machine.send('RESET');
-      mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+      notifyManager.batch(() => {
+        machine.send('RESET');
+        mutationCache.notify({
+          type: 'updated',
+          mutation: mutation as Mutation<any, any, any, any>,
+        });
+      });
     },
     continue: () => {
       if (mutationCache.canRun(mutation)) {
@@ -262,17 +268,22 @@ export const createMutation = <
         return undefined;
       }
 
-      machine.send('MUTATE');
-      state.data(undefined);
-      state.context(undefined);
-      state.error(null);
-      state.failureCount(0);
-      state.failureReason(null);
-      state.isPaused(!networkPause.canStart() || !mutationCache.canRun(mutation));
-      state.variables(variables);
-      state.submittedAt(Date.now());
-      state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
-      mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+      notifyManager.batch(() => {
+        machine.send('MUTATE');
+        state.data(undefined);
+        state.context(undefined);
+        state.error(null);
+        state.failureCount(0);
+        state.failureReason(null);
+        state.isPaused(!networkPause.canStart() || !mutationCache.canRun(mutation));
+        state.variables(variables);
+        state.submittedAt(Date.now());
+        state.meta((resolvedOptions.meta ?? {}) as Record<string, unknown>);
+        mutationCache.notify({
+          type: 'updated',
+          mutation: mutation as Mutation<any, any, any, any>,
+        });
+      });
 
       let context: TContext | undefined;
       const mutationFunctionContext: MutationFunctionContext = {
@@ -290,10 +301,12 @@ export const createMutation = <
 
         if (mutation.resolvedOptions.onMutate) {
           context = await mutation.resolvedOptions.onMutate(variables, mutationFunctionContext);
-          state.context(context);
-          mutationCache.notify({
-            type: 'updated',
-            mutation: mutation as Mutation<any, any, any, any>,
+          notifyManager.batch(() => {
+            state.context(context);
+            mutationCache.notify({
+              type: 'updated',
+              mutation: mutation as Mutation<any, any, any, any>,
+            });
           });
         }
 
@@ -312,8 +325,14 @@ export const createMutation = <
             break;
           } catch (error) {
             failureCount += 1;
-            state.failureCount(failureCount);
-            state.failureReason(error as TError);
+            notifyManager.batch(() => {
+              state.failureCount(failureCount);
+              state.failureReason(error as TError);
+              mutationCache.notify({
+                type: 'updated',
+                mutation: mutation as Mutation<any, any, any, any>,
+              });
+            });
 
             const retryDelay = mutation.resolvedOptions.retryDelay;
             const resolvedRetryDelay =
@@ -360,14 +379,16 @@ export const createMutation = <
           mutationFunctionContext,
         );
 
-        machine.send('SUCCESS');
-        state.data(data);
-        state.error(null);
-        state.failureCount(0);
-        state.failureReason(null);
-        mutationCache.notify({
-          type: 'updated',
-          mutation: mutation as Mutation<any, any, any, any>,
+        notifyManager.batch(() => {
+          machine.send('SUCCESS');
+          state.data(data);
+          state.error(null);
+          state.failureCount(0);
+          state.failureReason(null);
+          mutationCache.notify({
+            type: 'updated',
+            mutation: mutation as Mutation<any, any, any, any>,
+          });
         });
 
         try {
@@ -431,15 +452,17 @@ export const createMutation = <
           void Promise.reject(callbackError);
         }
 
-        machine.send('ERROR');
-        state.error(error as TError);
-        state.failureReason(error as TError);
-        if (state.failureCount() === 0) {
-          state.failureCount(1);
-        }
-        mutationCache.notify({
-          type: 'updated',
-          mutation: mutation as Mutation<any, any, any, any>,
+        notifyManager.batch(() => {
+          machine.send('ERROR');
+          state.error(error as TError);
+          state.failureReason(error as TError);
+          if (state.failureCount() === 0) {
+            state.failureCount(1);
+          }
+          mutationCache.notify({
+            type: 'updated',
+            mutation: mutation as Mutation<any, any, any, any>,
+          });
         });
 
         try {
@@ -471,8 +494,10 @@ export const createMutation = <
 
   const setPaused = (paused: boolean) => {
     if (state.isPaused() === paused) return;
-    state.isPaused(paused);
-    mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+    notifyManager.batch(() => {
+      state.isPaused(paused);
+      mutationCache.notify({ type: 'updated', mutation: mutation as Mutation<any, any, any, any> });
+    });
   };
 
   networkPause = createNetworkPause(

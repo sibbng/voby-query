@@ -1,5 +1,6 @@
 import { $$, untrack } from 'voby';
 import { focusManager } from './focusManager.ts';
+import { notifyManager } from './notifyManager.ts';
 import type { Query } from './query.ts';
 import type { QueryKey } from './types.ts';
 import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
@@ -148,24 +149,26 @@ export class QueryObserver<
   }
 
   #notify(): void {
-    untrack(() => {
-      const currentResult = this.getCurrentResult();
+    notifyManager.batch(() => {
+      untrack(() => {
+        const currentResult = this.getCurrentResult();
 
-      const shouldNotifyListeners = this.#shouldNotifyListeners(currentResult);
+        const shouldNotifyListeners = this.#shouldNotifyListeners(currentResult);
 
-      this.#lastValues = this.#snapshotValues(currentResult);
+        this.#lastValues = this.#snapshotValues(currentResult);
 
-      if (shouldNotifyListeners) {
-        for (const listener of this.#listeners) {
-          listener(currentResult);
+        if (shouldNotifyListeners) {
+          for (const listener of this.#listeners) {
+            listener(currentResult);
+          }
         }
-      }
-      if (this.#query.cache.hasListeners()) {
-        this.#query.cache.notify({
-          type: 'observerResultsUpdated',
-          query: this.#query as any,
-        });
-      }
+        if (this.#query.cache.hasListeners()) {
+          this.#query.cache.notify({
+            type: 'observerResultsUpdated',
+            query: this.#query as any,
+          });
+        }
+      });
     });
   }
 

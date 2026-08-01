@@ -3,6 +3,7 @@ import { QueryClientContext } from './context.ts';
 import { fetchInitialInfiniteData } from './infiniteQuery.ts';
 import { createMutationCache } from './mutationCache.ts';
 import { focusManager } from './focusManager.ts';
+import { notifyManager } from './notifyManager.ts';
 import { onlineManager } from './onlineManager.ts';
 import { resolveStaleTime, setQuerySuccessData, type Query } from './query.ts';
 import { createQueryCache } from './queryCache.ts';
@@ -234,9 +235,11 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       });
     }
 
-    setQuerySuccessData(query, resolvedData, options?.updatedAt ?? Date.now());
-    cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
-    return resolvedData;
+    return notifyManager.batch(() => {
+      setQuerySuccessData(query!, resolvedData, options?.updatedAt ?? Date.now());
+      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
+      return resolvedData;
+    });
   };
 
   const getQueriesData: QueryClient['getQueriesData'] = <TQueryFnData = unknown>(
@@ -255,43 +258,52 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     updater: Updater<TQueryFnData, TQueryFnData | undefined>,
     options?: SetDataOptions,
   ) => {
-    return cache.findAll(filters).map((query) => {
-      const resolvedData = functionalUpdate(updater, query.state.data());
-      if (resolvedData === undefined) {
-        return [query.resolvedOptions.queryKey, undefined] as [QueryKey, TQueryFnData | undefined];
-      }
+    return notifyManager.batch(() =>
+      cache.findAll(filters).map((query) => {
+        const resolvedData = functionalUpdate(updater, query.state.data());
+        if (resolvedData === undefined) {
+          return [query.resolvedOptions.queryKey, undefined] as [
+            QueryKey,
+            TQueryFnData | undefined,
+          ];
+        }
 
-      setQuerySuccessData(query, resolvedData, options?.updatedAt ?? Date.now());
-      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
-      return [query.resolvedOptions.queryKey, resolvedData] as [QueryKey, TQueryFnData];
-    });
+        setQuerySuccessData(query, resolvedData, options?.updatedAt ?? Date.now());
+        cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
+        return [query.resolvedOptions.queryKey, resolvedData] as [QueryKey, TQueryFnData];
+      }),
+    );
   };
 
   const invalidateQueries: QueryClient['invalidateQueries'] = async (
     filters,
     { throwOnError = false, cancelRefetch = true } = {},
   ) => {
-    const { refetchType, ...queryFilters } = filters || {};
-    const effectiveRefetchType = refetchType ?? queryFilters.type ?? 'active';
-    const queriesToInvalidate = cache.findAll(queryFilters);
+    return notifyManager.batch(() => {
+      const { refetchType, ...queryFilters } = filters || {};
+      const effectiveRefetchType = refetchType ?? queryFilters.type ?? 'active';
+      const queriesToInvalidate = cache.findAll(queryFilters);
 
-    for (const query of queriesToInvalidate) {
-      query.state.isInvalidated(true);
-      query.state.isStale(true);
-      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'invalidate' } });
-    }
+      for (const query of queriesToInvalidate) {
+        query.state.isInvalidated(true);
+        query.state.isStale(true);
+        cache.notify({
+          type: 'updated',
+          query: query as QueryLike,
+          action: { type: 'invalidate' },
+        });
+      }
 
-    if (effectiveRefetchType === 'none') return;
+      if (effectiveRefetchType === 'none') return Promise.resolve();
 
-    // Upstream queryClient.ts:295-310: the refetch itself goes through
-    // refetchQueries (filtering out disabled/static/paused queries).
-    await refetchQueries(
-      {
-        ...queryFilters,
-        type: effectiveRefetchType,
-      },
-      { throwOnError, cancelRefetch },
-    );
+      return refetchQueries(
+        {
+          ...queryFilters,
+          type: effectiveRefetchType,
+        },
+        { throwOnError, cancelRefetch },
+      );
+    });
   };
 
   const refetchQueries = async (
@@ -300,12 +312,12 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   ): Promise<void> => {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
-    // Upstream queryClient.ts:313-337: skip disabled, static, and paused
-    // queries (isDisabled/isStatic per query.ts:281-302).
-    const queriesToRefetch = cache
-      .findAll(filters)
-      .filter((query) => !query.isDisabled() && !query.isStatic())
-      .filter((query) => query.state.fetchStatus() !== 'paused');
+    const queriesToRefetch = notifyManager.batch(() =>
+      cache
+        .findAll(filters)
+        .filter((query) => !query.isDisabled() && !query.isStatic())
+        .filter((query) => query.state.fetchStatus() !== 'paused'),
+    );
 
     if (cancelRefetch) {
       await Promise.all(
@@ -313,13 +325,15 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       );
     }
 
-    const refetchPromises = queriesToRefetch.map((query) => {
-      let promise = query.fetch({ throwOnError, force: true });
-      if (!throwOnError) {
-        promise = promise.catch(noop);
-      }
-      return promise;
-    });
+    const refetchPromises = notifyManager.batch(() =>
+      queriesToRefetch.map((query) => {
+        let promise = query.fetch({ throwOnError, force: true });
+        if (!throwOnError) {
+          promise = promise.catch(noop);
+        }
+        return promise;
+      }),
+    );
 
     await Promise.all(refetchPromises);
   };
@@ -328,15 +342,17 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     filters,
     { silent = false, revert = true } = {},
   ): Promise<void> => {
-    const queriesToCancel = cache.findAll(filters);
+    const queriesToCancel = notifyManager.batch(() => cache.findAll(filters));
 
     await Promise.all(queriesToCancel.map((query) => query.cancel({ silent, revert }))).catch(noop);
   };
 
   const removeQueries: QueryClient['removeQueries'] = (filters) => {
-    for (const query of cache.findAll(filters)) {
-      cache.remove(query as QueryLike);
-    }
+    notifyManager.batch(() => {
+      for (const query of cache.findAll(filters)) {
+        cache.remove(query as QueryLike);
+      }
+    });
   };
 
   const resetQueries: QueryClient['resetQueries'] = async (
@@ -345,20 +361,22 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   ): Promise<void> => {
     const { throwOnError = false, cancelRefetch = true } = options || {};
 
-    const queriesToReset = cache.findAll(filters);
+    const resetPromises = notifyManager.batch(() => {
+      const queriesToReset = cache.findAll(filters);
 
-    const resetPromises = queriesToReset.map(async (query) => {
-      query.reset();
-      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'setState' } });
-      if (query.isActive) {
-        try {
-          await query.refetch({ throwOnError, cancelRefetch });
-        } catch (error) {
-          if (throwOnError) {
-            throw error;
+      return queriesToReset.map(async (query) => {
+        query.reset();
+        cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'setState' } });
+        if (query.isActive) {
+          try {
+            await query.refetch({ throwOnError, cancelRefetch });
+          } catch (error) {
+            if (throwOnError) {
+              throw error;
+            }
           }
         }
-      }
+      });
     });
 
     await Promise.all(resetPromises);
@@ -572,8 +590,10 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   };
 
   const clear = (): void => {
-    cache.clear();
-    mutationCache.clear();
+    notifyManager.batch(() => {
+      cache.clear();
+      mutationCache.clear();
+    });
   };
 
   const queryClient = {

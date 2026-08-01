@@ -1,4 +1,5 @@
 import { createQuery, resolveQueryOptions, type Query } from './query.ts';
+import { notifyManager } from './notifyManager.ts';
 import { Subscribable } from './subscribable.ts';
 import type { QueryObserver } from './queryObserver.ts';
 import type {
@@ -62,9 +63,11 @@ export class QueryCache<
   }
 
   notify(event: QueryCacheNotifyEvent): void {
-    for (const listener of this.listeners) {
-      listener(event);
-    }
+    notifyManager.batch(() => {
+      for (const listener of this.listeners) {
+        listener(event);
+      }
+    });
   }
 
   get size() {
@@ -160,24 +163,28 @@ export class QueryCache<
   }
 
   clear() {
-    const queries = this.getAll();
-    if (queries.length === 0) return;
-
-    for (const query of queries) {
-      this.remove(query);
-    }
+    notifyManager.batch(() => {
+      const queries = this.getAll();
+      for (const query of queries) {
+        this.remove(query);
+      }
+    });
   }
 
   onOnline(): void {
-    for (const query of this.getAll()) {
-      (query as Query<any, any, any, any>).onOnline();
-    }
+    notifyManager.batch(() => {
+      for (const query of this.getAll()) {
+        (query as Query<any, any, any, any>).onOnline();
+      }
+    });
   }
 
   onFocus(): void {
-    for (const query of this.getAll()) {
-      (query as Query<any, any, any, any>).onFocus();
-    }
+    notifyManager.batch(() => {
+      for (const query of this.getAll()) {
+        (query as Query<any, any, any, any>).onFocus();
+      }
+    });
   }
 }
 
