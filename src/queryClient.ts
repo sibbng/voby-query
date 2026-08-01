@@ -551,7 +551,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   };
 
   const isMutating = (filters?: MutationFilters): number => {
-    return mutationCache.findAll(filters ?? { status: 'pending' }).length;
+    return mutationCache.findAll({ ...filters, status: 'pending' }).length;
   };
 
   const getQueryCache = (): QueryCache => {

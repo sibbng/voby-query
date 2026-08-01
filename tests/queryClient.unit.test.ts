@@ -14,6 +14,21 @@ let keyCounter = 0;
 const queryKey = () => [`query_${keyCounter++}`];
 
 describe('queryClient', () => {
+  it('isMutating counts only pending mutations even when filters are provided', async () => {
+    const queryClient = new QueryClient();
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationKey: ['is-mutating-status'],
+      mutationFn: async () => 'data',
+    });
+
+    await mutation.mutate('value');
+
+    expect(queryClient.isMutating({ mutationKey: ['is-mutating-status'] })).toBe(0);
+    expect(queryClient.isMutating({ mutationKey: ['is-mutating-status'], status: 'success' })).toBe(
+      0,
+    );
+  });
+
   describe('defaultOptions', () => {
     it('should merge defaultOptions', () => {
       const key = queryKey();

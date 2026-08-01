@@ -592,7 +592,7 @@ describe('useMutation', () => {
 
     expect(document.body.textContent).toContain('created todo');
     expect(document.body.textContent).toContain('0');
-    expect(queryClient.isMutating({ mutationKey: ['todos'], status: 'success' })).toBe(1);
+    expect(queryClient.isMutating({ mutationKey: ['todos'], status: 'success' })).toBe(0);
     expect(queryClient.isMutating({ mutationKey: ['todos'], exact: true })).toBe(0);
   });
 
@@ -648,7 +648,7 @@ describe('useMutation', () => {
       queryClient.isMutating({
         predicate: (mutation) => mutation.state.variables()?.id === 2,
       }),
-    ).toBe(1);
+    ).toBe(0);
   });
 
   test('useMutationState reactively shows pending count during in-flight mutation', async () => {
