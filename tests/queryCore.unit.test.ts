@@ -493,6 +493,53 @@ test('reset cancels an in-flight fetch before restoring state', async () => {
   expect(query.state.fetchStatus()).toBe('idle');
 });
 
+test('fetch resets failure metadata before a refetch starts', async () => {
+  const queryClient = new QueryClient();
+
+  await queryClient.prefetchQuery({
+    queryKey: ['failure-reset-on-fetch'],
+    queryFn: async () => {
+      throw new Error('first failure');
+    },
+    retry: false,
+  });
+
+  const query = findQuery(queryClient, 'failure-reset-on-fetch')!;
+  expect(query.state.failureCount()).toBe(1);
+  expect(query.state.failureReason()).toBeInstanceOf(Error);
+
+  let resolveRefetch: (value: string) => void = () => {};
+  query.resolvedOptions.queryFn = async () =>
+    new Promise<string>((resolve) => {
+      resolveRefetch = resolve;
+    });
+
+  const refetchPromise = query.refetch();
+  await Promise.resolve();
+
+  expect(query.state.failureCount()).toBe(0);
+  expect(query.state.failureReason()).toBeNull();
+
+  resolveRefetch('refetched data');
+  await refetchPromise;
+});
+
+test('no-data errors invalidate the query', async () => {
+  const queryClient = new QueryClient();
+
+  await queryClient.prefetchQuery({
+    queryKey: ['no-data-error-invalidated'],
+    queryFn: async () => {
+      throw new Error('no data failure');
+    },
+    retry: false,
+  });
+
+  const query = findQuery(queryClient, 'no-data-error-invalidated')!;
+  expect(query.state.data()).toBeUndefined();
+  expect(query.state.isInvalidated()).toBe(true);
+});
+
 // ──────────────────────────────────────
 // Section E — setQueryData & structuralSharing
 // ──────────────────────────────────────

@@ -475,9 +475,13 @@ export const createQuery = <
       if (currentState === 'retrying') {
         query.fetchMachine.send('RETRY');
       } else if (force) {
+        query.state.failureCount(0);
+        query.state.failureReason(null);
         query.fetchMachine.send('FETCH', true);
       } else {
         if (!query.fetchMachine.can('FETCH')) return;
+        query.state.failureCount(0);
+        query.state.failureReason(null);
         query.fetchMachine.send('FETCH');
       }
 
@@ -615,7 +619,7 @@ export const createQuery = <
               query.state.error(error);
               query.state.errorUpdatedAt(Date.now());
               query.state.errorUpdateCount((previous) => previous + 1);
-              query.state.isInvalidated(query.state.data() !== undefined);
+              query.state.isInvalidated(true);
               query.staleDisposer();
               query.staleDisposer = () => {};
               query.state.isStale(true);
