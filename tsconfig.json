@@ -13,6 +13,7 @@
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
     "useDefineForClassFields": true,
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "jsxImportSource": "voby",
     "jsx": "react-jsx"

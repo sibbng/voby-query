@@ -287,6 +287,9 @@ export const createMutation = <
           }
         }
 
+        await mutation.resolvedOptions.onSuccess?.(data, variables, context);
+        await mutation.resolvedOptions.onSettled?.(data, null, variables, context);
+
         machine.send('SUCCESS');
         state.data(data);
         state.error(null);
@@ -297,14 +300,36 @@ export const createMutation = <
           mutation: mutation as Mutation<any, any, any, any>,
         });
 
-        await mutation.resolvedOptions.onSuccess?.(data, variables, context);
-        mutateOptions?.onSuccess?.(data, variables, context);
-
-        await mutation.resolvedOptions.onSettled?.(data, null, variables, context);
-        mutateOptions?.onSettled?.(data, null, variables, context);
+        try {
+          mutateOptions?.onSuccess?.(data, variables, context);
+        } catch (error) {
+          void Promise.reject(error);
+        }
+        try {
+          mutateOptions?.onSettled?.(data, null, variables, context);
+        } catch (error) {
+          void Promise.reject(error);
+        }
 
         return data;
       } catch (error) {
+        try {
+          await mutation.resolvedOptions.onError?.(error as TError, variables, context);
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
+
+        try {
+          await mutation.resolvedOptions.onSettled?.(
+            undefined,
+            error as TError,
+            variables,
+            context,
+          );
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
+
         machine.send('ERROR');
         state.error(error as TError);
         state.failureReason(error as TError);
@@ -316,11 +341,16 @@ export const createMutation = <
           mutation: mutation as Mutation<any, any, any, any>,
         });
 
-        await mutation.resolvedOptions.onError?.(error as TError, variables, context);
-        mutateOptions?.onError?.(error as TError, variables, context);
-
-        await mutation.resolvedOptions.onSettled?.(undefined, error as TError, variables, context);
-        mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
+        try {
+          mutateOptions?.onError?.(error as TError, variables, context);
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
+        try {
+          mutateOptions?.onSettled?.(undefined, error as TError, variables, context);
+        } catch (callbackError) {
+          void Promise.reject(callbackError);
+        }
 
         throw error;
       }

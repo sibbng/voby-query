@@ -311,4 +311,172 @@ describe('mutations', () => {
       expect(mutationError).toEqual(newMutationError);
     });
   });
+
+  it('dispatches success after option callbacks and before per-call callbacks', async () => {
+    const queryClient = new QueryClient();
+    const events: string[] = [];
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => 'data',
+      onSuccess: () => {
+        events.push(`options-onSuccess:${mutation.state.status()}:${mutation.state.data()}`);
+      },
+      onSettled: () => {
+        events.push(`options-onSettled:${mutation.state.status()}:${mutation.state.data()}`);
+      },
+    });
+
+    await (mutation as any).mutate('vars', {
+      onSuccess: () => {
+        events.push(`call-onSuccess:${mutation.state.status()}:${mutation.state.data()}`);
+      },
+      onSettled: () => {
+        events.push(`call-onSettled:${mutation.state.status()}:${mutation.state.data()}`);
+      },
+    });
+
+    expect(events).toEqual([
+      'options-onSuccess:pending:undefined',
+      'options-onSettled:pending:undefined',
+      'call-onSuccess:success:data',
+      'call-onSettled:success:data',
+    ]);
+  });
+
+  it('reports errors thrown by per-call success callbacks without changing success state', async ({
+    onTestFinished,
+  }) => {
+    const successCallbackError = new Error('success-callback-error');
+    const settledCallbackError = new Error('settled-callback-error');
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (error: unknown) => unhandledRejections.push(error);
+    process.on('unhandledRejection', onUnhandledRejection);
+    onTestFinished(() => {
+      process.off('unhandledRejection', onUnhandledRejection);
+    });
+
+    const queryClient = new QueryClient();
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => 'data',
+    });
+
+    await (mutation as any).mutate('vars', {
+      onSuccess: () => {
+        throw successCallbackError;
+      },
+      onSettled: () => {
+        throw settledCallbackError;
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(unhandledRejections).toEqual([successCallbackError, settledCallbackError]);
+    expect(mutation.state.status()).toBe('success');
+    expect(mutation.state.data()).toBe('data');
+  });
+
+  it('reports errors thrown by per-call error callbacks without replacing the mutation error', async ({
+    onTestFinished,
+  }) => {
+    const mutationError = new Error('mutation-error');
+    const errorCallbackError = new Error('error-callback-error');
+    const settledCallbackError = new Error('settled-callback-error');
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (error: unknown) => unhandledRejections.push(error);
+    process.on('unhandledRejection', onUnhandledRejection);
+    onTestFinished(() => {
+      process.off('unhandledRejection', onUnhandledRejection);
+    });
+
+    const queryClient = new QueryClient();
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        throw mutationError;
+      },
+    });
+
+    await expect(
+      (mutation as any).mutate('vars', {
+        onError: () => {
+          throw errorCallbackError;
+        },
+        onSettled: () => {
+          throw settledCallbackError;
+        },
+      }),
+    ).rejects.toBe(mutationError);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(unhandledRejections).toEqual([errorCallbackError, settledCallbackError]);
+    expect(mutation.state.status()).toBe('error');
+    expect(mutation.state.error()).toBe(mutationError);
+  });
+
+  it('turns an option onSuccess error into the mutation error state', async () => {
+    const callbackError = new Error('success-callback-error');
+    const queryClient = new QueryClient();
+    const onError = vi.fn();
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => 'data',
+      onSuccess: () => {
+        throw callbackError;
+      },
+      onError,
+    });
+
+    await expect((mutation as any).mutate('vars')).rejects.toBe(callbackError);
+
+    expect(onError).toHaveBeenCalledWith(callbackError, 'vars', undefined);
+    expect(mutation.state.status()).toBe('error');
+    expect(mutation.state.error()).toBe(callbackError);
+  });
+
+  it('runs error callbacks in order and preserves the original error', async ({
+    onTestFinished,
+  }) => {
+    const queryClient = new QueryClient();
+    const mutationError = new Error('mutation-error');
+    const callbackError = new Error('callback-error');
+    const unhandledRejection = vi.fn();
+    const onUnhandledRejection = (error: unknown) => unhandledRejection(error);
+    process.on('unhandledRejection', onUnhandledRejection);
+    onTestFinished(() => {
+      process.off('unhandledRejection', onUnhandledRejection);
+    });
+    const events: string[] = [];
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        throw mutationError;
+      },
+      onError: () => {
+        events.push(`options-onError:${mutation.state.status()}`);
+        throw callbackError;
+      },
+      onSettled: () => {
+        events.push(`options-onSettled:${mutation.state.status()}`);
+      },
+    });
+
+    await expect(
+      (mutation as any).mutate('vars', {
+        onError: () => {
+          events.push(`call-onError:${mutation.state.status()}`);
+        },
+        onSettled: () => {
+          events.push(`call-onSettled:${mutation.state.status()}`);
+        },
+      }),
+    ).rejects.toBe(mutationError);
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(events).toEqual([
+      'options-onError:pending',
+      'options-onSettled:pending',
+      'call-onError:error',
+      'call-onSettled:error',
+    ]);
+    expect(mutation.state.error()).toBe(mutationError);
+    expect(unhandledRejection).toHaveBeenCalledTimes(1);
+    expect(unhandledRejection).toHaveBeenCalledWith(callbackError);
+  });
 });
