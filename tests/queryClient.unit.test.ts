@@ -213,6 +213,32 @@ describe('queryClient', () => {
       expect(queryClient.getQueryData(key)).toEqual('new data + test data');
     });
 
+    it('should return updated data and honor updatedAt options', () => {
+      const key = queryKey();
+      const firstKey = [...key, 'first'];
+      const secondKey = [...key, 'second'];
+      const queryClient = new QueryClient();
+
+      const result = queryClient.setQueryData(key, 'data', { updatedAt: 1234 });
+      const initialUpdatedAt = queryClient.getQueryState(key)?.dataUpdatedAt();
+      queryClient.setQueryData(firstKey, 'first');
+      queryClient.setQueryData(secondKey, 'second');
+      const results = queryClient.setQueriesData(
+        { queryKey: key },
+        (previous: string | undefined) => `${previous}!`,
+        { updatedAt: 5678 },
+      );
+
+      expect(result).toBe('data');
+      expect(initialUpdatedAt).toBe(1234);
+      expect(results).toEqual([
+        [key, 'data!'],
+        [firstKey, 'first!'],
+        [secondKey, 'second!'],
+      ]);
+      expect(queryClient.getQueryState(firstKey)?.dataUpdatedAt()).toBe(5678);
+    });
+
     it('should set the new data without comparison if structuralSharing is set to false', () => {
       const key = queryKey();
       const queryClient = new QueryClient();

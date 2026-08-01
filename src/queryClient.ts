@@ -218,6 +218,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   >(
     queryKey: TTaggedQueryKey,
     data: TQueryFnData | ((previous: TQueryFnData | undefined) => TQueryFnData | undefined),
+    options?: SetDataOptions,
   ) => {
     const queryHash = getQueryKeyHashFn()(queryKey);
     let query = cache.get(queryHash) as QueryLike | undefined;
@@ -233,8 +234,9 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       });
     }
 
-    setQuerySuccessData(query, resolvedData);
+    setQuerySuccessData(query, resolvedData, options?.updatedAt ?? Date.now());
     cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
+    return resolvedData;
   };
 
   const getQueriesData: QueryClient['getQueriesData'] = <TQueryFnData = unknown>(
@@ -253,12 +255,15 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     updater: Updater<TQueryFnData, TQueryFnData | undefined>,
     options?: SetDataOptions,
   ) => {
-    cache.findAll(filters).forEach((query) => {
+    return cache.findAll(filters).map((query) => {
       const resolvedData = functionalUpdate(updater, query.state.data());
-      if (resolvedData === undefined) return;
-      const updatedAt = options?.updatedAt ?? Date.now();
-      setQuerySuccessData(query, resolvedData, updatedAt);
+      if (resolvedData === undefined) {
+        return [query.resolvedOptions.queryKey, undefined] as [QueryKey, TQueryFnData | undefined];
+      }
+
+      setQuerySuccessData(query, resolvedData, options?.updatedAt ?? Date.now());
       cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
+      return [query.resolvedOptions.queryKey, resolvedData] as [QueryKey, TQueryFnData];
     });
   };
 
@@ -634,7 +639,8 @@ export class QueryClient {
     data:
       | TInferredQueryFnData
       | ((previous: TInferredQueryFnData | undefined) => TInferredQueryFnData | undefined),
-  ) => void;
+    options?: SetDataOptions,
+  ) => TInferredQueryFnData | undefined;
   declare getQueryState: <
     TQueryFnData = unknown,
     TError = Error,
@@ -690,7 +696,7 @@ export class QueryClient {
     filters: QueryFilters,
     updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
     options?: SetDataOptions,
-  ) => void;
+  ) => Array<[QueryKey, TQueryFnData | undefined]>;
   declare refetchQueries: (filters?: QueryFilters, options?: QueryRefetchOptions) => Promise<void>;
   declare cancelQueries: (filters?: QueryFilters, options?: CancelOptions) => Promise<void>;
   declare removeQueries: (filters?: QueryFilters) => void;
