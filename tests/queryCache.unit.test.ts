@@ -267,20 +267,23 @@ describe('queryCache', () => {
     it('should filter by stale status', async () => {
       const queryClient = new QueryClient();
       const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+      const staleKey = queryKey();
+      const freshKey = queryKey();
       await queryClient.fetchQuery({
-        queryKey: queryKey(),
+        queryKey: staleKey,
         queryFn: async () => 'stale data',
         staleTime: 0,
       });
       await queryClient.fetchQuery({
-        queryKey: queryKey(),
+        queryKey: freshKey,
         queryFn: async () => 'fresh data',
         staleTime: 10000,
       });
+      await queryClient.invalidateQueries({ queryKey: staleKey, refetchType: 'none' });
       const staleQueries = queryCache.findAll({ stale: true });
       const freshQueries = queryCache.findAll({ stale: false });
-      expect(staleQueries.length).toBeGreaterThanOrEqual(1);
-      expect(freshQueries.length).toBeGreaterThanOrEqual(1);
+      expect(staleQueries.map((query) => query.queryKey)).toContainEqual(staleKey);
+      expect(freshQueries.map((query) => query.queryKey)).toContainEqual(freshKey);
     });
   });
 

@@ -801,6 +801,11 @@ test('cache.findAll filters by stale option', async () => {
     staleTime: 10000,
   });
 
+  await queryClient.invalidateQueries({
+    queryKey: ['filter-stale-yes'],
+    refetchType: 'none',
+  });
+
   const staleQueries = queryClient.getQueryCache().findAll({ stale: true });
   const freshQueries = queryClient.getQueryCache().findAll({ stale: false });
 
@@ -811,6 +816,24 @@ test('cache.findAll filters by stale option', async () => {
   expect(staleKeys).not.toContain('filter-stale-no');
   expect(freshKeys).toContain('filter-stale-no');
   expect(freshKeys).not.toContain('filter-stale-yes');
+});
+
+test('cache.findAll treats inactive cached data as fresh', async () => {
+  const queryClient = new QueryClient();
+  const queryKey = ['inactive-cached-data'];
+
+  await queryClient.fetchQuery({
+    queryKey,
+    queryFn: async () => 'cached data',
+    staleTime: 0,
+  });
+
+  expect(queryClient.getQueryCache().findAll({ stale: true })).not.toContainEqual(
+    expect.objectContaining({ queryKey }),
+  );
+  expect(queryClient.getQueryCache().findAll({ stale: false })).toContainEqual(
+    expect.objectContaining({ queryKey }),
+  );
 });
 
 // ──────────────────────────────────────

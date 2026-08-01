@@ -124,7 +124,7 @@ export function matchQuery<TQuery extends Query>(
     if (type === 'inactive' && isActive) return false;
   }
 
-  if (typeof stale === 'boolean' && query.state.isStale() !== stale) return false;
+  if (typeof stale === 'boolean' && query.isStale() !== stale) return false;
 
   if (fetchStatus && fetchStatus !== query.state.fetchStatus()) return false;
 

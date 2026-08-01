@@ -74,6 +74,7 @@ export type Query<
   queryHash: string;
   queryKey: unknown[];
   isActive: boolean;
+  isStale: () => boolean;
   cache: QueryCache;
   meta: Record<string, unknown> | undefined;
   state: QueryState<TData, TError>;
@@ -309,6 +310,13 @@ export const createQuery = <
     queryHash,
     queryKey: resolvedOptions.queryKey,
     isActive: false,
+    isStale: () => {
+      if (query.observers.size > 0) {
+        return Array.from(query.observers).some((observer) => observer.isStale());
+      }
+
+      return query.state.data() === undefined || query.state.isInvalidated();
+    },
     cache,
     get meta() {
       return query.resolvedOptions.meta;
