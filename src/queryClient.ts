@@ -330,9 +330,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
   ): Promise<void> => {
     const queriesToCancel = cache.findAll(filters);
 
-    for (const query of queriesToCancel) {
-      await query.cancel({ silent, revert });
-    }
+    await Promise.all(queriesToCancel.map((query) => query.cancel({ silent, revert }))).catch(noop);
   };
 
   const removeQueries: QueryClient['removeQueries'] = (filters) => {

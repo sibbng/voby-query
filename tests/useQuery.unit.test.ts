@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, expectTypeOf, test, vi } from 'vite-plus/test';
 import { QueryClient } from '../src';
-import { CancelledError } from '../src/useQuery';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -585,7 +584,7 @@ test('queryClient.cancelQueries reverts an in-flight refetch to the previous sta
   expect(queryClient.getQueryData(['cancel-revert'])).toBe('data 1');
 });
 
-test('queryClient.cancelQueries throws CancelledError for initial fetches unless silent', async () => {
+test('queryClient.cancelQueries resolves for initial fetches even with revert', async () => {
   const queryClient = new QueryClient();
 
   const firstFetch = queryClient.fetchQuery({
@@ -606,7 +605,7 @@ test('queryClient.cancelQueries throws CancelledError for initial fetches unless
 
   await expect(
     queryClient.cancelQueries({ queryKey: ['cancel-initial'], fetchStatus: 'fetching' }),
-  ).rejects.toBeInstanceOf(CancelledError);
+  ).resolves.toBeUndefined();
   await firstFetch;
 
   const cancelledInitialQuery = findQuery(queryClient, 'cancel-initial');

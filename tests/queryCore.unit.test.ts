@@ -283,7 +283,7 @@ test('cancel with revert: false does not revert state', async () => {
   expect(query.state.fetchStatus()).toBe('idle');
 });
 
-test('cancelQueries with revert: true on initial fetch throws CancelledError', async () => {
+test('cancelQueries with revert: true on initial fetch resolves', async () => {
   const queryClient = new QueryClient();
 
   const firstFetch = queryClient.fetchQuery({
@@ -301,7 +301,7 @@ test('cancelQueries with revert: true on initial fetch throws CancelledError', a
       { queryKey: ['cancel-initial-revert'], fetchStatus: 'fetching' },
       { revert: true, silent: false },
     ),
-  ).rejects.toBeInstanceOf(CancelledError);
+  ).resolves.toBeUndefined();
 
   await firstFetch;
   const query = findQuery(queryClient, 'cancel-initial-revert')!;
