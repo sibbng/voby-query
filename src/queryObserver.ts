@@ -209,8 +209,13 @@ export class QueryObserver<
     });
   }
 
-  #resolveStaleTime(): number | 'static' {
-    const staleTime = this.#resolvedOptions.staleTime;
+  #resolveStaleTime(
+    staleTime:
+      | number
+      | 'static'
+      | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => number | 'static')
+      | undefined = this.#resolvedOptions.staleTime,
+  ): number | 'static' {
     return typeof staleTime === 'function' ? staleTime(this.#query) : staleTime;
   }
 
@@ -232,8 +237,13 @@ export class QueryObserver<
     });
   }
 
-  #resolveRefetchInterval(): number | false {
-    const interval = this.#resolvedOptions.refetchInterval;
+  #resolveRefetchInterval(
+    interval:
+      | number
+      | false
+      | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => number | false | undefined)
+      | undefined = this.#resolvedOptions.refetchInterval,
+  ): number | false {
     const resolved = typeof interval === 'function' ? interval(this.#query) : interval;
     return resolved ?? false;
   }
@@ -350,6 +360,14 @@ export class QueryObserver<
 
   setOptions(options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>): void {
     const previousOptions = this.#resolvedOptions;
+
+    // Capture previous resolved values before swapping options (upstream gate:
+    // timers must only be re-armed when a relevant option actually changed).
+    const previousStaleTime = untrack(() => this.#resolveStaleTime(previousOptions.staleTime));
+    const previousRefetchInterval = untrack(() =>
+      this.#resolveRefetchInterval(previousOptions.refetchInterval),
+    );
+
     this.#resolvedOptions = this.#resolveOptions(options);
 
     if (!shallowEqualObjects(previousOptions, this.#resolvedOptions)) {
@@ -360,16 +378,31 @@ export class QueryObserver<
       });
     }
 
+    const mounted = this.#listeners.size > 0;
+
     const shouldFetchOnOptionsUpdate = untrack(
       () =>
-        this.#listeners.size > 0 &&
+        mounted &&
         previousOptions.enabled === false &&
         this.#resolvedOptions.enabled &&
         this.#query.state.fetchStatus() !== 'paused',
     );
 
-    this.#updateStaleTimeout();
-    this.#updateRefetchInterval();
+    const enabledChanged = previousOptions.enabled !== this.#resolvedOptions.enabled;
+    const staleTimeChanged = untrack(() => this.#resolveStaleTime()) !== previousStaleTime;
+    const refetchIntervalChanged =
+      untrack(() => this.#resolveRefetchInterval()) !== previousRefetchInterval;
+
+    // Unmounted observers (and unchanged options) must not re-arm timers:
+    // setOptions on a destroyed observer would otherwise keep the query
+    // refetching forever after unmount (matches upstream's condition).
+    if (mounted && (enabledChanged || staleTimeChanged)) {
+      this.#updateStaleTimeout();
+    }
+
+    if (mounted && (enabledChanged || refetchIntervalChanged)) {
+      this.#updateRefetchInterval();
+    }
 
     if (shouldFetchOnOptionsUpdate) {
       untrack(() => {

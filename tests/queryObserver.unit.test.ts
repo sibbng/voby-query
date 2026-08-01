@@ -227,4 +227,65 @@ describe('queryObserver stale timers', () => {
 
     unsubscribe();
   });
+
+  it('should not re-arm the refetch interval when setOptions is called on an unmounted observer', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    const query = queryCache.build(queryClient, { queryKey: key, queryFn });
+
+    // A mounted observer keeps the query active
+    const active = new QueryObserver(query, {});
+    const unsubscribeActive = active.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // An unmounted observer calling setOptions must not arm an interval
+    const detached = new QueryObserver(query, {});
+    detached.setOptions({ refetchInterval: 50 });
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    detached.destroy();
+    unsubscribeActive();
+  });
+
+  it('should not arm the stale timer when setOptions is called on an unmounted observer', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    await queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: async () => 'data',
+      staleTime: 100,
+    });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {});
+
+    const spy = vi.fn();
+    const unsubscribeCache = queryCache.subscribe(spy);
+
+    observer.setOptions({ staleTime: 1000 });
+
+    // setOptions synchronously emits observerOptionsUpdated + one
+    // observerResultsUpdated notify — but no stale timer may be armed,
+    // so no second observerResultsUpdated may arrive once it would fire.
+    const resultsUpdated = () =>
+      spy.mock.calls.filter((c) => (c[0] as any)?.type === 'observerResultsUpdated').length;
+
+    expect(resultsUpdated()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(resultsUpdated()).toBe(1);
+
+    observer.destroy();
+    unsubscribeCache();
+  });
 });
