@@ -271,7 +271,8 @@ export type QueryOptions<
   refetchIntervalInBackground?: boolean;
   notifyOnChangeProps?:
     | Array<'data' | 'error' | 'isLoading' | 'isPending' | 'isFetching' | 'isStale'>
-    | 'all';
+    | 'all'
+    | 'tracked';
   subscribed?: boolean;
   meta?: Record<string, unknown>;
   queryKeyHashFn?: (queryKey: QueryKey) => string;
@@ -389,9 +390,12 @@ export type ResolvedObserverOptions<
   queryFn: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['queryFn'];
   structuralSharing: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['structuralSharing'];
   placeholderData: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['placeholderData'];
-  notifyOnChangeProps: NonNullable<
-    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['notifyOnChangeProps']
-  >;
+  notifyOnChangeProps: ObserverOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey
+  >['notifyOnChangeProps'];
   subscribed: NonNullable<ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['subscribed']>;
   suspense: NonNullable<ObserverOptions<TQueryFnData, TError, TData, TQueryKey>['suspense']>;
 };

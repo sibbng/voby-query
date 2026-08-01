@@ -523,6 +523,9 @@ export const createQuery = <
               query.staleDisposer();
               query.staleDisposer = () => {};
               query.state.isStale(true);
+              for (const observer of query.observers) {
+                observer.onQueryUpdate();
+              }
               const isDefaultThrowOnError = throwOnError === query.resolvedOptions.throwOnError;
               if (shouldThrowError(throwOnError, [error, query])) {
                 query.state.status('error');

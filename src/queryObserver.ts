@@ -6,6 +6,10 @@ import { timeoutManager, type ManagedTimerId } from './timeoutManager.ts';
 import type { ObserverOptions, ResolvedObserverOptions } from './types.ts';
 import { isValidTimeout, shallowEqualObjects, timeUntilStale } from './utils.ts';
 
+export type QueryObserverResult = {
+  [key: string]: unknown;
+};
+
 export class QueryObserver<
   TQueryFnData = unknown,
   TError = unknown,
@@ -14,15 +18,23 @@ export class QueryObserver<
 > {
   #query: Query<TQueryFnData, TError, TData, TQueryKey>;
   #resolvedOptions: ResolvedObserverOptions<TQueryFnData, TError, TData, TQueryKey>;
-  #listeners: Set<() => void> = new Set();
+  #listeners: Set<(result: QueryObserverResult) => void> = new Set();
   #staleTimeoutId?: ManagedTimerId;
   #refetchIntervalId?: ManagedTimerId;
+  #trackedProps: Set<string> = new Set();
+  #lastValues?: Map<string, unknown>;
   constructor(
     query: Query<TQueryFnData, TError, TData, TQueryKey>,
     options: ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
   ) {
     this.#query = query;
     this.#resolvedOptions = this.#resolveOptions(options);
+    this.#lastValues = new Map<string, unknown>();
+    untrack(() => {
+      for (const key of Object.keys(this.#query.state)) {
+        this.#lastValues!.set(key, (this.#query.state as any)[key]());
+      }
+    });
   }
 
   get query(): Query<TQueryFnData, TError, TData, TQueryKey> {
@@ -50,13 +62,13 @@ export class QueryObserver<
       queryFn: options.queryFn,
       structuralSharing: options.structuralSharing,
       placeholderData: options.placeholderData,
-      notifyOnChangeProps: options.notifyOnChangeProps ?? 'all',
+      notifyOnChangeProps: options.notifyOnChangeProps,
       subscribed: options.subscribed ?? false,
       suspense: options.suspense ?? false,
     };
   }
 
-  subscribe(listener: () => void): () => void {
+  subscribe(listener: (result: QueryObserverResult) => void): () => void {
     this.#listeners.add(listener);
 
     if (this.#listeners.size === 1) {
@@ -76,6 +88,8 @@ export class QueryObserver<
         untrack(() => {
           void this.#refetchObserverQuery();
         });
+      } else {
+        untrack(() => this.#notify());
       }
     }
 
@@ -113,15 +127,86 @@ export class QueryObserver<
   }
 
   #notify(): void {
-    for (const listener of this.#listeners) {
-      listener();
+    untrack(() => {
+      const currentResult = this.getCurrentResult();
+
+      const shouldNotifyListeners = this.#shouldNotifyListeners(currentResult);
+
+      this.#lastValues = this.#snapshotValues(currentResult);
+
+      if (shouldNotifyListeners) {
+        for (const listener of this.#listeners) {
+          listener(currentResult);
+        }
+      }
+      if (this.#query.cache.hasListeners()) {
+        this.#query.cache.notify({
+          type: 'observerResultsUpdated',
+          query: this.#query as any,
+        });
+      }
+    });
+  }
+
+  trackResult(
+    result: QueryObserverResult,
+    onPropTracked?: (key: string) => void,
+  ): QueryObserverResult {
+    return new Proxy(result, {
+      get: (target, key) => {
+        this.trackProp(key as string);
+        onPropTracked?.(key as string);
+        if (key === 'promise') {
+          this.trackProp('data');
+        }
+        return Reflect.get(target, key);
+      },
+    });
+  }
+
+  trackProp(key: string): void {
+    this.#trackedProps.add(key);
+  }
+
+  #resultValue(result: QueryObserverResult, prop: string): unknown {
+    const value = result[prop];
+    if (prop in this.#query.state && typeof value === 'function') {
+      return (value as () => unknown)();
     }
-    if (this.#query.cache.hasListeners()) {
-      this.#query.cache.notify({
-        type: 'observerResultsUpdated',
-        query: this.#query as any,
-      });
+    return value;
+  }
+
+  #snapshotValues(result: QueryObserverResult): Map<string, unknown> {
+    const values = new Map<string, unknown>();
+    for (const key of Object.keys(result)) {
+      values.set(key, this.#resultValue(result, key));
     }
+    return values;
+  }
+
+  #shouldNotifyListeners(currentResult: QueryObserverResult): boolean {
+    const notifyOnChangeProps = this.#resolvedOptions.notifyOnChangeProps;
+
+    if (notifyOnChangeProps === 'all' || (!notifyOnChangeProps && this.#trackedProps.size === 0)) {
+      return true;
+    }
+
+    const props =
+      notifyOnChangeProps === 'tracked' || !notifyOnChangeProps
+        ? this.#trackedProps
+        : notifyOnChangeProps;
+    const includedProps = new Set<string>(props);
+
+    if (this.#resolvedOptions.throwOnError) {
+      includedProps.add('error');
+    }
+
+    const lastValues = this.#lastValues!;
+    return Array.from(includedProps).some((prop) => {
+      const prev = lastValues.get(prop);
+      const cur = this.#resultValue(currentResult, prop);
+      return cur !== prev;
+    });
   }
 
   #resolveStaleTime(): number | 'static' {
@@ -234,6 +319,7 @@ export class QueryObserver<
 
   onQueryUpdate(): void {
     this.#updateStaleTimeout();
+    this.#notify();
   }
 
   isPlaceholderData(): boolean {
