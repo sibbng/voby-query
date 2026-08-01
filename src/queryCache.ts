@@ -16,10 +16,19 @@ export interface QueryCacheConfig {
   onSettled?: (data: unknown, error: unknown, query: Query<any, any, any, any>) => void;
 }
 
+export type QueryCacheAction = {
+  type: 'fetch' | 'failed' | 'pause' | 'continue' | 'success' | 'error' | 'invalidate' | 'setState';
+  [key: string]: unknown;
+};
+
 export type QueryCacheNotifyEvent =
   | { type: 'added'; query: Query<any, any, any, any> }
   | { type: 'removed'; query: Query<any, any, any, any> }
-  | { type: 'updated'; query: Query<any, any, any, any> }
+  | {
+      type: 'updated';
+      query: Query<any, any, any, any>;
+      action?: QueryCacheAction;
+    }
   | {
       type: 'observerAdded';
       query: Query<any, any, any, any>;

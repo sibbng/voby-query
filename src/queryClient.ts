@@ -237,7 +237,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     }
 
     setQuerySuccessData(query, resolvedData);
-    cache.notify({ type: 'updated', query: query as QueryLike });
+    cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
   };
 
   const getQueriesData: QueryClient['getQueriesData'] = <TQueryFnData = unknown>(
@@ -261,7 +261,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       if (resolvedData === undefined) return;
       const updatedAt = options?.updatedAt ?? Date.now();
       setQuerySuccessData(query, resolvedData, updatedAt);
-      cache.notify({ type: 'updated', query: query as QueryLike });
+      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'success' } });
     });
   };
 
@@ -276,7 +276,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     for (const query of queriesToInvalidate) {
       query.state.isInvalidated(true);
       query.state.isStale(true);
-      cache.notify({ type: 'updated', query: query as QueryLike });
+      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'invalidate' } });
     }
 
     if (effectiveRefetchType === 'none') return;
@@ -347,7 +347,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
     const resetPromises = queriesToReset.map(async (query) => {
       query.reset();
-      cache.notify({ type: 'updated', query: query as QueryLike });
+      cache.notify({ type: 'updated', query: query as QueryLike, action: { type: 'setState' } });
       if (query.isActive) {
         try {
           await query.refetch({ throwOnError, cancelRefetch });

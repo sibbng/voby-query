@@ -77,6 +77,6 @@ export { Subscribable } from './subscribable.ts';
 export { onlineManager } from './onlineManager.ts';
 export { focusManager } from './focusManager.ts';
 export { timeoutManager } from './timeoutManager.ts';
-export type { QueryCacheNotifyEvent, QueryCacheConfig } from './queryCache.ts';
+export type { QueryCacheAction, QueryCacheNotifyEvent, QueryCacheConfig } from './queryCache.ts';
 export type { MutationCacheNotifyEvent } from './mutationCache.ts';
 export type { Updater, SetDataOptions } from './types.ts';

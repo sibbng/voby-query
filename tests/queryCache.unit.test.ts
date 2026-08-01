@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { QueryCache } from '../src/queryCache.ts';
 import { QueryObserver } from '../src/queryObserver.ts';
 import { QueryClient } from '../src/index.ts';
+import { onlineManager } from '../src/onlineManager.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -70,6 +71,84 @@ describe('queryCache', () => {
       });
       queryClient.setQueryData(key, 'new value');
       expect(events).toContain('updated');
+    });
+
+    it('should notify cache subscribers when fetching starts', async () => {
+      const queryClient = new QueryClient();
+      const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+      const key = queryKey();
+      await queryClient.fetchQuery({
+        queryKey: key,
+        queryFn: async () => 'initial',
+        staleTime: 1000,
+      });
+
+      const query = queryCache.find({ queryKey: key }) as any;
+      let resolveRefetch: (value: string) => void = () => {};
+      query.resolvedOptions.queryFn = async () =>
+        new Promise<string>((resolve) => {
+          resolveRefetch = resolve;
+        });
+
+      const actions: string[] = [];
+      queryCache.subscribe((event) => {
+        if (event.type === 'updated' && event.query === query) {
+          actions.push((event as any).action?.type ?? 'missing');
+        }
+      });
+
+      const refetchPromise = query.refetch();
+      await Promise.resolve();
+
+      expect(actions).toContain('fetch');
+
+      resolveRefetch('refetched');
+      await refetchPromise;
+    });
+
+    it('should notify cache subscribers when a fetch pauses and continues', async () => {
+      const queryClient = new QueryClient();
+      const queryCache = queryClient.getQueryCache() as unknown as QueryCache;
+      const query = queryCache.build(queryClient, {
+        queryKey: queryKey(),
+        queryFn: async () => 'data',
+        networkMode: 'online',
+      });
+      const actions: string[] = [];
+      queryCache.subscribe((event) => {
+        if (event.type === 'updated' && event.query === query) {
+          actions.push((event as any).action?.type ?? 'missing');
+        }
+      });
+
+      let resolveFetch: (value: string) => void = () => {};
+      let fetchStarted!: () => void;
+      const fetchStartedPromise = new Promise<void>((resolve) => {
+        fetchStarted = resolve;
+      });
+      query.resolvedOptions.queryFn = async () =>
+        new Promise<string>((resolve) => {
+          fetchStarted();
+          resolveFetch = resolve;
+        });
+
+      onlineManager.setOnline(false);
+      try {
+        const fetchPromise = query.fetch({ force: true });
+        await Promise.resolve();
+
+        expect(actions).toContain('pause');
+
+        onlineManager.setOnline(true);
+        await Promise.resolve();
+        expect(actions).toContain('continue');
+
+        await fetchStartedPromise;
+        resolveFetch('data');
+        await fetchPromise;
+      } finally {
+        onlineManager.setOnline(true);
+      }
     });
 
     it('should fire removed on removeQueries', async () => {

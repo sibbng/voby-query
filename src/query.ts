@@ -478,11 +478,21 @@ export const createQuery = <
         query.state.failureCount(0);
         query.state.failureReason(null);
         query.fetchMachine.send('FETCH', true);
+        cache.notify({
+          type: 'updated',
+          query: query as Query<any, any, any, any>,
+          action: { type: 'fetch' },
+        });
       } else {
         if (!query.fetchMachine.can('FETCH')) return;
         query.state.failureCount(0);
         query.state.failureReason(null);
         query.fetchMachine.send('FETCH');
+        cache.notify({
+          type: 'updated',
+          query: query as Query<any, any, any, any>,
+          action: { type: 'fetch' },
+        });
       }
 
       // Use the queryFn of the first observer with one if the query itself
@@ -534,7 +544,11 @@ export const createQuery = <
         }
         cache.config.onError?.(error, query as Query<any, any, any, any>);
         cache.config.onSettled?.(query.state.data(), error, query as Query<any, any, any, any>);
-        cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+        cache.notify({
+          type: 'updated',
+          query: query as Query<any, any, any, any>,
+          action: { type: 'error', error },
+        });
         throw error;
       };
 
@@ -598,7 +612,11 @@ export const createQuery = <
           query.fetchMachine.send('SUCCESS');
           cache.config.onSuccess?.(newData, query as Query<any, any, any, any>);
           cache.config.onSettled?.(newData, null, query as Query<any, any, any, any>);
-          cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'success', data: newData },
+          });
         } catch (err) {
           const isCancelledError = err instanceof CancelledError;
           if (isCancelledError) {
@@ -659,7 +677,18 @@ export const createQuery = <
               }
             }
 
-            cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+            const action = willRetry
+              ? {
+                  type: 'failed' as const,
+                  failureCount: query.state.failureCount(),
+                  error,
+                }
+              : { type: 'error' as const, error };
+            cache.notify({
+              type: 'updated',
+              query: query as Query<any, any, any, any>,
+              action,
+            });
           }
         } finally {
           if (query.fetchPromise === fetchPromise) {
@@ -846,6 +875,11 @@ export const createQuery = <
         if (query.fetchMachine.getState() === 'fetching') {
           pausedController = query.controller;
           query.fetchMachine.send('PAUSE');
+          cache.notify({
+            type: 'updated',
+            query: query as Query<any, any, any, any>,
+            action: { type: 'pause' },
+          });
         }
       },
       () => {
@@ -859,6 +893,11 @@ export const createQuery = <
         if (query.fetchPromise === undefined && pendingFetch !== undefined) {
           query.fetchPromise = pendingFetch;
         }
+        cache.notify({
+          type: 'updated',
+          query: query as Query<any, any, any, any>,
+          action: { type: 'continue' },
+        });
       },
     );
 
