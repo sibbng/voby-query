@@ -292,6 +292,23 @@ describe('core/utils', () => {
       const next = replaceEqualDeep(current, [{ foo: 1 }, undefined]);
       expect(next).toBe(current);
     });
+
+    it('should stop structural sharing beyond the recursion depth limit', () => {
+      const createDeepValue = (depth: number) => {
+        let value: any = { leaf: 'value' };
+        for (let index = 0; index < depth; index++) {
+          value = { child: value };
+        }
+        return value;
+      };
+
+      const previous = createDeepValue(600);
+      const next = createDeepValue(600);
+      const result = replaceEqualDeep(previous, next);
+
+      expect(result).toEqual(next);
+      expect(result).not.toBe(previous);
+    });
   });
 
   describe('hashFn', () => {

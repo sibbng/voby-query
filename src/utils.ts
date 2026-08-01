@@ -227,11 +227,13 @@ export function shallowEqualObjects<T extends Record<string, any>>(
  * If not, it will replace any deeply equal children of `b` with those of `a`.
  * This can be used for structural sharing between JSON values for example.
  */
-export function replaceEqualDeep<T>(a: unknown, b: T): T;
-export function replaceEqualDeep(a: any, b: any): any {
+export function replaceEqualDeep<T>(a: unknown, b: T, depth?: number): T;
+export function replaceEqualDeep(a: any, b: any, depth = 0): any {
   if (a === b) {
     return a;
   }
+
+  if (depth > 500) return b;
 
   const array = isPlainArray(a) && isPlainArray(b);
 
@@ -255,7 +257,7 @@ export function replaceEqualDeep(a: any, b: any): any {
         copy[key] = undefined;
         equalItems++;
       } else {
-        copy[key] = replaceEqualDeep(a[key], b[key]);
+        copy[key] = replaceEqualDeep(a[key], b[key], depth + 1);
         if (copy[key] === a[key] && a[key] !== undefined) {
           equalItems++;
         }
