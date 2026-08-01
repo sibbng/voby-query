@@ -194,6 +194,9 @@ export class MutationCache<
     const mutations = this.getAll();
     if (mutations.length === 0) return;
 
+    for (const mutation of mutations) {
+      this.notify({ type: 'removed', mutation: mutation as Mutation<any, any, any, any> });
+    }
     this.mutations.clear();
     for (const mutation of mutations) {
       mutation.destroyDisposer();
@@ -202,10 +205,6 @@ export class MutationCache<
       }
     }
     this.scopes.clear();
-    this.notify({
-      type: 'removed',
-      mutation: mutations[mutations.length - 1] as Mutation<any, any, any, any>,
-    });
   }
 
   private addToScope(mutation: TMutation) {

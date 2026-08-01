@@ -397,6 +397,29 @@ describe('mutationCache', () => {
     });
   });
 
+  it('emits one removed event for every mutation when cleared', () => {
+    const queryClient = new QueryClient();
+    const cache = queryClient.getMutationCache();
+    const mutation1 = cache.build(queryClient, {
+      mutationKey: mutationKey(),
+      mutationFn: async () => 'data1',
+    });
+    const mutation2 = cache.build(queryClient, {
+      mutationKey: mutationKey(),
+      mutationFn: async () => 'data2',
+    });
+    const removedMutations: unknown[] = [];
+
+    cache.subscribe((event) => {
+      if (event.type === 'removed') removedMutations.push(event.mutation);
+    });
+
+    cache.clear();
+
+    expect(removedMutations).toEqual([mutation1, mutation2]);
+    expect(cache.getAll()).toEqual([]);
+  });
+
   it('should retain an unused mutation while it is pending', async () => {
     const queryClient = new QueryClient();
     const cache = queryClient.getMutationCache();
