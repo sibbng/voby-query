@@ -368,4 +368,75 @@ describe('queryObserver stale timers', () => {
     unsubscribe();
     observer.destroy();
   });
+
+  it('should not cancel an in-flight fetch on window focus', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const resolvers: Array<(v: string) => void> = [];
+    const queryFn = vi.fn(() => new Promise<string>((resolve) => resolvers.push(resolve)));
+
+    const query = queryCache.build(queryClient, { queryKey: key, queryFn });
+    const observer = new QueryObserver(query, {});
+    const unsubscribe = observer.subscribe(() => {});
+
+    // t=0: mount fetch
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    // Complete the mount fetch so the query has data
+    resolvers[0]('data');
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Start a background refetch (in-flight when focus fires)
+    void observer.refetch();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    // Focus event: must leave the in-flight fetch alone
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    for (const resolve of resolvers.slice(1)) resolve('data');
+    await vi.advanceTimersByTimeAsync(0);
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not cancel an in-flight fetch on reconnect', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const resolvers: Array<(v: string) => void> = [];
+    const queryFn = vi.fn(() => new Promise<string>((resolve) => resolvers.push(resolve)));
+
+    const query = queryCache.build(queryClient, { queryKey: key, queryFn });
+    const observer = new QueryObserver(query, {});
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    resolvers[0]('data');
+    await vi.advanceTimersByTimeAsync(0);
+
+    void observer.refetch();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    // Reconnect event: must leave the in-flight fetch alone
+    (query as any).onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    for (const resolve of resolvers.slice(1)) resolve('data');
+    await vi.advanceTimersByTimeAsync(0);
+    unsubscribe();
+    observer.destroy();
+  });
 });

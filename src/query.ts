@@ -354,7 +354,7 @@ export const createQuery = <
     onOnline: () => {
       const observer = [...query.observers].find((o) => o.shouldFetchOnReconnect());
       if (observer) {
-        observer.refetch();
+        observer.refetch({ cancelRefetch: false });
       }
       if (query.fetchMachine.getState() === 'paused') {
         query.fetchMachine.send('FETCH', true);
@@ -363,7 +363,7 @@ export const createQuery = <
     onFocus: () => {
       const observer = [...query.observers].find((o) => o.shouldFetchOnWindowFocus());
       if (observer) {
-        observer.refetch();
+        observer.refetch({ cancelRefetch: false });
       }
     },
     cancel: async ({ revert = true, silent = false } = {}) => {

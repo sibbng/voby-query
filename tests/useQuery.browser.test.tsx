@@ -642,7 +642,7 @@ describe('useQuery.browser.test', () => {
   });
 
   test(
-    'useQuery refetchOnWindowFocus cancels the active request when cancelRefetch is true',
+    'useQuery refetchOnWindowFocus does not cancel the active request',
     { retry: 3 },
     async () => {
       const queryClient = new QueryClient();
@@ -680,7 +680,6 @@ describe('useQuery.browser.test', () => {
             });
           },
           staleTime: 0,
-          cancelRefetch: true,
           refetchOnWindowFocus: true,
         });
 
@@ -720,15 +719,13 @@ describe('useQuery.browser.test', () => {
         Object.defineProperty(document, 'visibilityState', originalVisibility);
       }
 
-      expect(fetchCount).toBe(3);
-      expect(abortedSignals).toHaveLength(1);
-      expect(abortedSignals[0]?.aborted).toBe(true);
-
-      resolveFetches.get(2)?.('Stale value');
-      await vi.advanceTimersByTimeAsync(1);
+      // The focus event must leave the in-flight refetch alone: no new
+      // fetch, no abort (upstream onFocus hardcodes cancelRefetch: false)
+      expect(fetchCount).toBe(2);
+      expect(abortedSignals).toHaveLength(0);
       expect(document.body.textContent).toBe('Initial value');
 
-      resolveFetches.get(3)?.('Focused value');
+      resolveFetches.get(2)?.('Focused value');
       await refetchPromise;
       await vi.advanceTimersByTimeAsync(10);
       expect(document.body.textContent).toBe('Focused value');
