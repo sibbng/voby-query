@@ -84,7 +84,7 @@ export class QueryObserver<
 
       if (shouldFetchOnSubscribe) {
         untrack(() => {
-          void this.#refetchObserverQuery();
+          void this.#refetchObserverQuery().catch(() => undefined);
         });
       } else {
         untrack(() => this.#notify());
@@ -420,7 +420,7 @@ export class QueryObserver<
 
     if (shouldFetchOnOptionsUpdate) {
       untrack(() => {
-        void this.#refetchObserverQuery();
+        void this.#refetchObserverQuery().catch(() => undefined);
       });
     }
 

@@ -22,7 +22,7 @@ export class CancelledError extends Error {
   revert: boolean;
   silent: boolean;
 
-  constructor({ revert = true, silent = false }: CancelOptions = {}) {
+  constructor({ revert = false, silent = false }: CancelOptions = {}) {
     super('Query was cancelled');
     this.name = 'CancelledError';
     this.revert = revert;
@@ -88,6 +88,7 @@ export type Query<
   stateDisposer: () => void;
   staleDisposer: () => void;
   retryDisposer: () => void;
+  cancelReject?: (error: CancelledError) => void;
   isStaleByTime: (staleTime: number | 'static') => boolean;
   isDisabled: () => boolean;
   isStatic: () => boolean;
@@ -323,6 +324,7 @@ export const createQuery = <
     stateDisposer: () => {},
     staleDisposer: () => {},
     retryDisposer: () => {},
+    cancelReject: undefined,
     fetchPromise: undefined,
     revertState: undefined,
     fetchMachine: undefined as any,
@@ -379,17 +381,19 @@ export const createQuery = <
       }
       networkPause.continue();
     },
-    cancel: async ({ revert = true, silent = false } = {}) => {
+    cancel: async ({ revert = false, silent = false } = {}) => {
       const currentState = query.fetchMachine.getState();
       if (currentState !== 'fetching' && currentState !== 'retrying' && currentState !== 'paused') {
         return;
       }
 
-      const hadPreviousData = query.revertState?.data !== undefined;
+      const cancellationError = new CancelledError({ revert, silent });
 
+      query.isCancelled = true;
+      query.cancelReject?.(cancellationError);
+      query.cancelReject = undefined;
       networkPause.cancel();
       query.controller.abort();
-      query.isCancelled = true;
       query.retryDisposer();
       query.retryDisposer = () => {};
 
@@ -398,10 +402,6 @@ export const createQuery = <
       }
 
       query.fetchMachine.send('CANCEL');
-
-      if (currentState !== 'paused' && revert && !silent && !hadPreviousData) {
-        throw new CancelledError({ revert, silent });
-      }
     },
     reset: () => {
       query.state.data(query.resolvedOptions.initialData as TData);
@@ -476,22 +476,72 @@ export const createQuery = <
 
       const signal = query.controller.signal;
       let fetchPromise!: Promise<void>;
+      let cancellationError: CancelledError | undefined;
+      const cancellationPromise = new Promise<never>((_, reject) => {
+        query.cancelReject = (error) => {
+          cancellationError = error;
+          reject(error);
+        };
+      });
+
+      const handleCancelled = (error: CancelledError): Promise<void> | void => {
+        if (error.silent) {
+          const nextFetch = query.fetchPromise;
+          if (nextFetch && nextFetch !== fetchPromise) return nextFetch;
+          return;
+        }
+
+        if (error.revert) {
+          if (query.state.data() === undefined) throw error;
+          return;
+        }
+
+        query.state.error(error as unknown as TError);
+        query.state.errorUpdatedAt(Date.now());
+        query.state.errorUpdateCount((previous) => previous + 1);
+        query.state.failureCount((previous) => previous + 1);
+        query.state.failureReason(error as unknown as TError);
+        query.state.isInvalidated(query.state.data() !== undefined);
+        query.state.status('error');
+        query.staleDisposer();
+        query.staleDisposer = () => {};
+        query.state.isStale(true);
+        for (const observer of query.observers) {
+          observer.onQueryUpdate();
+        }
+        cache.config.onError?.(error, query as Query<any, any, any, any>);
+        cache.config.onSettled?.(query.state.data(), error, query as Query<any, any, any, any>);
+        cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
+        throw error;
+      };
 
       fetchPromise = (async () => {
         try {
           const pause = networkPause.wait(retryAttempt > 0);
-          if (pause) await pause;
-          if (query.isCancelled || signal.aborted) return;
+          if (pause) await Promise.race([pause, cancellationPromise]);
+          if (cancellationError) throw cancellationError;
+          if (signal.aborted) return;
 
           const meta = query.resolvedOptions.meta;
-          const result = await untrack(() =>
+          const queryResult = untrack(() =>
             (fetchFn ?? ensureQueryFn(query.resolvedOptions))({
               signal,
               queryKey: query.resolvedOptions.queryKey,
               meta,
             }),
           );
-          if (query.isCancelled || signal.aborted) return;
+          let result: unknown;
+          if (
+            queryResult !== null &&
+            (typeof queryResult === 'object' || typeof queryResult === 'function') &&
+            typeof (queryResult as PromiseLike<unknown>).then === 'function'
+          ) {
+            result = await Promise.race([queryResult, cancellationPromise]);
+          } else {
+            result = await queryResult;
+          }
+          if (cancellationError) throw cancellationError;
+          if (signal.aborted) return;
 
           if (result === undefined) {
             if (!isProduction) {
@@ -524,9 +574,13 @@ export const createQuery = <
           cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
         } catch (err) {
           const isCancelledError = err instanceof CancelledError;
-          if (query.fetchMachine.getState() !== 'fetching' && !isCancelledError) return;
+          if (isCancelledError) {
+            return handleCancelled(err);
+          }
 
-          if (!signal.aborted && !isCancelledError) {
+          if (query.fetchMachine.getState() !== 'fetching' || signal.aborted) return;
+
+          {
             const error = (err instanceof Error ? err : new Error(String(err))) as TError;
             query.state.failureCount((prev) => prev + 1);
             query.state.failureReason(error);
@@ -563,28 +617,28 @@ export const createQuery = <
             } else if (awaitChain) {
               // Keep the fetch promise pending until the whole retry chain
               // settles (flush happens in scheduleRetry / on cancel)
-              await new Promise<void>((resolve, reject) => {
-                chainWaiters.push({ resolve, reject });
-              });
+              try {
+                await Promise.race([
+                  new Promise<void>((resolve, reject) => {
+                    chainWaiters.push({ resolve, reject });
+                  }),
+                  cancellationPromise,
+                ]);
+              } catch (retryError) {
+                if (retryError instanceof CancelledError) {
+                  return handleCancelled(retryError);
+                }
+                throw retryError;
+              }
             }
 
             cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
-          } else if (isCancelledError) {
-            query.state.error(err as unknown as TError);
-            query.state.status('error');
-            if (!err.silent) {
-              cache.config.onSettled?.(
-                query.state.data(),
-                err as unknown,
-                query as Query<any, any, any, any>,
-              );
-              cache.notify({ type: 'updated', query: query as Query<any, any, any, any> });
-            }
           }
         } finally {
           if (query.fetchPromise === fetchPromise) {
             query.fetchPromise = undefined;
             query.revertState = undefined;
+            query.cancelReject = undefined;
           }
         }
       })();

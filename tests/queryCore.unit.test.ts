@@ -233,6 +233,26 @@ test('cancel with silent: true does not throw CancelledError', async () => {
   await expect(query.cancel({ revert: true, silent: true })).resolves.toBeUndefined();
 });
 
+test('cancel resolves while the active fetch rejects with CancelledError', async () => {
+  const queryClient = new QueryClient();
+  const query = queryClient.cache.build(queryClient, {
+    queryKey: ['cancel-default'],
+    queryFn: async ({ signal }) =>
+      new Promise<string>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      }),
+  });
+
+  const fetchPromise = query.fetch({ force: true });
+  await Promise.resolve();
+
+  await expect(query.cancel()).resolves.toBeUndefined();
+  await expect(fetchPromise).rejects.toBeInstanceOf(CancelledError);
+  expect(query.state.data()).toBeUndefined();
+  expect(query.state.status()).toBe('error');
+  expect(query.state.error()).toBeInstanceOf(CancelledError);
+});
+
 test('cancel with revert: true restores previous data state', async () => {
   const queryClient = new QueryClient();
   let resolveRefetch: (value: string) => void = () => {};
@@ -283,7 +303,32 @@ test('cancel with revert: false does not revert state', async () => {
   expect(query.state.fetchStatus()).toBe('idle');
 });
 
-test('cancelQueries with revert: true on initial fetch resolves', async () => {
+test('cancel with revert: false and silent: false rejects and enters error state', async () => {
+  const queryClient = new QueryClient();
+
+  await queryClient.fetchQuery({
+    queryKey: ['cancel-no-revert-error'],
+    queryFn: async () => 'original data',
+    staleTime: 1000,
+  });
+
+  const query = findQuery(queryClient, 'cancel-no-revert-error')!;
+  query.resolvedOptions.queryFn = async ({ signal }) =>
+    new Promise<string>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    });
+
+  const fetchPromise = query.refetch();
+  await Promise.resolve();
+
+  await expect(query.cancel({ revert: false })).resolves.toBeUndefined();
+  await expect(fetchPromise).rejects.toBeInstanceOf(CancelledError);
+  expect(query.state.data()).toBe('original data');
+  expect(query.state.status()).toBe('error');
+  expect(query.state.error()).toBeInstanceOf(CancelledError);
+});
+
+test('cancelQueries with revert: true rejects an initial fetch caller', async () => {
   const queryClient = new QueryClient();
 
   const firstFetch = queryClient.fetchQuery({
@@ -303,9 +348,11 @@ test('cancelQueries with revert: true on initial fetch resolves', async () => {
     ),
   ).resolves.toBeUndefined();
 
-  await firstFetch;
+  await expect(firstFetch).rejects.toBeInstanceOf(CancelledError);
   const query = findQuery(queryClient, 'cancel-initial-revert')!;
   expect(query.state.data()).toBeUndefined();
+  expect(query.state.status()).toBe('pending');
+  expect(query.state.error()).toBeNull();
 });
 
 // ──────────────────────────────────────

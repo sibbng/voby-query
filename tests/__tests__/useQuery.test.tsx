@@ -2323,7 +2323,7 @@ describe('useQuery', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(document.body.textContent).toContain('status: pending');
 
-    queryClient.removeQueries({ queryKey: key });
+    await queryClient.cancelQueries({ queryKey: key }, { revert: false });
     await vi.advanceTimersByTimeAsync(100);
     expect(document.body.textContent).toContain('status: error');
   });
