@@ -1,4 +1,4 @@
-import { isDevelopment, isProduction } from 'std-env';
+import { isProduction } from 'std-env';
 import { $, $$, untrack, useMemo, useRoot } from 'voby';
 import type {
   CancelOptions,
@@ -651,19 +651,10 @@ export const createQuery = <
           }
 
           const resultData: unknown = result;
-          let newData: TData;
-          if (isDevelopment) {
-            try {
-              newData = replaceData(query.state.data(), resultData, query.resolvedOptions) as TData;
-            } catch (error) {
-              console.error(
-                `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${queryHash}]: ${String(error)}`,
-              );
-              throw error;
-            }
-          } else {
-            newData = replaceData(query.state.data(), resultData, query.resolvedOptions) as TData;
-          }
+          const newData = replaceData(query.state.data(), resultData, {
+            ...query.resolvedOptions,
+            queryHash,
+          }) as TData;
 
           notifyManager.batch(() => {
             setQuerySuccessData(query, newData, Date.now(), true);

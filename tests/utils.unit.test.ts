@@ -11,6 +11,7 @@ import {
   isPlainObject,
   partialMatchKey,
   replaceEqualDeep,
+  replaceData,
   resolveQueryBoolean,
   resolveStaleTime,
   shouldThrowError,
@@ -527,6 +528,37 @@ describe('core/utils', () => {
         );
       }
       await expect(resolved(context)).rejects.toThrow('Missing queryFn: \'["skip"]\'');
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('replaceData', () => {
+    it('reports structural-sharing failures only in development', () => {
+      const error = new Error('not serializable');
+      const next = {};
+      Object.defineProperty(next, 'value', {
+        enumerable: true,
+        get: () => {
+          throw error;
+        },
+      });
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      expect(() =>
+        replaceData({}, next, {
+          structuralSharing: true,
+          queryHash: 'key',
+        }),
+      ).toThrow(error);
+
+      if (isProduction) {
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } else {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Structural sharing requires data to be JSON serializable'),
+        );
+      }
 
       consoleErrorSpy.mockRestore();
     });

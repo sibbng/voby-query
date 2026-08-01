@@ -293,12 +293,22 @@ export function replaceEqualDeep(a: any, b: any, depth = 0): any {
 export function replaceData<TData>(
   prevData: TData | undefined,
   data: TData,
-  options: { structuralSharing?: unknown },
+  options: { structuralSharing?: unknown; queryHash?: string },
 ): TData {
   if (typeof options.structuralSharing === 'function') {
     return options.structuralSharing(prevData, data) as TData;
   }
   if (options.structuralSharing !== false) {
+    if (!isProduction) {
+      try {
+        return replaceEqualDeep(prevData, data);
+      } catch (error) {
+        console.error(
+          `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${options.queryHash}]: ${error}`,
+        );
+        throw error;
+      }
+    }
     return replaceEqualDeep(prevData, data);
   }
   return data;
