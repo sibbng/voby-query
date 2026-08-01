@@ -604,4 +604,191 @@ describe('queryObserver stale timers', () => {
     unsubscribe();
     observer.destroy();
   });
+
+  it('should not refetch on mount when refetchOnMount is a function returning true and data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 1000 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 1000,
+      refetchOnMount: () => true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on window focus when refetchOnWindowFocus is a function returning true and data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 1000 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 1000,
+      refetchOnWindowFocus: () => true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on reconnect when refetchOnReconnect is a function returning true and data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 1000 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 1000,
+      refetchOnReconnect: () => true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onOnline();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should refetch on window focus when refetchOnWindowFocus is a function returning true and data is stale', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 0,
+      refetchOnMount: false,
+      refetchOnWindowFocus: () => true,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should not refetch on window focus when refetchOnWindowFocus is a function returning false and data is stale', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 0,
+      refetchOnMount: false,
+      refetchOnWindowFocus: () => false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should refetch on window focus when refetchOnWindowFocus is a function returning "always" and data is fresh', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn, staleTime: 1000 });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 1000,
+      refetchOnWindowFocus: () => 'always' as const,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    observer.destroy();
+  });
+
+  it('should refetch on window focus when refetchOnWindowFocus is a function returning undefined and data is stale', async () => {
+    const queryClient = new QueryClient();
+    const queryCache = queryClient.getQueryCache() as any;
+    const key = queryKey();
+
+    const queryFn = vi.fn(async () => 'data');
+    await queryClient.fetchQuery({ queryKey: key, queryFn });
+
+    const query = queryCache.find({ queryKey: key }) as any;
+    const observer = new QueryObserver(query, {
+      staleTime: 0,
+      refetchOnMount: false,
+      refetchOnWindowFocus: () => undefined as any,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    (query as any).onFocus();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    observer.destroy();
+  });
 });

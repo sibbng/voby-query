@@ -295,42 +295,34 @@ export class QueryObserver<
 
     if (this.#query.state.data() === undefined) return false;
 
-    // Upstream's shouldFetchOn gates the whole field evaluation on
-    // enabled !== false && staleTime !== 'static' (queryObserver.ts:773-789):
-    // a 'static' staleTime must suppress even 'always'.
-    if (this.#resolveStaleTime() === 'static') return false;
-
-    const refetchOnMount = this.#resolvedOptions.refetchOnMount;
-    if (typeof refetchOnMount === 'function') {
-      return !!refetchOnMount(this.#query);
-    }
-    if (refetchOnMount === 'always') return true;
-    if (refetchOnMount === false) return false;
-    return this.isStale();
+    return this.#shouldFetchOn(this.#resolvedOptions.refetchOnMount);
   }
 
   shouldFetchOnWindowFocus(): boolean {
-    if (this.#resolveStaleTime() === 'static') return false;
-
-    const refetchOnWindowFocus = this.#resolvedOptions.refetchOnWindowFocus;
-    if (typeof refetchOnWindowFocus === 'function') {
-      return !!refetchOnWindowFocus(this.#query);
-    }
-    if (refetchOnWindowFocus === 'always') return true;
-    if (refetchOnWindowFocus && this.isStale()) return true;
-    return false;
+    return this.#shouldFetchOn(this.#resolvedOptions.refetchOnWindowFocus);
   }
 
   shouldFetchOnReconnect(): boolean {
+    return this.#shouldFetchOn(this.#resolvedOptions.refetchOnReconnect);
+  }
+
+  // Upstream's shouldFetchOn (queryObserver.ts:773-789): a function value is
+  // resolved to a boolean and treated like the boolean — only 'always' is
+  // unconditional, every other non-false value refetches only if stale. The
+  // whole evaluation is gated on enabled !== false && staleTime !== 'static'
+  // (the latter suppressing even 'always').
+  #shouldFetchOn(
+    field:
+      | boolean
+      | 'always'
+      | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => boolean | 'always'),
+  ): boolean {
+    if (!this.#resolvedOptions.enabled) return false;
     if (this.#resolveStaleTime() === 'static') return false;
 
-    const refetchOnReconnect = this.#resolvedOptions.refetchOnReconnect;
-    if (typeof refetchOnReconnect === 'function') {
-      return !!refetchOnReconnect(this.#query);
-    }
-    if (refetchOnReconnect === 'always') return true;
-    if (refetchOnReconnect && this.isStale()) return true;
-    return false;
+    const value = typeof field === 'function' ? field(this.#query) : field;
+
+    return value === 'always' || (value !== false && this.isStale());
   }
 
   isEnabled(): boolean {
