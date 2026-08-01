@@ -247,10 +247,6 @@ export const createMutation = <
         return undefined;
       }
 
-      if (mutationHash && !mutationCache.has(mutationHash)) {
-        mutationCache.set(mutationHash, mutation);
-      }
-
       machine.send('MUTATE');
       state.data(undefined);
       state.error(null);

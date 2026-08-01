@@ -21,6 +21,21 @@ const executeMutation = (queryClient: QueryClient, options: any, variables: any)
 };
 
 describe('mutationCache', () => {
+  it('creates separate mutations for the same mutationKey', () => {
+    const queryClient = new QueryClient();
+    const cache = queryClient.getMutationCache();
+    const options = {
+      mutationKey: ['same-mutation'],
+      mutationFn: async () => 'data',
+    };
+
+    const mutation1 = cache.build(queryClient, options);
+    const mutation2 = cache.build(queryClient, options);
+
+    expect(mutation2).not.toBe(mutation1);
+    expect(cache.getAll()).toHaveLength(2);
+  });
+
   describe('config callbacks', () => {
     it('should call onError when a mutation errors', async () => {
       const key = mutationKey();

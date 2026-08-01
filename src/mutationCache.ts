@@ -104,16 +104,7 @@ export class MutationCache<
   ) {
     const resolvedOptions = resolveMutationOptions(queryClient, options);
     const mutationHash = resolveMutationHash(resolvedOptions.mutationKey);
-    const existingMutation = mutationHash
-      ? (this.get(mutationHash) as Mutation<TData, TError, TVariables, TContext> | undefined)
-      : undefined;
-
-    if (existingMutation) {
-      existingMutation.resolvedOptions = resolvedOptions;
-      return existingMutation;
-    }
-
-    const cacheKey = mutationHash ?? `mutation:${++this.nextId}`;
+    const cacheKey = `mutation:${++this.nextId}`;
     const mutation = createMutation({
       mutationCache: this as unknown as MutationCacheType,
       cacheKey,
