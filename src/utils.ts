@@ -1,4 +1,5 @@
 import { $$ } from 'voby';
+import { isProduction } from 'std-env';
 import type { Mutation } from './mutation.ts';
 import type { Query } from './query.ts';
 import { timeoutManager } from './timeoutManager.ts';
@@ -383,7 +384,7 @@ export function ensureQueryFn(
   options: { queryFn?: unknown; queryHash?: string },
   fetchOptions?: { initialPromise?: Promise<unknown> },
 ): (...args: Array<unknown>) => Promise<unknown> {
-  if (options.queryFn === skipToken) {
+  if (!isProduction && options.queryFn === skipToken) {
     console.error(
       `Attempted to invoke queryFn when set to skipToken. This is likely a configuration error. Query hash: '${options.queryHash}'`,
     );

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { isProduction } from 'std-env';
 import {
   addConsumeAwareSignal,
   addToEnd,
@@ -518,9 +519,13 @@ describe('core/utils', () => {
         queryHash: '["skip"]',
       });
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Attempted to invoke queryFn when set to skipToken'),
-      );
+      if (isProduction) {
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } else {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Attempted to invoke queryFn when set to skipToken'),
+        );
+      }
       await expect(resolved(context)).rejects.toThrow('Missing queryFn: \'["skip"]\'');
 
       consoleErrorSpy.mockRestore();
