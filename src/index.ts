@@ -42,6 +42,7 @@ export type {
   UnsetMarker,
   InferDataFromTag,
   InferErrorFromTag,
+  QueryDefaultsOptions,
 } from './types.ts';
 
 export { useIsFetching } from './useIsFetching.ts';

@@ -328,6 +328,18 @@ export type ObserverOptions<
   suspense?: boolean;
 };
 
+// Query observer options minus queryKey — accepted by setQueryDefaults/getQueryDefaults
+export type QueryDefaultsOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = Omit<
+  QueryOptions<TQueryFnData, TError, TData, TQueryKey> &
+    ObserverOptions<TQueryFnData, TError, TData, TQueryKey>,
+  'queryKey'
+>;
+
 // Combined — what users pass to useQuery (same as QueryOptions)
 export type UseQueryOptions<
   TQueryFnData = unknown,

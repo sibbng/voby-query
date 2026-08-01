@@ -86,7 +86,7 @@ describe('queryClient', () => {
       const key = queryKey();
       const queryClient = new QueryClient();
 
-      queryClient.setQueryDefaults([...key, 'todo'], { suspense: true } as any);
+      queryClient.setQueryDefaults([...key, 'todo'], { suspense: true });
       queryClient.setQueryDefaults([...key, 'todo', 'detail'], { staleTime: 5000 });
 
       expect(queryClient.getQueryDefaults([...key, 'todo', 'detail'])).toMatchObject({

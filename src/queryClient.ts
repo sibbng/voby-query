@@ -18,6 +18,7 @@ import type {
   MutationKey,
   MutationOptions,
   QueryCache,
+  QueryDefaultsOptions,
   QueryFilters,
   QueryKey,
   QueryOptions,
@@ -83,14 +84,14 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
   const queryDefaultsMap = new Map<
     string,
-    { queryKey: QueryKey; defaults: Partial<QueryOptions> }
+    { queryKey: QueryKey; defaults: Partial<QueryDefaultsOptions> }
   >();
 
   const queryKeyHashFn = queryDefaults.queryKeyHashFn ?? hashFn;
 
   const getQueryDefaults = (queryKey: QueryKey) => {
     const queryHash = queryKeyHashFn(queryKey);
-    let result: Partial<QueryOptions> = {};
+    let result: Partial<QueryDefaultsOptions> = {};
     for (const [key, { queryKey: defaultQueryKey, defaults }] of queryDefaultsMap.entries()) {
       if (queryHash === key || partialMatchKey(defaultQueryKey, queryKey)) {
         result = { ...result, ...defaults };
@@ -99,7 +100,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
     return result;
   };
 
-  const setQueryDefaults = (queryKey: QueryKey, defaults: Partial<QueryOptions>) => {
+  const setQueryDefaults = (queryKey: QueryKey, defaults: Partial<QueryDefaultsOptions>) => {
     const queryHash = queryKeyHashFn(queryKey);
     queryDefaultsMap.set(queryHash, { queryKey, defaults });
   };
@@ -706,8 +707,8 @@ export class QueryClient {
     queries?: Partial<Omit<QueryOptions, 'queryKey'>>;
     mutations?: Partial<MutationOptions>;
   }) => void;
-  declare getQueryDefaults: (queryKey: QueryKey) => Partial<QueryOptions>;
-  declare setQueryDefaults: (queryKey: QueryKey, defaults: Partial<QueryOptions>) => void;
+  declare getQueryDefaults: (queryKey: QueryKey) => Partial<QueryDefaultsOptions>;
+  declare setQueryDefaults: (queryKey: QueryKey, defaults: Partial<QueryDefaultsOptions>) => void;
   declare getMutationDefaults: (mutationKey?: MutationKey) => Partial<MutationOptions>;
   declare setMutationDefaults: (
     mutationKey: MutationKey,
