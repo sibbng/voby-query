@@ -1,17 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import {
+  addConsumeAwareSignal,
   addToEnd,
   addToStart,
   hashFn,
   hashQueryKeyByOptions,
+  isServer,
   isPlainArray,
   isPlainObject,
   partialMatchKey,
   replaceEqualDeep,
+  resolveQueryBoolean,
+  resolveStaleTime,
   shouldThrowError,
+  sleep,
   skipToken,
   ensureQueryFn,
 } from '../src/utils.ts';
+import type { Query } from '../src/query.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -22,6 +28,58 @@ afterEach(() => {
 });
 
 describe('core/utils', () => {
+  describe('environment and timing helpers', () => {
+    it('exposes the current server environment', () => {
+      expect(isServer).toBe(typeof window === 'undefined' || 'Deno' in globalThis);
+    });
+
+    it('resolves query-aware options', () => {
+      const query = {} as Query;
+      expect(resolveStaleTime(() => 25, query)).toBe(25);
+      expect(resolveStaleTime('static', query)).toBe('static');
+      expect(resolveQueryBoolean(() => false, query)).toBe(false);
+      expect(resolveQueryBoolean(true, query)).toBe(true);
+    });
+
+    it('sleeps through the managed timeout provider', async () => {
+      const promise = sleep(25);
+
+      await vi.advanceTimersByTimeAsync(24);
+      let settled = false;
+      void promise.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('calls the cancellation handler once when signal is consumed', () => {
+      const controller = new AbortController();
+      const onCancelled = vi.fn();
+      const context = addConsumeAwareSignal({}, () => controller.signal, onCancelled);
+
+      expect(onCancelled).not.toHaveBeenCalled();
+      expect(context.signal).toBe(controller.signal);
+      expect(context.signal).toBe(controller.signal);
+
+      controller.abort();
+      expect(onCancelled).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles a signal that was already aborted before consumption', () => {
+      const controller = new AbortController();
+      controller.abort();
+      const onCancelled = vi.fn();
+      const context = addConsumeAwareSignal({}, () => controller.signal, onCancelled);
+
+      void context.signal;
+      expect(onCancelled).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('isPlainObject', () => {
     it('should return `true` for a plain object', () => {
       expect(isPlainObject({})).toEqual(true);

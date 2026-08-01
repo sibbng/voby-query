@@ -1,21 +1,38 @@
 import { $$ } from 'voby';
 import type { Mutation } from './mutation.ts';
 import type { Query } from './query.ts';
-import type { FetchStatus, MutationKey, QueryKey } from './types.ts';
+import { timeoutManager } from './timeoutManager.ts';
+import type { FetchStatus, MutationKey, QueryKey, QueryOptions } from './types.ts';
 
 // #region Utils
+
+export const isServer = typeof window === 'undefined' || 'Deno' in globalThis;
 
 export function noop(): undefined {
   return undefined;
 }
 
-export const isValidTimeout = (value: unknown): boolean => {
+export const isValidTimeout = (value: unknown): value is number => {
   return typeof value === 'number' && value >= 0 && value !== Infinity;
 };
 
-export const timeUntilStale = (updatedAt: number, staleTime: number): number => {
+export const timeUntilStale = (updatedAt: number, staleTime?: number): number => {
   return Math.max(updatedAt + (staleTime || 0) - Date.now(), 0);
 };
+
+export function resolveStaleTime(
+  staleTime: QueryOptions['staleTime'],
+  query: Query,
+): number | 'static' | undefined {
+  return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+}
+
+export function resolveQueryBoolean(
+  option: boolean | ((query: Query) => boolean) | undefined,
+  query: Query,
+): boolean | undefined {
+  return typeof option === 'function' ? option(query) : option;
+}
 
 export function functionalUpdate<TInput, TOutput>(
   updater: TOutput | ((input: TInput) => TOutput),
@@ -202,6 +219,12 @@ export function isPlainArray(value: unknown) {
   return Array.isArray(value) && value.length === Object.keys(value).length;
 }
 
+export function sleep(timeout: number): Promise<void> {
+  return new Promise((resolve) => {
+    timeoutManager.setTimeout(resolve, timeout);
+  });
+}
+
 export function shallowEqualObjects<T extends Record<string, any>>(
   a: T,
   b: T | undefined,
@@ -300,6 +323,34 @@ export function shouldThrowError<T extends (...args: Array<any>) => boolean>(
     return throwOnError(...params);
   }
   return !!throwOnError;
+}
+
+export function addConsumeAwareSignal<T>(
+  object: T,
+  getSignal: () => AbortSignal,
+  onCancelled: () => void,
+): T & { signal: AbortSignal } {
+  let consumed = false;
+  let signal: AbortSignal | undefined;
+
+  Object.defineProperty(object, 'signal', {
+    enumerable: true,
+    get: () => {
+      signal ??= getSignal();
+      if (consumed) return signal;
+
+      consumed = true;
+      if (signal.aborted) {
+        onCancelled();
+      } else {
+        signal.addEventListener('abort', onCancelled, { once: true });
+      }
+
+      return signal;
+    },
+  });
+
+  return object as T & { signal: AbortSignal };
 }
 
 export function ensureSuspenseTimers<

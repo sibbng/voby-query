@@ -14,7 +14,14 @@ import type {
   ResolvedQueryOptions,
 } from './types.ts';
 import type { QueryObserver as QueryObserverType } from './queryObserver.ts';
-import { ensureQueryFn, replaceData, resolveKey, shouldThrowError, skipToken } from './utils.ts';
+import {
+  ensureQueryFn,
+  replaceData,
+  resolveKey,
+  resolveStaleTime as resolveStaleTimeOption,
+  shouldThrowError,
+  skipToken,
+} from './utils.ts';
 import { createNetworkPause, type NetworkPause } from './retryer.ts';
 import { notifyManager } from './notifyManager.ts';
 import { timeoutManager } from './timeoutManager.ts';
@@ -195,8 +202,7 @@ export const resolveQueryOptions = <
 };
 
 export const resolveStaleTime = (query: Query<any, any, any, any>): number | 'static' => {
-  const staleTime = query.resolvedOptions.staleTime ?? 0;
-  return typeof staleTime === 'function' ? staleTime(query) : staleTime;
+  return resolveStaleTimeOption(query.resolvedOptions.staleTime, query) ?? 0;
 };
 
 export const scheduleQueryStale = (query: Query<any, any, any, any>) => {
