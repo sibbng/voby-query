@@ -565,7 +565,7 @@ describe('queryObserver stale timers', () => {
     const key = queryKey();
 
     const queryFn = vi.fn(async () => 'data');
-    await queryClient.setQueryData(key, 'initial');
+    queryClient.setQueryData(key, 'initial');
 
     const query = queryCache.find({ queryKey: key }) as any;
     const observer = new QueryObserver(query, {

@@ -304,7 +304,7 @@ export function replaceData<TData>(
         return replaceEqualDeep(prevData, data);
       } catch (error) {
         console.error(
-          `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${options.queryHash}]: ${error}`,
+          `Structural sharing requires data to be JSON serializable. To fix this, turn off structuralSharing or return JSON-serializable data from your queryFn. [${options.queryHash}]: ${String(error)}`,
         );
         throw error;
       }

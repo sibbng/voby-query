@@ -607,7 +607,7 @@ describe('query', () => {
     expect(query.state.error()).toEqual(error);
 
     expect(consoleMock).toHaveBeenCalledWith(
-      `Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["${key}"]`,
+      `Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["${String(key)}"]`,
     );
     consoleMock.mockRestore();
   });

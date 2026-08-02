@@ -1,5 +1,6 @@
 import { $, For, If } from 'voby';
 import { useQuery } from 'voby-query';
+import { queryClient } from '../src/client';
 import { Card, Tag } from '../src/ui';
 
 type Post = { id: number; title: string };
@@ -128,7 +129,7 @@ export const CancellationDemo = () => {
 
   const cancel = () => {
     if (request().isFetching()) {
-      void request().cancel({ silent: true });
+      void queryClient.cancelQueries({ queryKey: ['cancellation-demo'] }, { silent: true });
     }
   };
 

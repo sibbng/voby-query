@@ -22,19 +22,19 @@ export interface MutationCacheConfig {
     context: unknown,
     mutation: Mutation<any, any, any, any>,
     mutationFunctionContext: MutationFunctionContext,
-  ) => unknown | Promise<unknown>;
+  ) => void | Promise<unknown>;
   onSuccess?: (
     data: unknown,
     variables: unknown,
     context: unknown,
     mutation: Mutation<any, any, any, any>,
     mutationFunctionContext: MutationFunctionContext,
-  ) => unknown | Promise<unknown>;
+  ) => void | Promise<unknown>;
   onMutate?: (
     variables: unknown,
     mutation: Mutation<any, any, any, any>,
     mutationFunctionContext: MutationFunctionContext,
-  ) => unknown | Promise<unknown>;
+  ) => void | Promise<unknown>;
   onSettled?: (
     data: unknown,
     error: unknown,
@@ -42,7 +42,7 @@ export interface MutationCacheConfig {
     context: unknown,
     mutation: Mutation<any, any, any, any>,
     mutationFunctionContext: MutationFunctionContext,
-  ) => unknown | Promise<unknown>;
+  ) => void | Promise<unknown>;
 }
 
 export type MutationCacheNotifyEvent =
