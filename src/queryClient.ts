@@ -32,6 +32,36 @@ import { functionalUpdate, hashFn, noop, partialMatchKey } from './utils.ts';
 
 type QueryLike = Query<any, any, any, any>;
 
+const fetchQueryData = async <TData>(
+  query: QueryLike,
+  retry: QueryOptions<any, any>['retry'],
+): Promise<TData> => {
+  if (!query.isStaleByTime(resolveStaleTime(query))) {
+    return query.state.data() as TData;
+  }
+
+  // TanStack: fetchQuery doesn't retry by default
+  // https://github.com/tannerlinsley/react-query/issues/652
+  if (retry === undefined) {
+    const originalRetry = query.resolvedOptions.retry;
+    query.resolvedOptions.retry = false;
+    try {
+      await query.fetch({ force: true, awaitChain: true });
+    } finally {
+      query.resolvedOptions.retry = originalRetry;
+    }
+  } else {
+    await query.fetch({ force: true, awaitChain: true });
+  }
+
+  // Propagate error when fetchQuery forced retry=false (TanStack behavior)
+  if (query.state.error()) {
+    throw query.state.error();
+  }
+
+  return query.state.data() as TData;
+};
+
 export type QueryClientConfig = {
   queryCache?: QueryCache | Map<string, QueryLike>;
   mutationCache?: MutationCache | Map<string, Mutation<any, any, any, any>>;
@@ -486,25 +516,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
 
     const query = cache.build(queryClient, wrappedOptions) as QueryLike;
 
-    if (!query.isStaleByTime(resolveStaleTime(query))) {
-      return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
-    }
-
-    if (options.retry === undefined) {
-      const originalRetry = (query as any).resolvedOptions.retry;
-      (query as any).resolvedOptions.retry = false;
-      try {
-        await query.fetch({ force: true, awaitChain: true });
-      } finally {
-        (query as any).resolvedOptions.retry = originalRetry;
-      }
-    } else {
-      await query.fetch({ force: true, awaitChain: true });
-    }
-    if (query.state.error()) {
-      throw query.state.error();
-    }
-    return query.state.data() as InfiniteData<TQueryFnData, TPageParam>;
+    return fetchQueryData<InfiniteData<TQueryFnData, TPageParam>>(query, options.retry);
   };
 
   const prefetchInfiniteQuery = async <
@@ -531,28 +543,7 @@ const buildQueryClient = (options?: QueryClientConfig): QueryClient => {
       options as QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
     ) as QueryLike;
 
-    if (!query.isStaleByTime(resolveStaleTime(query))) {
-      return query.state.data() as TData;
-    }
-
-    // TanStack: fetchQuery doesn't retry by default
-    // https://github.com/tannerlinsley/react-query/issues/652
-    if (options.retry === undefined) {
-      const originalRetry = query.resolvedOptions.retry;
-      query.resolvedOptions.retry = false;
-      try {
-        await query.fetch({ force: true, awaitChain: true });
-      } finally {
-        query.resolvedOptions.retry = originalRetry;
-      }
-    } else {
-      await query.fetch({ force: true, awaitChain: true });
-    }
-    // Propagate error when fetchQuery forced retry=false (TanStack behavior)
-    if (query.state.error()) {
-      throw query.state.error();
-    }
-    return query.state.data() as TData;
+    return fetchQueryData<TData>(query, options.retry);
   };
 
   const prefetchQuery = async <
